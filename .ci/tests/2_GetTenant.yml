@@ -1,0 +1,32 @@
+name: Test Chroma CLI - Get Current Tenant
+
+testcases:
+  - name: Current Default_tenant should Exists
+    steps:
+      - type: exec
+        script: cmdChroma cT
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Retrieving if current tenant Exists"
+          - result.systemout ShouldContainSubstring "default_tenant"
+          - result.systemout ShouldContainSubstring "true"
+  - name: Current Tenant with -tenant flag
+    steps:
+      - type: exec
+        script: cmdChroma cT -tenant some_tenant
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Retrieving if current tenant Exists"
+          - result.systemout ShouldContainSubstring "some_tenant"
+          - result.systemout ShouldContainSubstring "false"
+
+  - name: Current Tenant with Env Variable
+    steps:
+      - type: exec
+        script: TENANT=some_tenant cmdChroma cT
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Retrieving if current tenant Exists"
+          - result.systemout ShouldContainSubstring "some_tenant"
+          - result.systemout ShouldContainSubstring "false"
+

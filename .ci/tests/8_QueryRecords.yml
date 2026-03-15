@@ -1,0 +1,17 @@
+name: Test Chroma CLI - Query Records
+
+testcases:
+  - name: Query Collection test_Valid
+    steps:
+      - type: exec
+        script: cmdChroma q test_Valid --query "How do I add records?"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Initializing AI Engine for search"
+          - result.systemout ShouldContainSubstring "Executing batch query"
+          - result.systemout ShouldContainSubstring "How do I add records?"
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "🎯 Query:"
+          - result.systemout ShouldContainSubstring "Dist:"
+          - result.systemout ShouldContainSubstring "Content:"
+

@@ -1,0 +1,27 @@
+name: Test Chroma CLI - Create Collection
+
+testcases:
+  - name: Create Collection Error if no collectionName not given
+    steps:
+      - type: exec
+        script: cmdChroma mkColl
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "collectionName name is required as the first argument"
+  - name: Create Collection Successful
+    steps:
+      - type: exec
+        script: cmdChroma mkColl test_collection
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Collection created"
+          - result.systemout ShouldContainSubstring "test_collection"
+  - name: Create Collection Successful
+    steps:
+      - type: exec
+        script: cmdChroma mkColl test_Valid
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Collection created"
+          - result.systemout ShouldNotContainSubstring "test_collection"
+          - result.systemout ShouldContainSubstring "test_Valid"

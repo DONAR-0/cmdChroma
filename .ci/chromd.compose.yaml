@@ -1,0 +1,24 @@
+version: '3.9'
+services:
+  chromadb:
+    container_name: chromadb
+    image: ghcr.io/chroma-core/chroma:latest
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      # Mounts a local volume to the directory where Chroma stores its data
+      - chroma-data:/chroma/chroma/
+    ports:
+      # Maps port 8000 on your host to port 8000 in the container
+      - 8000:8000
+    healthcheck:
+      # Optional health check for monitoring
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  # Defines the named volume for data persistence
+  chroma-data:
+    driver: local
+
