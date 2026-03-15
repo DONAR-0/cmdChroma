@@ -1,0 +1,66 @@
+name: Test Chroma CLI - Successful Connection
+
+testcases:
+  - name: Chroma t
+    steps:
+      - type: exec
+        script: cmdChroma t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+  - name: Chroma test
+    steps:
+      - type: exec
+        script: cmdChroma test
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+          - result.systemout ShouldContainSubstring "default_tenant"
+
+  - name: Chroma test global tenant flag
+    steps:
+      - type: exec
+        script: cmdChroma test -tenant some_tenant
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+          - result.systemout ShouldContainSubstring "some_tenant"
+  - name: Chroma test global tenant flag with environment variable
+    steps:
+      - type: exec
+        script: TENANT=some_tenant cmdChroma test
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+          - result.systemout ShouldContainSubstring "some_tenant"
+  - name: Chroma test global tenant and database flag with environment variable
+    steps:
+      - type: exec
+        script: TENANT=some_tenant DATABASE=some_database cmdChroma test
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+          - result.systemout ShouldContainSubstring "some_tenant"
+          - result.systemout ShouldContainSubstring "some_database"
+
+  - name: Chroma test global database flag
+    steps:
+      - type: exec
+        script: cmdChroma test -tenant some_tenant -database some_database
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Starting connection test"
+          - result.systemout ShouldContainSubstring "ChromaDB connection successful"
+          - result.systemout ShouldContainSubstring "Successfully connected to Chroma DB"
+          - result.systemout ShouldContainSubstring "some_tenant"
+          - result.systemout ShouldContainSubstring "some_database"

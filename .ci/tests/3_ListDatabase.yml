@@ -1,0 +1,22 @@
+name: Test Chroma CLI - List Databases
+
+testcases:
+  - name: dbs should work
+    steps:
+      - type: exec
+        script: cmdChroma dbs
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully Retrieved Databases for tenant"
+          - result.systemout ShouldContainSubstring "default_tenant"
+          - result.systemout ShouldContainSubstring "default_database"
+  - name: ls-dbs should work
+    steps:
+      - type: exec
+        script: cmdChroma ls-dbs
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully Retrieved Databases for tenant"
+          - result.systemout ShouldContainSubstring "default_tenant"
+          - result.systemout ShouldContainSubstring "default_database"
+

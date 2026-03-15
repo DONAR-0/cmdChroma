@@ -1,0 +1,30 @@
+name: Test Chroma CLI - List Collection
+
+testcases:
+  - name: List Collections
+    steps:
+      - type: exec
+        script: cmdChroma colls
+        assertions:
+          # These Collections are created in previous test case
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "test_collection"
+          - result.systemout ShouldContainSubstring "test_Valid"
+  - name: List Collections using alias
+    steps:
+      - type: exec
+        script: cmdChroma ls-colls collections
+        assertions:
+          # These Collections are created in previous test case
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "test_collection"
+          - result.systemout ShouldContainSubstring "test_Valid"
+  - name: List Collections using alias
+    steps:
+      - type: exec
+        script: cmdChroma collections
+        assertions:
+          # These Collections are created in previous test case
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "test_collection"
+          - result.systemout ShouldContainSubstring "test_Valid"

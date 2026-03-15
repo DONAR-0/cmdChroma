@@ -1,0 +1,40 @@
+name: Test Chroma CLI - Add Records
+
+testcases:
+  - name: Error on missing document flag
+    steps:
+      - type: exec
+        script: cmdChroma a test_collection
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "Required flag"
+          - result.systemout ShouldContainSubstring "not set"
+
+  - name: Add multiple records (Batch) to test_Valid
+    steps:
+      - type: exec
+        script: |
+          export CHROMA_MODEL_PATH="../../models/all-MiniLM-L6-v2/model.onnx"
+          export CHROMA_TOKENIZER_PATH="../../models/all-MiniLM-L6-v2/tokenizer.json"
+          export CHROMA_ONNX_LIB="../../models/onnx_runtime/lib/libonnxruntime.so.1"
+          cmdChroma a test_Valid \
+            --doc "The quick brown fox" \
+            --doc "Jumps over the lazy dog" \
+            --doc "Go is an open source programming language"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully added 3 documents"
+          - result.systemout ShouldContainSubstring "Uploading batch to Chroma"
+  - name: Add Multiple Records with Parallel Custom IDs
+    steps:
+      - type: exec
+        script: |
+          export CHROMA_MODEL_PATH="../../models/all-MiniLM-L6-v2/model.onnx"
+          export CHROMA_TOKENIZER_PATH="../../models/all-MiniLM-L6-v2/tokenizer.json"
+          export CHROMA_ONNX_LIB="../../models/onnx_runtime/lib/libonnxruntime.so.1"
+          cmdChroma a test_Valid \
+            -d "Wikipedia entry A" --id "wiki-a" \
+            -d "Wikipedia entry B" --id "wiki-b"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully added 2 documents"

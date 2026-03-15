@@ -1,0 +1,19 @@
+name: Test Chroma CLI - List Records
+
+testcases:
+  - name: List Collections Error on empty collection name
+    steps:
+      - type: exec
+        script: cmdChroma rs
+        assertions:
+          # These Collections are created in previous test case
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "argument empty Collection name not found, Please provide collection name"
+  - name: List Collections Error on empty collection name
+    steps:
+      - type: exec
+        script: cmdChroma rs test_Valid
+        assertions:
+          # These Collections are created in previous test case
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "handleListDocuments:✅ Retrieved"

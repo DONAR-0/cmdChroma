@@ -1,0 +1,53 @@
+version: '3.9'
+
+services:
+  # ChromaDB Vector Database
+  chromadb:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  # Ollama Runtime
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment below for NVIDIA GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Helper service to preload the Qwen model
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: ollama-pull
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=ollama
+    entrypoint: /bin/sh
+    command: >
+      -c "echo 'Waiting for Ollama server...';
+      while ! ollama list > /dev/null 2>&1; do
+        echo 'Ollama server not ready, retrying...';
+        sleep 2;
+      done;
+      echo 'Server is up! Pulling Qwen 0.5B...';
+      ollama pull qwen:0.5b"
+
+volumes:
+  chroma_data:
+  ollama_data:
+
