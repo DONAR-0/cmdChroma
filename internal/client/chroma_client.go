@@ -387,7 +387,7 @@ func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer cd(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

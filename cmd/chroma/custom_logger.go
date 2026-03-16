@@ -43,7 +43,7 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 	// 3. Final Output
 	// Format: Date Time Stamp : File Name : Location : actual log Value
-	fmt.Fprintf(os.Stdout, "%s:%s:%s\n", timeStr, location, r.Message)
+	_, _ = fmt.Fprintf(os.Stdout, "%s:%s:%s\n", timeStr, location, r.Message)
 	// Print extra attributes (like errors) on a new Line
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Value.String() != "" {
