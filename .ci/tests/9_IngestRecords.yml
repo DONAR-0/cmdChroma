@@ -1,0 +1,74 @@
+version: "2"
+name: Test Chroma CLI - Ingestion Records
+
+vars:
+  cmdChroma: cmdChroma
+  collection: test_Valid
+  test_file: test_data.jsonl
+  limit_count: 5
+
+testcases:
+  - name: validation_checks
+    steps:
+      - type: exec
+        script: {{.cmdChroma}} ingest
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "Collection Name is not provided"
+
+      - type: exec
+        script: {{.cmdChroma}} ingest {{.collection}}
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "filepath is not provided"
+
+  - name: setup_test_data
+    steps:
+      - type: exec
+        script: |
+          rm -f {{.test_file}}
+          for i in $(seq 1 10); do
+            echo "{\"id\": \"test-$i\", \"text\": \"Document $i content\"}" >> {{.test_file}}
+          done
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: run_ingest_with_limit
+    steps:
+      - type: exec
+        script: {{.cmdChroma}} ingest {{.collection}} {{.test_file}} --n-ingest {{.limit_count}}
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Limit reached"
+
+  # - name: verify_chroma_count_handshake
+  #   steps:
+  #     # Step 1: Use curl + jq to extract the UUID manually
+  #     - type: exec
+  #       script: |
+  #         # Fetch the JSON, then use jq to grab the 'id' from the first element
+  #         UUID=$(curl -s "http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections?name={{.collection}}" | jq -r '.[0].id')
+  #         echo "EXTRACTED_UUID=$UUID"
+  #       assertions:
+  #         - result.code ShouldEqual 0
+  #       extracts:
+  #         # Venom can extract variables from the system output using regex
+  #         collection_uuid: EXTRACTED_UUID=(.*) from result.systemout
+  #
+  #     # Step 2: Debug - This will show you if the ID was found
+  #     - type: exec
+  #       script: echo "Using UUID [{{.collection_uuid}}]"
+  #
+  #     # Step 3: Perform the count check using the extracted UUID
+  #     - type: http
+  #       method: GET
+  #       url: "http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/{{.collection_uuid}}/count"
+  #       assertions:
+  #         - result.status_code ShouldEqual 200
+  #         - result.body ShouldEqual {{.limit_count}}
+
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: rm -f {{.test_file}}

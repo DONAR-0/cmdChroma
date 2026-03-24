@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -282,6 +284,140 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
+func handleImportJsonlFileInChromaDb(ctx context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("Collection Name is not provided, required collection name")
+	}
+
+	fp := c.Args().Get(1)
+	if fp == "" {
+		return fmt.Errorf("filepath is not provided, Please provide jsonl file path")
+	}
+
+	limit := c.Int("n-ingest") // Get the flag value
+
+	cleanPath := filepath.Clean(fp)
+	// 1. Check if the path is absolute
+	if filepath.IsAbs(cleanPath) {
+		return fmt.Errorf("security error: absolute paths are not allowed. " +
+			"Please provide a path relative to the current directory")
+	}
+
+	// 2. Open the Root (Current Working Directory)
+	cwd, _ := os.Getwd()
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	// 3. Attempt to open the file
+	file, err := root.Open(cleanPath)
+	if err != nil {
+		return fmt.Errorf("cannot open file '%s': %w", fp, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	const maxCapacity = 1 * 1024 * 1024 // 1MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
+	var docs, ids []string
+	batchSize := 10
+	count := 0 // MOVED: Now it tracks progress correctly across all lines
+
+	slog.Info("Starting ingestion...", "file", fp)
+
+	client, err := createChromaClient(c)
+	if err != nil {
+		return err
+	}
+	if client == nil {
+		return fmt.Errorf("chroma client is nil after initialization")
+	}
+
+	embedder, err := initEmbedder(c)
+	if err != nil {
+		return err
+	}
+	client.Embedder = embedder
+
+	// NEW STEP: Get the collection metadata to find the UUID
+	id, err := client.GetIDByName(collectionName)
+	if err != nil {
+		return fmt.Errorf("could not find collection '%s': %w", collectionName, err)
+	}
+
+	for scanner.Scan() {
+		var rec IngestRecord
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			slog.Error("Failed to parse line", "error", err)
+			continue
+		}
+
+		// Handle field mapping (Context vs Text)
+		content := rec.Text
+		if content == "" {
+			content = rec.Context
+		}
+
+		// PROTECT: Don't let a massive article crash the embedder
+		if len(content) > 5000 {
+			content = content[:5000]
+		}
+
+		// Skip empty records to avoid ChromaDB errors
+		if content == "" {
+			continue
+		}
+
+		docs = append(docs, content)
+
+		// Handle ID generation
+		currentID := rec.ID
+		if currentID == "" {
+			currentID = fmt.Sprintf("wiki-%d", count)
+			slog.Info(currentID)
+		}
+		ids = append(ids, currentID)
+
+		count++
+
+		// Check the limit (if it's greater than 0)
+		if limit > 0 && count >= limit {
+			slog.Info("Limit reached, stopping ingestion", "limit", limit)
+			break
+		}
+
+		// Execute batch upload when limit is reached
+		if len(docs) >= batchSize {
+			slog.Info("Starting Embedding for batch", "count", len(docs))
+			if err := client.AddBatch(id, docs, ids); err != nil {
+				return fmt.Errorf("batch upload failed at record %d: %w", count, err)
+			}
+			slog.Info("Embedding complete, batch sent to Chroma")
+			docs, ids = nil, nil // Clear slices for next batch
+		}
+
+	}
+
+	// 6. Handle the remaining records (the final partial batch)
+	if len(docs) > 0 {
+		if err := client.AddBatch(id, docs, ids); err != nil {
+			return fmt.Errorf("final batch upload failed: %w", err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading file: %w", err)
+	}
+
+	slog.Info("Ingestion complete!", "total_records", count)
+	return nil
+}
+
 func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {
 	modelPath, tokenizerPath, onnxLibPath, err := resolveAIPaths(c)
 	if err != nil {
@@ -321,4 +457,12 @@ func resolveAIPaths(c *cli.Command) (string, string, string, error) {
 	}
 
 	return modelPath, tokenizerPath, onnxLibPath, nil
+}
+
+type IngestRecord struct {
+	ID       string         `json:"id"`
+	Text     string         `json:"text"`
+	Context  string         `json:"context"`
+	Question string         `json:"question"` // Optional
+	Metadata map[string]any `json:"metadata"` // Optional
 }

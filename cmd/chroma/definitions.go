@@ -25,14 +25,15 @@ func createApp() *cli.Command {
 			return ctx, nil
 		},
 		Commands: []*cli.Command{
-			TestCommandDefinition(),
-			GetTenantDefinition(),
-			ListDatabaseDefinition(),
-			ListCollectionsInDatabaseDefinition(),
-			GetOrCreateCollectionInDatabaseDefinition(),
-			ListRecordsInCollection(),
+			testCommandDefinition,
+			getTenantDefinition,
+			listDatabaseDefinition,
+			listCollectionsInDatabaseDefinition,
+			getOrCreateCollectionInDatabaseDefinition,
+			listRecordsInCollection,
 			AddBatchDocumentCommandDefinition(),
 			QueryDocumentCommandDefinition(),
+			ingestRecordsJsonlfile,
 		},
 
 		//Default action when no command is provided
@@ -42,70 +43,14 @@ func createApp() *cli.Command {
 	}
 }
 
-func GetTenantDefinition() *cli.Command {
-	return &cli.Command{
-		Name:    "tenant", // Better to use lowercase short names for CLI commands
-		Aliases: []string{"currentTenant", "cT"},
-		Usage:   "Current Tenant in Chroma DB",
-		Action:  handleCurrentTenants,
-	}
-}
-
-func ListDatabaseDefinition() *cli.Command {
-	return &cli.Command{
-		Name:    "databases",
-		Aliases: []string{"ls-dbs", "dbs"},
-		Usage:   "List Databases in current Tenant",
-		Action:  handleListDatabases,
-	}
-}
-
-func ListCollectionsInDatabaseDefinition() *cli.Command {
-	return &cli.Command{
-		Name:    "collections",
-		Aliases: []string{"ls-colls", "colls"},
-		Usage:   "List All the collections in database",
-		Action:  handleListCollection,
-	}
-}
-
-func GetOrCreateCollectionInDatabaseDefinition() *cli.Command {
-	return &cli.Command{
-		Name:    "createCollections",
-		Aliases: []string{"mkdir-colls", "mkColl"},
-		Usage:   "Create the collections in database",
-		Action:  handleCreateCollection,
-	}
-}
-
-func ListRecordsInCollection() *cli.Command {
-	return &cli.Command{
-		Name:      "records",
-		Aliases:   []string{"ls-rs", "rs"},
-		Usage:     "List All the records in database",
-		ArgsUsage: collection_args_usage,
-		Action:    handleListDocuments,
-	}
-}
-
-func TestCommandDefinition() *cli.Command {
-	return &cli.Command{
-		Name:    "testConnection",
-		Aliases: []string{"test", "t"},
-		Usage:   "Test the connection to Chroma DB",
-		Description: "Verifies connectivity to the DB instance and " +
-			"ensures the service is responding correctly",
-		Action: handleTestConnection,
-		Flags:  []cli.Flag{timeoutFlag},
-	}
-}
-
 func QueryDocumentCommandDefinition() *cli.Command {
+	name := "query"
+	usage := "Search for documents using one or more natural language queries"
 	return &cli.Command{
-		Name:      "query",
+		Name:      name,
 		Aliases:   []string{"q", "search"},
-		Usage:     "Search for documents using one or more natural language queries",
-		ArgsUsage: "<collection_name>",
+		Usage:     usage,
+		ArgsUsage: collection_args_usage,
 		Description: `Perform a semantic search against a collection. 
 You can provide multiple queries to perform a batch search in a single execution.
 The tool will vectorize each query locally and find the most similar documents.
@@ -122,12 +67,7 @@ EXAMPLES:
 		Action: handleQueryBatchInCollection,
 		Flags: []cli.Flag{
 			queryFlag,
-			&cli.IntFlag{
-				Name:    "n-results",
-				Aliases: []string{"n"},
-				Usage:   "Number of results to return per query",
-				Value:   5,
-			},
+			nResultsFlag,
 			modelOnnxFileFlag,
 			tokenizerJsonFileFlag,
 			onnxLibFlag,
@@ -156,23 +96,71 @@ EXAMPLES:
    chroma add my_collection -d "Text 1" --id "id-01" -d "Text 2" --id "id-02"`,
 		Action: handleBatchAddDocuments,
 		Flags: []cli.Flag{
-			&cli.StringSliceFlag{
-				Name:     "doc",
-				Aliases:  []string{"d"},
-				Usage:    "The text document to add (can be repeated for batch add)",
-				Required: true,
-			},
-			&cli.StringSliceFlag{
-				Name:    "id",
-				Aliases: []string{"i"},
-				Usage:   "Optional: Custom IDs for the documents (must match the number of documents)",
-			},
+			docSliceFlag,
+			idSliceFlag,
 			modelOnnxFileFlag,
 			tokenizerJsonFileFlag,
 			onnxLibFlag,
 		},
 	}
 }
+
+// Commands
+var (
+	getTenantDefinition = &cli.Command{
+		Name:    "tenant", // Better to use lowercase short names for CLI commands
+		Aliases: []string{"currentTenant", "cT"},
+		Usage:   "Current Tenant in Chroma DB",
+		Action:  handleCurrentTenants,
+	}
+
+	listDatabaseDefinition = &cli.Command{
+		Name:    "databases",
+		Aliases: []string{"ls-dbs", "dbs"},
+		Usage:   "List Databases in current Tenant",
+		Action:  handleListDatabases,
+	}
+
+	testCommandDefinition = &cli.Command{
+		Name:    "testConnection",
+		Aliases: []string{"test", "t"},
+		Usage:   "Test the connection to Chroma DB",
+		Description: "Verifies connectivity to the DB instance and " +
+			"ensures the service is responding correctly",
+		Action: handleTestConnection,
+		Flags:  []cli.Flag{timeoutFlag},
+	}
+
+	listCollectionsInDatabaseDefinition = &cli.Command{
+		Name:    "collections",
+		Aliases: []string{"ls-colls", "colls"},
+		Usage:   "List All the collections in database",
+		Action:  handleListCollection,
+	}
+
+	getOrCreateCollectionInDatabaseDefinition = &cli.Command{
+		Name:    "createCollections",
+		Aliases: []string{"mkdir-colls", "mkColl"},
+		Usage:   "Create the collections in database",
+		Action:  handleCreateCollection,
+	}
+
+	listRecordsInCollection = &cli.Command{
+		Name:      "records",
+		Aliases:   []string{"ls-rs", "rs"},
+		Usage:     "List All the records in database",
+		ArgsUsage: collection_args_usage,
+		Action:    handleListDocuments,
+	}
+
+	ingestRecordsJsonlfile = &cli.Command{
+		Name:    "import",
+		Aliases: []string{"ingest", "jsonl"},
+		Usage:   "Ingest a .jsonl file into collection",
+		Action:  handleImportJsonlFileInChromaDb,
+		Flags:   []cli.Flag{nIngestDocumentFlag},
+	}
+)
 
 // Flags
 var (
@@ -246,6 +234,32 @@ var (
 		Aliases:  []string{"q"},
 		Usage:    "Query text (can be repeated for batch query)",
 		Required: true,
+	}
+
+	nResultsFlag = &cli.IntFlag{
+		Name:    "n-results",
+		Aliases: []string{"n"},
+		Usage:   "Number of results to return per query",
+		Value:   5,
+	}
+
+	docSliceFlag = &cli.StringSliceFlag{
+		Name:     "doc",
+		Aliases:  []string{"d"},
+		Usage:    "The text document to add (can be repeated for batch add)",
+		Required: true,
+	}
+	idSliceFlag = &cli.StringSliceFlag{
+
+		Name:    "id",
+		Aliases: []string{"i"},
+		Usage:   "Optional: Custom IDs for the documents (must match the number of documents)",
+	}
+
+	nIngestDocumentFlag = &cli.IntFlag{
+		Name:    "n-ingest",
+		Aliases: []string{"l"},
+		Usage:   "Set Limit to number of documents to ingest",
 	}
 )
 
