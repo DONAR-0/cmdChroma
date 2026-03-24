@@ -32,7 +32,7 @@ func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 
 func (c *ChromaClient) TestConnection() error {
 
-	endpoint := fmt.Sprintf("%s/api/v2/heartbeat", c.URL)
+	endpoint := fmt.Sprintf(testEndpoint, c.URL)
 	slog.Info("Calling Endpoint", "endpoint", endpoint)
 	resp, err := c.client.Get(endpoint)
 
@@ -52,7 +52,7 @@ func (c *ChromaClient) TestConnection() error {
 
 func (c *ChromaClient) GetTenant() (bool, error) {
 	// Correct endpoint for checking a specific tenant
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s", c.URL, c.Tenant)
+	endpoint := fmt.Sprintf(getTenant, c.URL, c.Tenant)
 
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
@@ -73,7 +73,7 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 
 func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	// URL includes the specific tenant from your client struct
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases", c.URL, c.Tenant)
+	endpoint := fmt.Sprintf(listDatabases, c.URL, c.Tenant)
 	slog.Info("List Databases from URL :" + endpoint)
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
@@ -97,7 +97,7 @@ func (c *ChromaClient) ListDatabases() ([]Database, error) {
 
 func (c *ChromaClient) ListCollections() ([]Collection, error) {
 	// endpoint
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections", c.URL, c.Tenant, c.Database)
+	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
 
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
@@ -120,7 +120,7 @@ func (c *ChromaClient) ListCollections() ([]Collection, error) {
 func (c *ChromaClient) CreateCollection(name string) (string, error) {
 	slog.Info("- Creating Collection with name:", "Name", name)
 	//endpoint
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections", c.URL, c.Tenant, c.Database)
+	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
 	payload := CreateCollectionRequest{
 		Name:        name,
 		GetOrCreate: true,
@@ -154,7 +154,7 @@ func (c *ChromaClient) CreateCollection(name string) (string, error) {
 // ListDocuments - List Documents in collection
 func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, error) {
 	// CHANGE: Use the fully scoped path, just like your AddDocument function
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/get",
+	endpoint := fmt.Sprintf(listDocuments,
 		c.URL, c.Tenant, c.Database, collectionID)
 
 	slog.Info("Listing Documents", "endpoint", endpoint)
@@ -232,7 +232,7 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 
 // AddDocument - Corrected Metadata tag handling
 func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float32) error {
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/add",
+	endpoint := fmt.Sprintf(batchAdd,
 		c.URL, c.Tenant, c.Database, collectionID)
 
 	payload := AddRecordsRequest{
@@ -269,49 +269,6 @@ func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
 	return vector, nil
 }
 
-// func (c *ChromaClient) Query(collectioID, queryText string, nResults int) (*QueryResponse, error) {
-// 	//1. Generate the embedding for the search term
-// 	vector, err := c.GenerateLocalEmbedding(queryText)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to embed query: %w", err)
-// 	}
-// 	//2. Use the scoped query endpoint
-// 	endPoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/query",
-// 		c.URL, c.Tenant, c.Database, collectioID)
-//
-// 	payload := map[string]any{
-// 		"query_embeddings": [][]float32{vector},
-// 		"n_results":        nResults,
-// 		"include":          []string{"documents", "metadatas", "distances"},
-// 	}
-//
-// 	jsonData, err := json.Marshal(payload)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error received: unable to marshal json")
-// 	}
-//
-// 	resp, err := c.client.Post(endPoint, "application/json", bytes.NewBuffer(jsonData))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer cd(resp.Body.Close)
-//
-// 	if resp.StatusCode != http.StatusOK {
-// 		body, _ := io.ReadAll(resp.Body)
-// 		return nil, fmt.Errorf("query failed: %d - %s", resp.StatusCode, string(body))
-// 	}
-//
-// 	// The response structure for /query is slightly different (nested arrays)
-// 	// but for simplicity, we can decode it into a similar format
-// 	var result QueryResponse
-//
-// 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-// 		return nil, err
-// 	}
-//
-// 	return &result, nil
-// }
-
 func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error) {
 	//1. Generate embeddings for all queries at once
 	// Assuming your local embedder can handle a slice of string
@@ -326,7 +283,7 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 		"include":          []string{"documents", "metadatas", "distances"},
 	}
 	//3. Use the scoped query endpoint
-	endPoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/query",
+	endPoint := fmt.Sprintf(queryEndpoint,
 		c.URL, c.Tenant, c.Database, collectionId)
 
 	jsonData, err := json.Marshal(payload)
@@ -360,6 +317,11 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 }
 
 func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string) error {
+
+	if c.Embedder == nil {
+		return fmt.Errorf("embedder is not initialized; check if the AI model loaded correctly")
+	}
+
 	// 1. Generate embeddings for the entire batch
 	// Using the EmbedDocuments function we discussed earlier
 	vectors, err := c.Embedder.EmbedDocuments(context.Background(), docs)
@@ -368,7 +330,7 @@ func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string
 	}
 
 	// 2. Prepare the Chroma /add payload
-	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/add",
+	endpoint := fmt.Sprintf(batchAdd,
 		c.URL, c.Tenant, c.Database, collectionID)
 
 	payload := map[string]any{
@@ -450,8 +412,22 @@ type (
 		Metadatas [][]map[string]any `json:"metadatas"`
 		Distances [][]float32        `json:"distances"`
 	}
+
+	IngestRecord struct {
+		ID       string         `json:"id"`
+		Text     string         `json:"text"`
+		Metadata map[string]any `json:"metadata"`
+	}
 )
 
 var (
 	cd = internal.CheckDefer
+	// endpoints
+	testEndpoint         = "%s/api/v2/heartbeat"
+	getTenant            = "%s/api/v2/tenants/%s"
+	listDatabases        = "%s/api/v2/tenants/%s/databases"
+	listCreateCollection = "%s/api/v2/tenants/%s/databases/%s/collections"
+	listDocuments        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/get"
+	queryEndpoint        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/query"
+	batchAdd             = "%s/api/v2/tenants/%s/databases/%s/collections/%s/add"
 )
