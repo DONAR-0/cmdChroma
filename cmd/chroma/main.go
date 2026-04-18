@@ -15,7 +15,7 @@ var (
 	// AppVersion is the semantic version of the CLI.
 	// It defaults to "dev" and can be overridden via go generate / ldflags.
 	AppVersion  = version.Version
-	ExitSuccess = 1
+	ExitSuccess = 0
 	ExitError   = 1
 )
 

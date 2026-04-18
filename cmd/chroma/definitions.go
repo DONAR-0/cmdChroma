@@ -158,7 +158,10 @@ var (
 		Aliases: []string{"ingest", "jsonl"},
 		Usage:   "Ingest a .jsonl file into collection",
 		Action:  handleImportJsonlFileInChromaDb,
-		Flags:   []cli.Flag{nIngestDocumentFlag},
+		Flags: []cli.Flag{nIngestDocumentFlag,
+			fieldContentFlag, fieldIdFlag,
+			fieldMetadataFlag, allMetadataFlag,
+			batchSizeFlag},
 	}
 )
 
@@ -260,6 +263,37 @@ var (
 		Name:    "n-ingest",
 		Aliases: []string{"l"},
 		Usage:   "Set Limit to number of documents to ingest",
+	}
+
+	fieldContentFlag = &cli.StringFlag{
+		Name:    "field-content",
+		Aliases: []string{"content"},
+		Usage:   "Content key in Jsonl Schema",
+	}
+
+	fieldIdFlag = &cli.StringFlag{
+		Name:    "field-id",
+		Aliases: []string{"id-scheama"},
+		Usage:   "ID key in Jsonl Schema",
+	}
+
+	// CHANGED: StringSlice allows multiple metadata fields
+	fieldMetadataFlag = &cli.StringSliceFlag{
+		Name:  "field-metadata",
+		Usage: "Specific metadata fields to import (can be used multiple times)",
+	}
+
+	// NEW: The "Generic" Toggle
+	allMetadataFlag = &cli.BoolFlag{
+		Name:  "all-metadata",
+		Usage: "If true, all fields except content and ID will be stored as metadata",
+	}
+
+	// NEW: Batching control
+	batchSizeFlag = &cli.IntFlag{
+		Name:  "batch-size",
+		Value: 100,
+		Usage: "Number of documents to send in a single batch",
 	}
 )
 

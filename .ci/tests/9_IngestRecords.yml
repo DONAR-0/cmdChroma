@@ -5,6 +5,8 @@ vars:
   cmdChroma: cmdChroma
   collection: test_Valid
   test_file: test_data.jsonl
+  basic_file: basic_data.jsonl
+  hf_stlye_file: hf_mock.jsonl
   limit_count: 5
 
 testcases:
@@ -14,7 +16,7 @@ testcases:
         script: {{.cmdChroma}} ingest
         assertions:
           - result.code ShouldEqual 1
-          - result.systemout ShouldContainSubstring "Collection Name is not provided"
+          - result.systemout ShouldContainSubstring "collection name is not provided"
 
       - type: exec
         script: {{.cmdChroma}} ingest {{.collection}}
@@ -24,6 +26,11 @@ testcases:
 
   - name: setup_test_data
     steps:
+      - type: exec
+        script: {{.cmdChroma}} create {{.collection}}
+        assertions:
+          - result.code ShouldEqual 0
+
       - type: exec
         script: |
           rm -f {{.test_file}}
@@ -41,31 +48,37 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Limit reached"
 
-  # - name: verify_chroma_count_handshake
-  #   steps:
-  #     # Step 1: Use curl + jq to extract the UUID manually
-  #     - type: exec
-  #       script: |
-  #         # Fetch the JSON, then use jq to grab the 'id' from the first element
-  #         UUID=$(curl -s "http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections?name={{.collection}}" | jq -r '.[0].id')
-  #         echo "EXTRACTED_UUID=$UUID"
-  #       assertions:
-  #         - result.code ShouldEqual 0
-  #       extracts:
-  #         # Venom can extract variables from the system output using regex
-  #         collection_uuid: EXTRACTED_UUID=(.*) from result.systemout
-  #
-  #     # Step 2: Debug - This will show you if the ID was found
-  #     - type: exec
-  #       script: echo "Using UUID [{{.collection_uuid}}]"
-  #
-  #     # Step 3: Perform the count check using the extracted UUID
-  #     - type: http
-  #       method: GET
-  #       url: "http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/{{.collection_uuid}}/count"
-  #       assertions:
-  #         - result.status_code ShouldEqual 200
-  #         - result.body ShouldEqual {{.limit_count}}
+  - name: test_generic_mapping_and_metadata
+    steps:
+      # Step 1: Create a mock Hugging Face style file (Nested and custom keys)
+      - type: exec
+        script: |
+          echo '{"instruction": "Write a Go function", "output": "func main() {}", "author": "Odin"}' > {{.hf_style_file}}
+          echo '{"instruction": "Explain RAG", "output": "Retrieval Augmented...", "author": "Chroma"}' >> {{.hf_style_file}}
+        assertions:
+          - result.code ShouldEqual 0
+
+      # Step 2: Ingest using the NEW flags you added
+      - type: exec
+        script: |
+          {{.cmdChroma}} ingest {{.collection}} {{.hf_style_file}} \
+            --field-content "instruction" \
+            --all-metadata \
+            --batch-size 1
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Ingestion successful"
+
+      # Step 3: Verify the metadata and content mapping via list-docs
+      - type: exec
+        script: {{.cmdChroma}} rs {{.collection}}
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Write a Go function"
+          - result.systemout ShouldContainSubstring "author"
+          - result.systemout ShouldContainSubstring "Odin"
+          - result.systemout ShouldContainSubstring "output"
+          - result.systemout ShouldContainSubstring "func main() {}"
 
   - name: cleanup
     always: true

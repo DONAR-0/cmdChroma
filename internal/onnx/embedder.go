@@ -13,6 +13,13 @@ var (
 	cd = internal.CheckDefer
 )
 
+// EmbedderInterface defines the contract for embedding text into vectors.
+type EmbedderInterface interface {
+	Embed(text string) ([]float32, error)
+	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
+	Close()
+}
+
 type Embedder struct {
 	session   *ort.DynamicAdvancedSession
 	tokenizer *tokenizers.Tokenizer

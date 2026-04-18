@@ -17,7 +17,17 @@ import (
 type ChromaClient struct {
 	URL, Tenant, Database string
 	client                *http.Client
-	Embedder              *onnx.Embedder
+	Embedder              onnx.EmbedderInterface
+}
+
+type ChromaClientInterface interface {
+	TestConnection() error
+	GetTenant() (bool, error)
+	ListDatabases() ([]Database, error)
+	ListCollections() ([]Collection, error)
+	AddBatch(collectionID string, docs []string, ids []string) error
+	QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
+	GetIDByName(name string) (string, error)
 }
 
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {
@@ -354,6 +364,57 @@ func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to add batch: %s", string(body))
+	}
+
+	return nil
+}
+
+// AddBatchGeneric handles documents, IDs, and dynamic metadata maps.
+func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+	if len(documents) == 0 {
+		return nil
+	}
+
+	// 1. Generate Embeddings for the batch
+	// Ensure your embedder is initialized before calling this
+	embeddings, err := c.Embedder.EmbedDocuments(context.Background(), documents)
+	if err != nil {
+		return fmt.Errorf("embedding failed: %w", err)
+	}
+
+	// 2. Prepare the Request Body
+	// Chroma API expects: { "ids": [], "embeddings": [], "metadatas": [], "documents": [] }
+	payload := map[string]any{
+		"ids":        ids,
+		"embeddings": embeddings,
+		"metadatas":  metadatas,
+		"documents":  documents,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch payload: %w", err)
+	}
+
+	// 3. Execute the Request
+	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections/%s/upsert",
+		c.URL, c.Tenant, c.Database, collectionID)
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("chroma server error (%d): %s", resp.StatusCode, string(body))
 	}
 
 	return nil
