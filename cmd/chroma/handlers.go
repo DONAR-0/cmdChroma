@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/donar0/cmdChroma/internal"
 	"github.com/donar0/cmdChroma/internal/onnx"
+	"github.com/donar0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 )
 
@@ -23,8 +29,11 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	// Test the handleTestConnection
-	if err := chromaClient.TestConnection(); err != nil {
+	// Create service (embedder not needed for test)
+	svc := service.NewChromaService(chromaClient, nil)
+
+	// Test the connection
+	if err := svc.TestConnection(); err != nil {
 		slog.Error("Connection test failed", "error", err)
 		return fmt.Errorf("connection test failed: %w", err)
 	}
@@ -282,6 +291,189 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
+func handleImportJsonlFileInChromaDb(_ context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("collection name is not provided, required collection name")
+	}
+
+	fp := c.Args().Get(1)
+	if fp == "" {
+		return fmt.Errorf("filepath is not provided, Please provide jsonl file path")
+	}
+
+	// Flags
+	contentKey := c.String("field-content")
+	if contentKey == "" {
+		contentKey = "text"
+	}
+
+	idKey := c.String("field-id")
+	if idKey == "" {
+		idKey = "id"
+	}
+
+	batchSize := int(c.Int("batch-size"))
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+
+	allMetadata := c.Bool("all-metadata")
+	metadataKeys := c.StringSlice("field-metadata")
+
+	limit := c.Int("n-ingest")
+
+	cleanPath := filepath.Clean(fp)
+	// 1. Check if the path is absolute
+	if filepath.IsAbs(cleanPath) {
+		return fmt.Errorf("security error: absolute paths are not allowed. " +
+			"Please provide a path relative to the current directory")
+	}
+
+	// 2. Open the Root (Current Working Directory)
+	cwd, _ := os.Getwd()
+	root, err := os.OpenRoot(cwd)
+	if err != nil {
+		return err
+	}
+	defer internal.CheckDefer(root.Close)
+
+	// 3. Attempt to open the file
+	file, err := root.Open(cleanPath)
+	if err != nil {
+		return fmt.Errorf("cannot open file '%s': %w", fp, err)
+	}
+	defer internal.CheckDefer(file.Close)
+
+	// 3. Client & Embedder Initialization
+	client, err := createChromaClient(c)
+	if err != nil {
+		return err
+	}
+
+	embedder, err := initEmbedder(c)
+	if err != nil {
+		return err
+	}
+
+	client.Embedder = embedder
+
+	collectionID, err := client.GetIDByName(collectionName)
+	if err != nil {
+		return fmt.Errorf("collection '%s' not found: %w", collectionName, err)
+	}
+
+	// 4. Ingestion Loop
+	scanner := bufio.NewScanner(file)
+	const maxCapacity = 1 * 1024 * 1024
+	scanner.Buffer(make([]byte, maxCapacity), maxCapacity)
+
+	var (
+		docs  []string
+		ids   []string
+		metas []map[string]any
+		count = 0
+	)
+
+	slog.Info("Starting generic ingestion...", "file", fp, "content_field", contentKey)
+
+	for scanner.Scan() {
+		var rec map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			slog.Error("Failed to parse line", "error", err)
+			continue
+		}
+
+		contentVal := getNestedValue(rec, contentKey)
+		if contentVal == nil {
+			continue
+		}
+		content := fmt.Sprintf("%v", contentVal)
+
+		// Extract or Generate ID
+		var currentID string
+		idVal := getNestedValue(rec, idKey)
+		if idVal != nil {
+			currentID = fmt.Sprintf("%v", idVal)
+		} else {
+			// Deterministic Hash fallback: Prevents duplicates on re-runs
+			hash := sha256.Sum256([]byte(content))
+			currentID = hex.EncodeToString(hash[:12])
+		}
+
+		// Extract Metadata
+		meta := make(map[string]any)
+		if allMetadata {
+			for k, v := range rec {
+				if k != contentKey && k != idKey {
+					meta[k] = v
+				}
+			}
+		} else {
+			for _, k := range metadataKeys {
+				if v, exists := rec[k]; exists {
+					meta[k] = v
+				}
+			}
+		}
+
+		// Accumulate
+		docs = append(docs, content)
+		ids = append(ids, currentID)
+		metas = append(metas, meta)
+		count++
+
+		// 1. Check Limit IMMEDIATELY
+		if limit > 0 && count >= limit {
+			slog.Info("Limit reached", "count", count)
+			// Flush what we have in the current batch before breaking
+			if len(docs) > 0 {
+				if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
+					return err
+				}
+			}
+			docs, ids, metas = nil, nil, nil
+			break // Exit the loop
+		}
+		// Batch Flush
+		if len(docs) >= batchSize {
+			slog.Info("Sending batch to Chroma", "size", len(docs))
+			if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
+				return err
+			}
+			docs, ids, metas = nil, nil, nil
+		}
+	}
+
+	// Final Flush
+	if len(docs) > 0 {
+		if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
+			return err
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scanner error: %w", err)
+	}
+
+	slog.Info("Ingestion successful", "total", count)
+	return nil
+}
+
+func getNestedValue(m map[string]any, path string) any {
+
+	parts := strings.Split(path, ".")
+	var current any = m
+	for _, part := range parts {
+		if next, ok := current.(map[string]any); ok {
+			current = next[part]
+		} else {
+			return nil
+		}
+	}
+	return current
+}
+
 func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {
 	modelPath, tokenizerPath, onnxLibPath, err := resolveAIPaths(c)
 	if err != nil {
@@ -322,3 +514,5 @@ func resolveAIPaths(c *cli.Command) (string, string, string, error) {
 
 	return modelPath, tokenizerPath, onnxLibPath, nil
 }
+
+type IngestRecord map[string]any
