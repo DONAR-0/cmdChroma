@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.22.x
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Build binaries
+      run: |
+        make build-linux
+        make build-darwin
+        make build-windows
+
+    - name: Create release archives
+      run: |
+        mkdir -p releases
+        tar -czf releases/cmdChroma-linux-amd64.tar.gz -C dist cmdChroma-linux-amd64
+        tar -czf releases/cmdChroma-darwin-amd64.tar.gz -C dist cmdChroma-darwin-amd64
+        zip releases/cmdChroma-windows-amd64.zip dist/cmdChroma.exe
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the latest tag
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        # Get commits since last tag
+        CHANGES=$(git log --oneline --pretty=format:"- %s" ${LATEST_TAG}..HEAD 2>/dev/null || echo "- Initial release")
+        echo "changes<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body: |
+          ## Changes
+          ${{ steps.changelog.outputs.changes }}
+
+          ## Downloads
+          - [Linux AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/cmdChroma-linux-amd64.tar.gz)
+          - [macOS AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/cmdChroma-darwin-amd64.tar.gz)
+          - [Windows AMD64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/cmdChroma-windows-amd64.zip)
+        draft: false
+        prerelease: false
+
+    - name: Upload release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/cmdChroma-linux-amd64.tar.gz
+        asset_name: cmdChroma-linux-amd64.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload macOS release asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/cmdChroma-darwin-amd64.tar.gz
+        asset_name: cmdChroma-darwin-amd64.tar.gz
+        asset_content_type: application/gzip
+
+    - name: Upload Windows release asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/cmdChroma-windows-amd64.zip
+        asset_name: cmdChroma-windows-amd64.zip
+        asset_content_type: application/zip

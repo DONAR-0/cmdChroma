@@ -2,6 +2,12 @@
 
 A high-performance Go-based Command Line Interface for managing **ChromaDB** collections and performing local vector embeddings. This tool is designed for developers building **RAG (Retrieval-Augmented Generation)** pipelines who want to keep their data and AI processing entirely on their local machine.
 
+[![Go CI](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml)
+[![Integration Tests](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml)
+[![Docker Build](https://github.com/donar0/cmdChroma/actions/workflows/docker.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/docker.yml)
+[![Release](https://github.com/donar0/cmdChroma/actions/workflows/release.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/donar0/cmdChroma/branch/main/graph/badge.svg)](https://codecov.io/gh/donar0/cmdChroma)
+
 ---
 
 ## ✨ Features
@@ -50,7 +56,27 @@ Ensure your models are placed in the `models/` directory relative to the binary:
 └── Makefile
 ```
 
-### 3. Build
+### 3. Docker Installation
+You can also run cmdChroma via Docker:
+
+```bash
+# Pull the latest image
+docker pull donar0/cmdchroma:latest
+
+# Run the CLI
+docker run --rm donar0/cmdchroma:latest --help
+```
+
+For local development with ChromaDB:
+```bash
+# Start ChromaDB
+docker run -d -p 8000:8000 --name chromadb chromadb/chroma
+
+# Run cmdChroma with network access to ChromaDB
+docker run --rm --network host donar0/cmdchroma:latest test
+```
+
+### 4. Build
 Use the provided Makefile to ensure proper formatting and WSL compatibility:
 ```bash
 make build-wsl
@@ -129,6 +155,12 @@ go test ./...
 # or via Makefile
 make test
 ```
+
+### Code Coverage
+Test coverage is automatically calculated and uploaded to Codecov on each push. View the latest coverage report [here](https://codecov.io/gh/donar0/cmdChroma).
+
+### Linting
+The codebase is linted using `golangci-lint` in CI to ensure code quality and consistency.
 
 ### Integration Tests (Venom)
 Run the full integration suite using Venom:
