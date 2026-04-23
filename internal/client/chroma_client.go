@@ -1,6 +1,7 @@
 package cClient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,26 +9,77 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/donar0/cmdChroma/internal"
 	"github.com/donar0/cmdChroma/internal/onnx"
 	"github.com/google/uuid"
 )
 
-type ChromaClient struct {
-	URL, Tenant, Database string
-	client                *http.Client
-	Embedder              onnx.EmbedderInterface
-}
+type (
+	OllamaRequest struct {
+		Model  string `json:"model"`
+		Prompt string `json:"prompt"`
+		Stream bool   `json:"stream"`
+	}
 
-type ChromaClientInterface interface {
-	TestConnection() error
-	GetTenant() (bool, error)
-	ListDatabases() ([]Database, error)
-	ListCollections() ([]Collection, error)
-	AddBatch(collectionID string, docs []string, ids []string) error
-	QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
-	GetIDByName(name string) (string, error)
+	OllamaResponse struct {
+		Response string `json:"response"`
+		Done     bool   `json:"done"`
+	}
+)
+
+type (
+	ChromaClient struct {
+		URL, Tenant, Database string
+		client                *http.Client
+		Embedder              onnx.EmbedderInterface
+	}
+
+	ChromaClientInterface interface {
+		TestConnection() error
+		GetTenant() (bool, error)
+		ListDatabases() ([]Database, error)
+		ListCollections() ([]Collection, error)
+		AddBatch(collectionID string, docs []string, ids []string) error
+		QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
+		GetIDByName(name string) (string, error)
+	}
+)
+
+func (c *ChromaClient) CallOllama(prompt string, modelName string) error {
+
+	url := "http://localhost:11434/api/generate"
+	reqBody := OllamaRequest{
+		Model:  modelName,
+		Prompt: prompt,
+		Stream: true,
+	}
+
+	jsonData, _ := json.Marshal(reqBody)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("ollama connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	//Handling Sream Output
+	scanner := bufio.NewScanner(resp.Body)
+	fmt.Println("\n🤖 AI Response:")
+	fmt.Println(strings.Repeat("-", 20))
+
+	for scanner.Scan() {
+		var r OllamaResponse
+		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
+			continue
+		}
+		fmt.Print(r.Response) // Print tokens as they arrive
+		if r.Done {
+			break
+		}
+	}
+	fmt.Println("\n" + strings.Repeat("-", 20))
+	return nil
 }
 
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {

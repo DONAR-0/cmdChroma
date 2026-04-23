@@ -460,6 +460,47 @@ func handleImportJsonlFileInChromaDb(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
+func handleChat(_ context.Context, c *cli.Command) error {
+	question := c.Args().Get(0)
+	collectionName := c.Args().Get(1)
+
+	// 1. Setup Client
+	client, _ := createChromaClient(c)
+
+	// 2. Setup Embedder (Required for the Query)
+	embedder, _ := initEmbedder(c)
+	client.Embedder = embedder
+	defer embedder.Close()
+
+	// 3. Retrieve Context from Chroma
+	slog.Info("Searching for context...")
+	res, err := client.QueryBatch(collectionName, []string{question}, 3)
+	if err != nil {
+		return err
+	}
+
+	// 4. Augment the Prompt
+	var contextBuilder strings.Builder
+	for i, doc := range res.Documents[0] {
+		fmt.Fprintf(&contextBuilder, "[Context %d]: %s\n", i+1, doc)
+	}
+
+	finalPrompt := fmt.Sprintf(`Use the following context to answer the question.
+Context:
+%s
+Question: %s
+Answer:`, contextBuilder.String(), question)
+
+	// 5. Generate with Ollama
+	model := c.String("llm-model") // e.g., "llama3" or "mistral"
+	if model == "" {
+		model = "qwen:0.5b"
+	}
+
+	return client.CallOllama(finalPrompt, model)
+}
+
+// Helper functions
 func getNestedValue(m map[string]any, path string) any {
 
 	parts := strings.Split(path, ".")

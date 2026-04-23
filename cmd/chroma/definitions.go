@@ -122,8 +122,8 @@ var (
 	}
 
 	testCommandDefinition = &cli.Command{
-		Name:    "testConnection",
-		Aliases: []string{"test", "t"},
+		Name:    "ping",
+		Aliases: []string{"test", "check", "t"},
 		Usage:   "Test the connection to Chroma DB",
 		Description: "Verifies connectivity to the DB instance and " +
 			"ensures the service is responding correctly",
