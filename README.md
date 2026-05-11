@@ -1,6 +1,6 @@
 # 🚀 cmdChroma CLI
 
-A high-performance Go-based Command Line Interface for managing **ChromaDB** collections and performing local vector embeddings. This tool is designed for developers building **RAG (Retrieval-Augmented Generation)** pipelines who want to keep their data and AI processing entirely on their local machine.
+A high-performance, user-friendly command-line tool for **ChromaDB** with local AI embeddings. Designed for developers building **RAG (Retrieval-Augmented Generation)** pipelines who want to keep their data and AI processing entirely local.
 
 [![Go CI](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml)
@@ -10,192 +10,306 @@ A high-performance Go-based Command Line Interface for managing **ChromaDB** col
 
 ---
 
+## 🌟 Quick Start (30 seconds)
+
+1. **Start ChromaDB**
+   ```bash
+   docker run -d -p 8000:8000 --name chromadb chromadb/chroma
+   ```
+
+2. **Test connection**
+   ```bash
+   ./cmdChroma ping
+   ```
+
+3. **Create a collection and add data**
+   ```bash
+   ./cmdChroma create my_docs
+   ./cmdChroma add my_docs --doc "Your document text here"
+   ```
+
+4. **Search your data**
+   ```bash
+   ./cmdChroma query my_docs --query "search terms"
+   ```
+
+That's it! 🎉
+
+---
+
 ## ✨ Features
 
-* **Local AI Embedding:** Integrated ONNX Runtime generates embeddings locally using `all-MiniLM-L6-v2`. **No OpenAI API keys or internet required.**
-* **Batch Operations:** High-speed batch ingestion (`add`) and multi-query searching (`query`) to maximize CPU efficiency.
-* **WSL & Linux Optimized:** Tailored for Windows Subsystem for Linux (WSL) with automated path resolution and cross-platform build support.
-* **Dataset Ingestion:** Built-in logic to stream and import large datasets (like Wikipedia) from JSONL formats.
-* **Scalable Architecture:** Built with `urfave/cli/v3` for a robust, flag-driven user experience.
+- **Local AI Embedding**: All embeddings generated locally using ONNX Runtime (`all-MiniLM-L6-v2`). No OpenAI API keys or internet required.
+- **Batch Operations**: High-speed batch ingestion and multi-query searching for maximum efficiency.
+- **Intuitive CLI**: Designed following [clig.dev](https://clig.dev) guidelines for a consistent, user-friendly experience.
+- **Rich Error Messages**: Actionable hints when things go wrong.
+- **Dataset Import**: Stream large datasets from JSONL or Parquet files with progress reporting.
+- **RAG-Ready**: Built-in chat command for Retrieval-Augmented Generation (requires Ollama).
+- **Cross-Platform**: Optimized for WSL/Linux with automated path resolution.
 
 ---
 
-## 🛠️ Installation & Setup
+## 📦 Installation
 
-## 🚀 Getting Started
-1. Clone the repo: `git clone ...`
-2. Run the setup script to download AI models: `./.ci/scripts/setup.sh`
-3. Build the CLI: `make build-wsl`
+### Prerequisites
+- **Go**: 1.21 or higher (for building from source)
+- **ChromaDB**: Running locally (see quick start above)
+- **ONNX Runtime**: `libonnxruntime.so` and model files (automatically handled by setup script)
 
-### 1. Prerequisites
-* **Go:** 1.21 or higher.
-* **ChromaDB:** Running locally (typically via Docker).
-  ```bash
-  docker run -p 8000:8000 chromadb/chroma
-  ```
-* **ONNX Runtime:** Ensure the shared library (`libonnxruntime.so`) is available in your models directory.
-
-### 2. Project Structure
-Ensure your models are placed in the `models/` directory relative to the binary:
-```
-.
-├── cmd/
-│   └── chroma/
-│       ├── main.go
-│       ├── handlers.go
-│       └── definitions.go
-├── internal/
-│   ├── client/
-│   └── onnx/
-├── models/
-│   ├── all-MiniLM-L6-v2/
-│   │   ├── model.onnx
-│   │   └── tokenizer.json
-│   └── onnx_runtime/
-│       └── lib/libonnxruntime.so
-└── Makefile
-```
-
-### 3. Docker Installation
-You can also run cmdChroma via Docker:
-
+### Build from Source
 ```bash
-# Pull the latest image
+# Clone the repository
+git clone https://github.com/donar0/cmdChroma.git
+cd cmdChroma
+
+# Download AI models (one-time setup)
+./.ci/scripts/setup.sh
+
+# Build the CLI
+make build
+
+# Or for WSL/Linux specifically
+make build-linux
+```
+
+The binary will be at `./cmdChroma`.
+
+### Docker (Easiest)
+```bash
+# Pull pre-built image [TODO]
 docker pull donar0/cmdchroma:latest
 
-# Run the CLI
-docker run --rm donar0/cmdchroma:latest --help
+# Run (with network access to ChromaDB)
+docker run --rm --network host donar0/cmdchroma:latest ping
 ```
 
-For local development with ChromaDB:
-```bash
-# Start ChromaDB
-docker run -d -p 8000:8000 --name chromadb chromadb/chroma
-
-# Run cmdChroma with network access to ChromaDB
-docker run --rm --network host donar0/cmdchroma:latest test
+### Project Structure
+Your models should be placed in `models/` relative to the binary:
+```
+.
+├── cmdChroma              # built binary
+└── models/
+    ├── all-MiniLM-L6-v2/
+    │   ├── model.onnx
+    │   └── tokenizer.json
+    └── onnx_runtime/
+        └── lib/libonnxruntime.so
 ```
 
-### 4. Build
-Use the provided Makefile to ensure proper formatting and WSL compatibility:
-```bash
-make build-wsl
-```
-
-### 4. Docker Executable (Optional)
-If you prefer running `cmdChroma` inside a container, this repo includes a Docker build helper.
-
-Build the image:
-```bash
-./.ci/docker/build.sh
-```
-
-Run `cmdChroma` inside the container (uses `docker exec`):
-```bash
-./.ci/docker/exec.sh --help
-```
-
-If you want to export the built binary rather than a container image, enable the export mode:
-```bash
-DOCKER_OUTPUT=1 ./.ci/docker/build.sh
-```
-
-> **Note:** Full embedding support requires the native `libtokenizers` library.
-> If you do not have `libtokenizers` installed, the CLI will still build and run
-> (using a no-op placeholder embedder), but embedding-based commands will use
-> zero vectors.
+> **Note**: The setup script automatically downloads these files to the correct location.
 
 ---
 
-## 📖 Usage Examples
+## 🎯 Command Reference
 
-### Create a Collection
+### Core Commands
+
+#### `ping` — Test Connection
+Verify connectivity to your ChromaDB instance.
 ```bash
-./cmdChroma create wikipedia_simple
+chroma ping                    # Default localhost:8000
+chroma ping --host 192.168.1.10 --port 8080
+chroma ping --timeout 10       # Custom timeout
 ```
 
-### Add Documents (Batch)
-Add multiple documents in a single command. The CLI vectorizes them locally before sending them to Chroma.
+#### `create` — Create Collection
+Create a new collection to store your documents.
 ```bash
-./cmdChroma add wikipedia_simple \
-  --doc "Go is a statically typed, compiled high-level language." \
-  --doc "ChromaDB stores embeddings for semantic search."
+chroma create my_collection
+chroma create my_collection --tenant my_tenant --database my_db
 ```
 
-### Batch Query
-Search for multiple topics simultaneously.
+#### `add` — Add Documents
+Add one or more documents with automatic local embedding.
 ```bash
-./cmdChroma query wikipedia_simple \
-  -q "What is Go?" \
-  -q "How do vector databases work?" \
-  --n-results 3
+# Single document
+chroma add my_collection --doc "The capital of France is Paris."
+
+# Multiple documents (batch)
+chroma add my_collection \
+  --doc "Go is a compiled language." \
+  --doc "Python is interpreted." \
+  --doc "JavaScript runs in browsers."
+
+# With custom IDs
+chroma add my_collection \
+  --doc "Document 1" --id "doc-1" \
+  --doc "Document 2" --id "doc-2"
+
+# From a file using xargs
+cat docs.txt | xargs -I {} chroma add my_collection --doc "{}"
 ```
 
-### Version Info
-The CLI includes build metadata in `--version` output:
+#### `query` — Search Documents
+Perform semantic search with natural language queries.
 ```bash
-./cmdChroma --version
-# -> cmdChroma version (git <commit>, built <timestamp>)
+# Single query
+chroma query my_collection --query "What is Go programming?"
+
+# Batch queries (much faster than running separately)
+chroma query my_collection \
+  --query "How to use vectors?" \
+  --query "What is RAG?" \
+  --query "Explain embeddings"
+
+# Control number of results
+chroma query my_collection --query "AI concepts" --n-results 10
 ```
 
-### Dataset Import
-Import a JSONL file exported from Hugging Face or other sources:
+#### `import` — Import JSONL File
+Bulk import from JSONL files (e.g., Hugging Face datasets).
 ```bash
-./cmdChroma import wikipedia_simple ./data/wiki_subset.jsonl
+# Basic import (expects fields: 'text' and 'id')
+chroma import my_collection data.jsonl
+
+# Custom field mapping
+chroma import my_collection data.jsonl \
+  --field-content "content" \
+  --field-id "uuid"
+
+# Import with metadata and limit
+chroma import my_collection data.jsonl \
+  --field-metadata "author" \
+  --field-metadata "category" \
+  --all-metadata \
+  --n-ingest 1000 \
+  --batch-size 500
 ```
+
+#### `import-parquet` — Import Parquet File
+Bulk import from Parquet format.
+```bash
+chroma import-parquet my_collection data.parquet \
+  --text-column "content" \
+  --id-column "record_id" \
+  --all-metadata
+```
+
+#### `chat` — RAG Q&A
+Ask questions about your collection using local AI.
+```bash
+# Requires Ollama running (default: localhost:11434)
+chroma chat my_collection "What are the main topics?"
+
+# Use a specific model
+chroma chat my_collection "Summarize this" --llm-model llama2
+
+# Retrieve more context for complex questions
+chroma chat my_collection "Explain in detail" --n-results 10
+```
+
+#### `records` — List Documents
+Inspect documents in a collection.
+```bash
+chroma records my_collection
+chroma records my_collection | head -n 20  # Paginate
+```
+
+#### `databases` — List Databases
+View all databases in the current tenant.
+```bash
+chroma databases
+chroma databases --tenant custom_tenant
+```
+
+#### `collections` — List Collections
+View all collections in the current database.
+```bash
+chroma collections
+chroma collections --database my_db
+```
+
+#### `tenant` — Show Current Tenant
+Check tenant configuration.
+```bash
+chroma tenant
+chroma tenant --tenant my_tenant
+```
+
+---
+
+## 🔧 Global Flags
+
+These flags are available on all commands:
+
+| Flag | Alias | Environment | Default | Description |
+|------|-------|-------------|---------|-------------|
+| `--host` | `-H` | `CHROMA_HOST` | `localhost` | ChromaDB server host |
+| `--port` | `-p` | `CHROMA_PORT` | `8000` | ChromaDB server port |
+| `--tenant` | | `TENANT`, `CHROMA_TENANT` | `default_tenant` | Tenant name |
+| `--database` | | `DATABASE`, `CHROMA_DATABASE` | `default_database` | Database name |
+| `--collection` | | `COLLECTION`, `CHROMA_COLLECTION` | (none) | Default collection (can override per command) |
+| `--verbose` | `-v` | | `false` | Enable debug logging |
+
+---
+
+## 🎨 CLI Design Principles
+
+cmdChroma follows the [clig.dev](https://clig.dev) guidelines:
+
+- **Clear help text**: Every command has a detailed description and usage examples.
+- **Sensible defaults**: Works out of the box with local ChromaDB.
+- **Actionable errors**: When something fails, you get hints on how to fix it.
+- **Consistent flags**: Same flag names and environment variables across commands.
+- **Progress feedback**: Long-running operations (imports) show status updates.
+- **User-friendly output**: Emoji and formatting make results easy to scan.
+
+---
+
+## 🐛 Troubleshooting
+
+### "connection failed"
+- Is ChromaDB running? `docker ps`
+- Check host/port: `chroma ping --host localhost --port 8000`
+- Verify network connectivity
+
+### "failed to initialize embedding engine"
+- Ensure model files exist in `models/` directory
+- Run setup script: `./.ci/scripts/setup.sh`
+- Or specify paths manually: `--model-path`, `--tokenizer-path`, `--onnx-lib`
+
+### "collection not found"
+- List collections: `chroma collections`
+- Create collection first: `chroma create <name>`
+
+### LLM chat fails (`chroma chat`)
+- Is Ollama running? Start it: `ollama serve`
+- Pull a model: `ollama pull qwen:0.5b`
+- Check Ollama is at `http://localhost:11434`
 
 ---
 
 ## 🧪 Testing
 
-### Unit Tests
-Run the Go unit tests for the entire module:
 ```bash
+# Unit tests
 go test ./...
-# or via Makefile
+# or
 make test
-```
 
-### Code Coverage
-Test coverage is automatically calculated and uploaded to Codecov on each push. View the latest coverage report [here](https://codecov.io/gh/donar0/cmdChroma).
-
-### Linting
-The codebase is linted using `golangci-lint` in CI to ensure code quality and consistency.
-
-### Integration Tests (Venom)
-Run the full integration suite using Venom:
-```bash
+# Integration tests
 make venom
-# or directly
-./.ci/scripts/run-venom.sh
-```
 
-### Code Generation (`go generate`)
-This repository includes a small code generator that produces build metadata in `internal/version/version_gen.go`.
+# Lint
+make lint
 
-To regenerate build metadata (timestamp + git commit), run:
-```bash
+# Code generation (build metadata)
 go generate ./...
-# or via Makefile
-make generate
-```
-
-You can then access generated constants from code via:
-```go
-import "github.com/donar0/cmdChroma/internal/version"
-
-fmt.Println(version.BuildDate, version.GitCommit)
 ```
 
 ---
 
 ## 📜 License & Attribution
 
-This project is licensed under the Apache License 2.0.
+Licensed under the Apache License 2.0.
 
 ### Third-Party Attributions
-* **ChromaDB:** The AI-native open-source embedding database.
-* **ONNX Runtime:** High-performance ML inferencing engine by Microsoft.
-* **Hugging Face:** For the `all-MiniLM-L6-v2` transformer model.
+- **ChromaDB**: The AI-native open-source embedding database
+- **ONNX Runtime**: High-performance ML inferencing by Microsoft
+- **Hugging Face**: `all-MiniLM-L6-v2` transformer model
 
-Copyright © 2026 DONAR-0. Licensed under the Apache License, Version 2.0.
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) (to be created) and follow the clig.dev guidelines for CLI changes.

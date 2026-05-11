@@ -7,6 +7,7 @@ import (
 	"os"
 
 	client "github.com/donar0/cmdChroma/internal/client"
+	"github.com/donar0/cmdChroma/internal/config"
 	"github.com/donar0/cmdChroma/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -43,7 +44,9 @@ func main() {
 
 // createChromaClient creates a Chroma client based on CLI context
 func createChromaClient(c *cli.Command) (*client.ChromaClient, error) {
-	// For now, use the default client
-	// In the future, this could be enhanced to use host/port from flags
-	return client.NewChromaDBClient(fmt.Sprintf("http://%s:%s", c.String("host"), c.String("port")), c.String("tenant"), c.String("database")), nil
+	cfg, err := config.LoadFromCLI(c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	return client.NewChromaDBClient(cfg.GetChromaURL(), cfg.GetTenant(), cfg.GetDatabase()), nil
 }

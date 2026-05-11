@@ -1,0 +1,34 @@
+version: "2"
+import:
+  - _includes/collection_required.yml
+vars:
+  subcommand: rs
+name: Test Chroma CLI - List Records
+testcases:
+  - name: Setup - create collection and add a document
+    steps:
+      - type: exec
+        script: cmdChroma mkColl t6_testcoll
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        timeout: 120
+        script: cmdChroma a t6_testcoll -d "Test document content"
+        assertions:
+          - result.code ShouldEqual 0
+  - name: List Records
+    steps:
+      - type: exec
+        script: cmdChroma rs t6_testcoll
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "📄 Documents in collection"
+          - result.systemout ShouldContainSubstring "t6_testcoll"
+          - result.systemout ShouldContainSubstring "ID:"
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma delete t6_testcoll || true
+        assertions:
+          - result.code ShouldEqual 0

@@ -1,36 +1,25 @@
 version: "2"
-name: Test Chroma CLI - Ingestion Records
-
+import:
+  - _includes/collection_required.yml
+  - _includes/file_required.yml
 vars:
   cmdChroma: cmdChroma
+  subcommand: ingest
   collection: test_Valid
   test_file: test_data.jsonl
   basic_file: basic_data.jsonl
-  hf_stlye_file: hf_mock.jsonl
+  hf_style_file: hf_mock.jsonl
   limit_count: 5
 
+name: Test Chroma CLI - Ingestion Records
+
 testcases:
-  - name: validation_checks
-    steps:
-      - type: exec
-        script: {{.cmdChroma}} ingest
-        assertions:
-          - result.code ShouldEqual 1
-          - result.systemout ShouldContainSubstring "collection name is not provided"
-
-      - type: exec
-        script: {{.cmdChroma}} ingest {{.collection}}
-        assertions:
-          - result.code ShouldEqual 1
-          - result.systemout ShouldContainSubstring "filepath is not provided"
-
   - name: setup_test_data
     steps:
       - type: exec
         script: {{.cmdChroma}} create {{.collection}}
         assertions:
           - result.code ShouldEqual 0
-
       - type: exec
         script: |
           rm -f {{.test_file}}
@@ -43,6 +32,7 @@ testcases:
   - name: run_ingest_with_limit
     steps:
       - type: exec
+        timeout: 300
         script: {{.cmdChroma}} ingest {{.collection}} {{.test_file}} --n-ingest {{.limit_count}}
         assertions:
           - result.code ShouldEqual 0
@@ -60,17 +50,19 @@ testcases:
 
       # Step 2: Ingest using the NEW flags you added
       - type: exec
+        timeout: 300
         script: |
-          {{.cmdChroma}} ingest {{.collection}} {{.hf_style_file}} \
+          {{.cmdChroma}} import {{.collection}} {{.hf_style_file}} \
             --field-content "instruction" \
             --all-metadata \
             --batch-size 1
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Ingestion successful"
+          - result.systemout ShouldContainSubstring "Import completed"
 
       # Step 3: Verify the metadata and content mapping via list-docs
       - type: exec
+        timeout: 60
         script: {{.cmdChroma}} rs {{.collection}}
         assertions:
           - result.code ShouldEqual 0
@@ -84,4 +76,10 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: rm -f {{.test_file}}
+        script: {{.cmdChroma}} delete {{.collection}} || true
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f {{.test_file}} {{.hf_style_file}}
+        assertions:
+          - result.code ShouldEqual 0

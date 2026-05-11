@@ -1,7 +1,6 @@
-package cClient
+package client
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,24 +8,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/donar0/cmdChroma/internal"
 	"github.com/donar0/cmdChroma/internal/onnx"
 	"github.com/google/uuid"
-)
-
-type (
-	OllamaRequest struct {
-		Model  string `json:"model"`
-		Prompt string `json:"prompt"`
-		Stream bool   `json:"stream"`
-	}
-
-	OllamaResponse struct {
-		Response string `json:"response"`
-		Done     bool   `json:"done"`
-	}
 )
 
 type (
@@ -42,45 +27,14 @@ type (
 		ListDatabases() ([]Database, error)
 		ListCollections() ([]Collection, error)
 		AddBatch(collectionID string, docs []string, ids []string) error
+		AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 		QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
 		GetIDByName(name string) (string, error)
+		ResolveCollectionID(input string) (string, error)
+		DeleteCollection(name string) error
+		DeleteRecords(collectionID string, ids []string) error
 	}
 )
-
-func (c *ChromaClient) CallOllama(prompt string, modelName string) error {
-
-	url := "http://localhost:11434/api/generate"
-	reqBody := OllamaRequest{
-		Model:  modelName,
-		Prompt: prompt,
-		Stream: true,
-	}
-
-	jsonData, _ := json.Marshal(reqBody)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("ollama connection failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	//Handling Sream Output
-	scanner := bufio.NewScanner(resp.Body)
-	fmt.Println("\n🤖 AI Response:")
-	fmt.Println(strings.Repeat("-", 20))
-
-	for scanner.Scan() {
-		var r OllamaResponse
-		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
-			continue
-		}
-		fmt.Print(r.Response) // Print tokens as they arrive
-		if r.Done {
-			break
-		}
-	}
-	fmt.Println("\n" + strings.Repeat("-", 20))
-	return nil
-}
 
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 	slog.Info("Initiating ChromaClient Client", "URL:", url, "Tenant:", tenant, "Database:", database)
@@ -292,6 +246,59 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 	return "", fmt.Errorf("collection '%s' not found", name)
 }
 
+func (c *ChromaClient) DeleteCollection(name string) error {
+	slog.Info("Deleting collection", "name", name)
+	id, err := c.GetIDByName(name)
+	if err != nil {
+		return fmt.Errorf("collection '%s' not found: %w", name, err)
+	}
+	endpoint := fmt.Sprintf(deleteCollection, c.URL, c.Tenant, c.Database, id)
+	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete collection: %w", err)
+	}
+	defer cd(resp.Body.Close)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete collection failed: %d, %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// DeleteRecords removes specific documents from a collection by their IDs.
+func (c *ChromaClient) DeleteRecords(collectionID string, ids []string) error {
+	slog.Info("Deleting records", "collection", collectionID, "ids", ids)
+	colUUID, err := c.ResolveCollectionID(collectionID)
+	if err != nil {
+		return fmt.Errorf("failed to resolve collection: %w", err)
+	}
+	endpoint := fmt.Sprintf(deleteRecords, c.URL, c.Tenant, c.Database, colUUID)
+	payload := map[string]any{"ids": ids}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal delete payload: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete records: %w", err)
+	}
+	defer cd(resp.Body.Close)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete records failed: %d, %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // AddDocument - Corrected Metadata tag handling
 func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float32) error {
 	endpoint := fmt.Sprintf(batchAdd,
@@ -462,7 +469,7 @@ func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, 
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer internal.CheckDefer(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -543,4 +550,6 @@ var (
 	listDocuments        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/get"
 	queryEndpoint        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/query"
 	batchAdd             = "%s/api/v2/tenants/%s/databases/%s/collections/%s/add"
+	deleteCollection     = "%s/api/v2/tenants/%s/databases/%s/collections/%s"
+	deleteRecords        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/delete"
 )

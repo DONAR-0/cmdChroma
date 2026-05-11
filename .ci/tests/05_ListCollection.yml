@@ -1,0 +1,48 @@
+version: "2"
+name: Test Chroma CLI - List Collection
+testcases:
+  - name: Setup - create test collections
+    steps:
+      - type: exec
+        script: cmdChroma mkColl t5_collA
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma mkColl t5_collB
+        assertions:
+          - result.code ShouldEqual 0
+  - name: List Collections using collections command
+    steps:
+      - type: exec
+        script: cmdChroma collections
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: List Collections using alias ls
+    steps:
+      - type: exec
+        script: cmdChroma ls
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: List Collections using alias ls-colls
+    steps:
+      - type: exec
+        script: cmdChroma ls-colls
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma delete t5_collA || true
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma delete t5_collB || true
+        assertions:
+          - result.code ShouldEqual 0
