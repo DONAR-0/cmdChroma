@@ -21,8 +21,7 @@ var (
 )
 
 func main() {
-	// Initialize Logger first
-	InitLogger()
+	app := createApp()
 
 	// Recover from panic gracefully
 	defer func() {
@@ -32,8 +31,6 @@ func main() {
 			os.Exit(ExitError)
 		}
 	}()
-
-	app := createApp()
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		slog.Error("CLI execution failed", "error", err)

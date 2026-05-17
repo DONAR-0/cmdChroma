@@ -5,7 +5,7 @@ testcases:
   - name: Current Default_tenant should Exists
     steps:
       - type: exec
-        script: cmdChroma cT
+        script: cmdChroma --log-level info cT
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"
@@ -14,7 +14,7 @@ testcases:
   - name: Current Tenant with -tenant flag
     steps:
       - type: exec
-        script: cmdChroma cT -tenant some_tenant
+        script: cmdChroma --log-level info cT -tenant some_tenant
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"
@@ -24,7 +24,7 @@ testcases:
   - name: Current Tenant with Env Variable
     steps:
       - type: exec
-        script: TENANT=some_tenant cmdChroma cT
+        script: TENANT=some_tenant cmdChroma --log-level info cT
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"

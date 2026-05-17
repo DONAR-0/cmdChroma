@@ -4,13 +4,13 @@ testcases:
   - name: Setup - create collection
     steps:
       - type: exec
-        script: cmdChroma mkColl t7_testcoll
+        script: cmdChroma --log-level info mkColl t7_testcoll
         assertions:
           - result.code ShouldEqual 0
   - name: Error on missing document flag
     steps:
       - type: exec
-        script: cmdChroma a t7_testcoll
+        script: cmdChroma --log-level info a t7_testcoll
         assertions:
           - result.code ShouldEqual 1
           - result.systemout ShouldContainSubstring "Required flag"
@@ -20,7 +20,7 @@ testcases:
       - type: exec
         timeout: 120
         script: |
-          cmdChroma a t7_testcoll \
+          cmdChroma --log-level info a t7_testcoll \
             --doc "The quick brown fox" \
             --doc "Jumps over the lazy dog" \
             --doc "Go is an open source programming language"
@@ -32,7 +32,7 @@ testcases:
       - type: exec
         timeout: 120
         script: |
-          cmdChroma a t7_testcoll \
+          cmdChroma --log-level info a t7_testcoll \
             -d "Wikipedia entry A" --id "wiki-a" \
             -d "Wikipedia entry B" --id "wiki-b"
         assertions:
@@ -42,6 +42,6 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: cmdChroma delete t7_testcoll || true
+        script: cmdChroma --log-level info delete t7_testcoll || true
         assertions:
           - result.code ShouldEqual 0

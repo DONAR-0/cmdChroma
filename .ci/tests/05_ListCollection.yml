@@ -4,17 +4,17 @@ testcases:
   - name: Setup - create test collections
     steps:
       - type: exec
-        script: cmdChroma mkColl t5_collA
+        script: cmdChroma --log-level info mkColl t5_collA
         assertions:
           - result.code ShouldEqual 0
       - type: exec
-        script: cmdChroma mkColl t5_collB
+        script: cmdChroma --log-level info mkColl t5_collB
         assertions:
           - result.code ShouldEqual 0
   - name: List Collections using collections command
     steps:
       - type: exec
-        script: cmdChroma collections
+        script: cmdChroma --log-level info collections
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "t5_collA"
@@ -22,7 +22,7 @@ testcases:
   - name: List Collections using alias ls
     steps:
       - type: exec
-        script: cmdChroma ls
+        script: cmdChroma --log-level info ls
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "t5_collA"
@@ -30,7 +30,7 @@ testcases:
   - name: List Collections using alias ls-colls
     steps:
       - type: exec
-        script: cmdChroma ls-colls
+        script: cmdChroma --log-level info ls-colls
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "t5_collA"
@@ -39,10 +39,10 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: cmdChroma delete t5_collA || true
+        script: cmdChroma --log-level info delete t5_collA || true
         assertions:
           - result.code ShouldEqual 0
       - type: exec
-        script: cmdChroma delete t5_collB || true
+        script: cmdChroma --log-level info delete t5_collB || true
         assertions:
           - result.code ShouldEqual 0

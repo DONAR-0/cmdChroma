@@ -37,7 +37,7 @@ type (
 )
 
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {
-	slog.Info("Initiating ChromaClient Client", "URL:", url, "Tenant:", tenant, "Database:", database)
+	slog.Info("Initializing Chroma client", "url", url, "tenant", tenant, "database", database)
 	return &ChromaClient{
 		URL:      url,
 		Tenant:   tenant,
@@ -49,7 +49,7 @@ func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 func (c *ChromaClient) TestConnection() error {
 
 	endpoint := fmt.Sprintf(testEndpoint, c.URL)
-	slog.Info("Calling Endpoint", "endpoint", endpoint)
+	slog.Info("Calling endpoint", "endpoint", endpoint)
 	resp, err := c.client.Get(endpoint)
 
 	if err != nil {
@@ -62,7 +62,7 @@ func (c *ChromaClient) TestConnection() error {
 		return fmt.Errorf("heartbeat failed with status: %d, response: %s", resp.StatusCode, string(body))
 	}
 
-	slog.Info(fmt.Sprintf("ChromaDB connection successful: %s\n", string(body)))
+	slog.Info("ChromaDB connection successful", "response", string(body))
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	// URL includes the specific tenant from your client struct
 	endpoint := fmt.Sprintf(listDatabases, c.URL, c.Tenant)
-	slog.Info("List Databases from URL :" + endpoint)
+	slog.Info("Listing databases", "endpoint", endpoint)
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (c *ChromaClient) ListCollections() ([]Collection, error) {
 }
 
 func (c *ChromaClient) CreateCollection(name string) (string, error) {
-	slog.Info("- Creating Collection with name:", "Name", name)
+	slog.Info("Creating collection", "name", name)
 	//endpoint
 	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
 	payload := CreateCollectionRequest{
@@ -173,7 +173,7 @@ func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, 
 	endpoint := fmt.Sprintf(listDocuments,
 		c.URL, c.Tenant, c.Database, collectionID)
 
-	slog.Info("Listing Documents", "endpoint", endpoint)
+	slog.Info("Listing documents", "endpoint", endpoint)
 
 	// When using the scoped URL above, some Chroma versions expect a simpler body
 	payload := map[string]any{

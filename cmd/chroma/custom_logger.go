@@ -11,7 +11,9 @@ import (
 )
 
 type CustomHandler struct {
-	level slog.Level
+	level  slog.Level
+	attrs  []slog.Attr
+	groups []string
 }
 
 func (h *CustomHandler) Enabled(_ context.Context, level slog.Level) bool {
@@ -41,23 +43,67 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 			location = fmt.Sprintf("%s#%s", file, funcName)
 		}
 	}
-	// 3. Final Output
-	// Format: Date Time Stamp : File Name : Location : actual log Value
-	_, _ = fmt.Fprintf(os.Stdout, "%s:%s:%s\n", timeStr, location, r.Message)
-	// Print extra attributes (like errors) on a new Line
+	// 3. Final Output - Include log level
+	// Format: [LEVEL] timestamp:file:location:message
+	levelStr := r.Level.String()
+	_, _ = fmt.Fprintf(os.Stdout, "[%s] %s:%s:%s\n", levelStr, timeStr, location, r.Message)
+
+	// Merge handler attrs + record attrs
+	allAttrs := make([]slog.Attr, 0, len(h.attrs))
+	allAttrs = append(allAttrs, h.attrs...)
+
+	// Collect record attrs
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Value.String() != "" {
-			fmt.Printf("	└ %s: %v\n", a.Key, a.Value)
-		}
+		allAttrs = append(allAttrs, a)
 		return true
 	})
+
+	// Apply group prefix
+	groupPrefix := ""
+	if len(h.groups) > 0 {
+		groupPrefix = strings.Join(h.groups, ".") + "."
+	}
+
+	// Print attributes with optional prefix
+	for _, a := range allAttrs {
+		key := a.Key
+		if groupPrefix != "" {
+			key = groupPrefix + a.Key
+		}
+		if a.Value.String() != "" {
+			fmt.Printf("	└ %s: %v\n", key, a.Value)
+		}
+	}
 	return nil
 }
 
-func (h *CustomHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return h }
-func (h *CustomHandler) WithGroup(name string) slog.Handler       { return h }
+func (h *CustomHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &CustomHandler{
+		level:  h.level,
+		attrs:  append(h.attrs, attrs...),
+		groups: h.groups,
+	}
+}
 
-func InitLogger() {
-	handler := &CustomHandler{level: slog.LevelInfo}
+func (h *CustomHandler) WithGroup(name string) slog.Handler {
+	return &CustomHandler{
+		level:  h.level,
+		attrs:  h.attrs,
+		groups: append(h.groups, name),
+	}
+}
+
+func InitLogger(level slog.Level, format string) {
+	var handler slog.Handler
+
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     level,
+			AddSource: true,
+		})
+	} else {
+		handler = &CustomHandler{level: level}
+	}
+
 	slog.SetDefault(slog.New(handler))
 }

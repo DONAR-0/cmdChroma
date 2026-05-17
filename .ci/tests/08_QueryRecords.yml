@@ -4,13 +4,13 @@ testcases:
   - name: Setup - create collection and add documents
     steps:
       - type: exec
-        script: cmdChroma mkColl t8_testcoll
+        script: cmdChroma --log-level info mkColl t8_testcoll
         assertions:
           - result.code ShouldEqual 0
       - type: exec
         timeout: 120
         script: |
-          cmdChroma a t8_testcoll \
+          cmdChroma --log-level info a t8_testcoll \
             -d "The quick brown fox jumps over the lazy dog" \
             -d "Go is an open source programming language" \
             -d "ChromaDB is a vector database for AI applications"
@@ -20,7 +20,7 @@ testcases:
     steps:
       - type: exec
         timeout: 60
-        script: cmdChroma q t8_testcoll --query "How do I add records?"
+        script: cmdChroma --log-level info q t8_testcoll --query "How do I add records?"
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Initializing embedding engine"
@@ -34,6 +34,6 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: cmdChroma delete t8_testcoll || true
+        script: cmdChroma --log-level info delete t8_testcoll || true
         assertions:
           - result.code ShouldEqual 0

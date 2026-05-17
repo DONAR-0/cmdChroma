@@ -34,8 +34,37 @@ Get started quickly:
   chroma add my_collection -d "Your document text"  # Add a document
   chroma query my_collection -q "Search query"      # Search`,
 		// Global flags available to all commands
-		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, tenantFlag, databaseFlag, collectionFlag},
+		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
+			// Determine log level from flags
+			level := slog.LevelInfo
+			format := "text"
+
+			// Parse log-level flag
+			logLevel := c.String("log-level")
+			switch logLevel {
+			case "debug":
+				level = slog.LevelDebug
+			case "warn":
+				level = slog.LevelWarn
+			case "error":
+				level = slog.LevelError
+			}
+
+			// Parse log-format flag
+			format = c.String("log-format")
+			if format != "text" && format != "json" {
+				format = "text" // default fallback
+			}
+
+			// verbose flag overrides to debug
+			if c.Bool("verbose") {
+				level = slog.LevelDebug
+			}
+
+			// Initialize the logger
+			InitLogger(level, format)
+
 			if c.Bool("verbose") {
 				slog.Info("Verbose logging enabled", "version", AppVersion)
 			}
@@ -483,6 +512,21 @@ var (
 		Name:    "verbose",
 		Aliases: []string{"v"},
 		Usage:   "Enable verbose logging (debug level)",
+	}
+
+	logLevelFlag = &cli.StringFlag{
+		Name:    "log-level",
+		Aliases: []string{"l"},
+		Value:   "info",
+		Usage:   "Set log level: debug, info, warn, error",
+		Sources: cli.EnvVars("CHROMA_LOG_LEVEL"),
+	}
+
+	logFormatFlag = &cli.StringFlag{
+		Name:    "log-format",
+		Value:   "text",
+		Usage:   "Log output format: text, json",
+		Sources: cli.EnvVars("CHROMA_LOG_FORMAT"),
 	}
 
 	timeoutFlag = &cli.IntFlag{

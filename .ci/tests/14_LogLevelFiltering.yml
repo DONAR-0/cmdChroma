@@ -1,0 +1,37 @@
+version: "2"
+name: Test Log Level Filtering
+
+testcases:
+  - name: Info level shows INFO logs
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info ping
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "[INFO]"
+          - result.systemout ShouldNotContainSubstring "[DEBUG]"
+
+  - name: Debug level shows INFO logs
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug ping
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: Verbose flag enables debug logging level
+    steps:
+      - type: exec
+        script: cmdChroma ping --verbose
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: Warn level hides INFO logs
+    steps:
+      - type: exec
+        script: cmdChroma --log-level warn ping
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "[INFO]"
+          - result.systemout ShouldNotContainSubstring "[DEBUG]"

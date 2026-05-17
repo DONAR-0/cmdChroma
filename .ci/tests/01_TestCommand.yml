@@ -5,7 +5,7 @@ testcases:
   - name: Chroma t
     steps:
       - type: exec
-        script: cmdChroma t
+        script: cmdChroma --log-level info t
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"
@@ -13,7 +13,7 @@ testcases:
   - name: Chroma test
     steps:
       - type: exec
-        script: cmdChroma test
+        script: cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"
@@ -23,7 +23,7 @@ testcases:
   - name: Chroma test global tenant flag
     steps:
       - type: exec
-        script: cmdChroma test -tenant some_tenant
+        script: cmdChroma --log-level info test -tenant some_tenant
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"
@@ -32,7 +32,7 @@ testcases:
   - name: Chroma test global tenant flag with environment variable
     steps:
       - type: exec
-        script: TENANT=some_tenant cmdChroma test
+        script: TENANT=some_tenant cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"
@@ -41,7 +41,7 @@ testcases:
   - name: Chroma test global tenant and database flag with environment variable
     steps:
       - type: exec
-        script: TENANT=some_tenant DATABASE=some_database cmdChroma test
+        script: TENANT=some_tenant DATABASE=some_database cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"
@@ -52,7 +52,7 @@ testcases:
   - name: Chroma test global database flag
     steps:
       - type: exec
-        script: cmdChroma test -tenant some_tenant -database some_database
+        script: cmdChroma --log-level info test -tenant some_tenant -database some_database
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Testing connection"

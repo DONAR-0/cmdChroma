@@ -19,6 +19,9 @@ type ChromaService struct {
 // NewChromaService creates a new service with the given client and embedder.
 // If the client is a concrete *client.ChromaClient, the embedder is injected into it.
 func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
+	slog.Info("Creating ChromaService",
+		"client_type", fmt.Sprintf("%T", c),
+		"embedder_type", fmt.Sprintf("%T", e))
 	// Inject embedder into the client if possible
 	if ch, ok := c.(*client.ChromaClient); ok {
 		ch.Embedder = e
@@ -31,48 +34,101 @@ func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) 
 
 // TestConnection tests the connection to ChromaDB.
 func (s *ChromaService) TestConnection() error {
-	return s.client.TestConnection()
+	slog.Info("Testing ChromaDB connection")
+	err := s.client.TestConnection()
+	if err != nil {
+		slog.Error("Connection test failed", "error", err)
+	} else {
+		slog.Info("Connection test successful")
+	}
+	return err
 }
 
 // GetTenant checks if the tenant exists.
 func (s *ChromaService) GetTenant() (bool, error) {
-	return s.client.GetTenant()
+	slog.Info("Checking tenant existence")
+	exists, err := s.client.GetTenant()
+	if err != nil {
+		slog.Error("Tenant check failed", "error", err)
+	} else {
+		slog.Info("Tenant check completed", "exists", exists)
+	}
+	return exists, err
 }
 
 // ListDatabases lists all databases for the tenant.
 func (s *ChromaService) ListDatabases() ([]client.Database, error) {
-	return s.client.ListDatabases()
+	slog.Info("Listing databases")
+	databases, err := s.client.ListDatabases()
+	if err != nil {
+		slog.Error("Failed to list databases", "error", err)
+		return nil, err
+	}
+	slog.Info("Databases listed", "count", len(databases))
+	return databases, nil
 }
 
 // ListCollections lists all collections in the database.
 func (s *ChromaService) ListCollections() ([]client.Collection, error) {
-	return s.client.ListCollections()
+	slog.Info("Listing collections")
+	collections, err := s.client.ListCollections()
+	if err != nil {
+		slog.Error("Failed to list collections", "error", err)
+		return nil, err
+	}
+	slog.Info("Collections listed", "count", len(collections))
+	return collections, nil
 }
 
 // AddDocuments adds documents to a collection with embeddings.
 func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids []string) error {
 	if s.embedder == nil {
-		return errors.ErrEmbedderNotInitialized
+		err := errors.ErrEmbedderNotInitialized
+		slog.Error("Cannot add documents: embedder not initialized", "error", err)
+		return err
 	}
+	slog.Info("Adding documents",
+		"collection", collectionName,
+		"document_count", len(docs))
 	// Resolve collection name (or ID) to a valid collection ID
 	collectionID, err := s.client.ResolveCollectionID(collectionName)
 	if err != nil {
+		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
-	return s.client.AddBatch(collectionID, docs, ids)
+	err = s.client.AddBatch(collectionID, docs, ids)
+	if err != nil {
+		slog.Error("Failed to add batch", "collection", collectionName, "batch_size", len(docs), "error", err)
+	} else {
+		slog.Info("Documents added successfully", "collection", collectionName, "count", len(docs))
+	}
+	return err
 }
 
 // QueryDocuments queries documents in a collection.
 func (s *ChromaService) QueryDocuments(collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
 	if s.embedder == nil {
-		return nil, errors.ErrEmbedderNotInitialized
+		err := errors.ErrEmbedderNotInitialized
+		slog.Error("Cannot query: embedder not initialized", "error", err)
+		return nil, err
 	}
+	slog.Info("Querying documents",
+		"collection", collectionName,
+		"query_count", len(queries),
+		"n_results", nResults)
 	// Resolve collection name (or ID) to a valid collection ID
 	collectionID, err := s.client.ResolveCollectionID(collectionName)
 	if err != nil {
+		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
-	return s.client.QueryBatch(collectionID, queries, nResults)
+	result, err := s.client.QueryBatch(collectionID, queries, nResults)
+	if err != nil {
+		slog.Error("Query failed", "collection", collectionName, "error", err)
+		return nil, err
+	}
+	slog.Info("Query completed", "collection", collectionName, "results_count", len(result.IDs))
+	return result, nil
 }
 
 // Close releases resources used by the service.
