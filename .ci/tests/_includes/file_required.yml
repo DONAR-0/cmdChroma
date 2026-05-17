@@ -1,0 +1,10 @@
+version: "2"
+name: Common Validation - File Path Required
+testcases:
+  - name: Validation - Missing File Path
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} {{.subcommand}} {{.collection}}"
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "file path is required"

@@ -2,8 +2,11 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 
 	client "github.com/donar0/cmdChroma/internal/client"
+	"github.com/donar0/cmdChroma/internal/errors"
+	"github.com/donar0/cmdChroma/internal/ingest"
 	"github.com/donar0/cmdChroma/internal/onnx"
 )
 
@@ -14,7 +17,12 @@ type ChromaService struct {
 }
 
 // NewChromaService creates a new service with the given client and embedder.
+// If the client is a concrete *client.ChromaClient, the embedder is injected into it.
 func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
+	// Inject embedder into the client if possible
+	if ch, ok := c.(*client.ChromaClient); ok {
+		ch.Embedder = e
+	}
 	return &ChromaService{
 		client:   c,
 		embedder: e,
@@ -44,21 +52,200 @@ func (s *ChromaService) ListCollections() ([]client.Collection, error) {
 // AddDocuments adds documents to a collection with embeddings.
 func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids []string) error {
 	if s.embedder == nil {
-		return fmt.Errorf("embedder not available")
+		return errors.ErrEmbedderNotInitialized
 	}
-	return s.client.AddBatch(collectionName, docs, ids)
+	// Resolve collection name (or ID) to a valid collection ID
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+	return s.client.AddBatch(collectionID, docs, ids)
 }
 
 // QueryDocuments queries documents in a collection.
 func (s *ChromaService) QueryDocuments(collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
 	if s.embedder == nil {
-		return nil, fmt.Errorf("embedder not available")
+		return nil, errors.ErrEmbedderNotInitialized
 	}
-	return s.client.QueryBatch(collectionName, queries, nResults)
+	// Resolve collection name (or ID) to a valid collection ID
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+	return s.client.QueryBatch(collectionID, queries, nResults)
 }
 
-// IngestRecords ingests records from a file.
-func (s *ChromaService) IngestRecords(collectionName, filePath string) error {
-	// Implementation to be added
-	return fmt.Errorf("not implemented")
+// Close releases resources used by the service.
+func (s *ChromaService) Close() {
+	if s.embedder != nil {
+		s.embedder.Close()
+	}
+}
+
+// IngestRecords ingests records from a JSONL file into the collection.
+// It parses the file, extracts content and metadata, generates embeddings,
+// and uploads in batches. collectionName can be a name or UUID.
+// If cfg is nil, sensible defaults are used.
+func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *ingest.Config) error {
+	if s.embedder == nil {
+		return errors.ErrEmbedderNotInitialized
+	}
+
+	// Resolve collection
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	// Use provided config or fall back to defaults
+	if cfg == nil {
+		cfg = ingest.DefaultConfig()
+	}
+	processor := ingest.NewProcessor(cfg)
+
+	// Stream records
+	records, errChan := processor.ProcessJSONL(filePath)
+
+	// Batch accumulation with progress tracking
+	var (
+		docs          []string
+		ids           []string
+		metas         []map[string]any
+		batchIdx      int
+		totalUploaded int
+		progressN     = 10 // log progress every N documents processed
+		nextProgress  = progressN
+	)
+
+	for record := range records {
+		docs = append(docs, record.Content)
+		ids = append(ids, record.ID)
+		metas = append(metas, record.Metadata)
+		batchIdx++
+
+		// Current total processed (including current batch)
+		currentTotal := totalUploaded + batchIdx
+
+		// Progress update every N documents
+		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
+			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
+			nextProgress += progressN
+		}
+
+		if batchIdx >= cfg.BatchSize {
+			if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
+			}
+			totalUploaded += len(docs)
+			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
+			docs, ids, metas = nil, nil, nil
+			batchIdx = 0
+			nextProgress = totalUploaded + progressN // set next milestone
+		}
+	}
+
+	// Final batch
+	if len(docs) > 0 {
+		if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
+		}
+		totalUploaded += len(docs)
+		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
+	}
+
+	// Check for errors from processor
+	if err, ok := <-errChan; ok && err != nil {
+		return fmt.Errorf("ingestion error: %w", err)
+	}
+
+	slog.Info("Ingestion complete", "total_documents", totalUploaded)
+	return nil
+}
+
+// uploadBatch uploads a batch of documents to Chroma.
+// The client's AddBatchGeneric generates embeddings internally.
+func (s *ChromaService) uploadBatch(collectionID string, docs, ids []string, metas []map[string]any) error {
+	if len(docs) == 0 {
+		return nil
+	}
+	return s.client.AddBatchGeneric(collectionID, docs, ids, metas)
+}
+
+// IngestParquet ingests data from a Parquet file into the collection.
+// It reads rows, extracts ID/text using parquetCfg, and uploads in batches.
+// collectionName can be a collection name or UUID.
+func (s *ChromaService) IngestParquet(collectionName, filePath string, parquetCfg *ingest.ParquetConfig, ingestCfg *ingest.Config) error {
+	if s.embedder == nil {
+		return errors.ErrEmbedderNotInitialized
+	}
+
+	// Resolve collection
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	// Use provided ingest config or defaults
+	if ingestCfg == nil {
+		ingestCfg = ingest.DefaultConfig()
+	}
+	processor := ingest.NewProcessor(ingestCfg)
+
+	// Stream records from parquet
+	records, errChan := processor.ProcessParquet(filePath, parquetCfg)
+
+	// Batch accumulation with progress tracking
+	var (
+		docs          []string
+		ids           []string
+		metas         []map[string]any
+		batchIdx      int
+		totalUploaded int
+		progressN     = 10 // log progress every N documents processed
+		nextProgress  = progressN
+	)
+
+	for record := range records {
+		docs = append(docs, record.Content)
+		ids = append(ids, record.ID)
+		metas = append(metas, record.Metadata)
+		batchIdx++
+
+		// Current total processed (including current batch)
+		currentTotal := totalUploaded + batchIdx
+
+		// Progress update every N documents (before batch upload)
+		if currentTotal >= nextProgress && batchIdx < ingestCfg.BatchSize {
+			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
+			nextProgress += progressN
+		}
+
+		if batchIdx >= ingestCfg.BatchSize {
+			if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
+			}
+			totalUploaded += len(docs)
+			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
+			docs, ids, metas = nil, nil, nil
+			batchIdx = 0
+			nextProgress = totalUploaded + progressN // set next milestone
+		}
+	}
+
+	// Final batch
+	if len(docs) > 0 {
+		if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
+		}
+		totalUploaded += len(docs)
+		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
+	}
+
+	// Check for errors from processor
+	if err, ok := <-errChan; ok && err != nil {
+		return fmt.Errorf("parquet ingestion error: %w", err)
+	}
+
+	slog.Info("Ingestion complete", "total_documents", totalUploaded)
+	return nil
 }

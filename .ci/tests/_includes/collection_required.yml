@@ -1,0 +1,10 @@
+version: "2"
+name: Common Validation - Collection Name Required
+testcases:
+  - name: Validation - Missing Collection Name
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} {{.subcommand}}"
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "collection name is required"

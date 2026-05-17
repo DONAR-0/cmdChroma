@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,120 +10,135 @@ import (
 	"time"
 
 	"github.com/donar0/cmdChroma/internal"
+	"github.com/donar0/cmdChroma/internal/ingest"
+	"github.com/donar0/cmdChroma/internal/llm"
 	"github.com/donar0/cmdChroma/internal/onnx"
 	"github.com/donar0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 )
 
-// Test Connection
-func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
-	slog.Info("Starting connection test", "host", cmd.String("host"), "port", cmd.String("port"), "timeout", cmd.Int("timeout"))
+// ============== Command Handlers ==============
 
-	// Create Client with context from global flags
+// handleTestConnection tests connectivity to ChromaDB.
+func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
+	slog.Info("Testing connection", "host", cmd.String("host"), "port", cmd.String("port"))
+
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	// Create service (embedder not needed for test)
 	svc := service.NewChromaService(chromaClient, nil)
 
-	// Test the connection
+	timeout := cmd.Int("timeout")
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+
 	if err := svc.TestConnection(); err != nil {
 		slog.Error("Connection test failed", "error", err)
-		return fmt.Errorf("connection test failed: %w", err)
+		return fmt.Errorf("connection failed: %w\n\nHints:\n  • Is ChromaDB running? Try: docker ps\n  • Check host/port: --host %s --port %s\n  • Verify network connectivity", err, cmd.String("host"), cmd.String("port"))
 	}
 
 	slog.Info("Connection test successful")
-	fmt.Println("✅ Successfully connected to Chroma DB")
+	fmt.Println("✅ Successfully connected to ChromaDB")
+	fmt.Printf("   Server: %s:%s\n", cmd.String("host"), cmd.String("port"))
+	fmt.Printf("   Tenant: %s\n", cmd.String("tenant"))
+	fmt.Printf("   Database: %s\n", cmd.String("database"))
 	return nil
 }
 
-// Current tenants
+// handleCurrentTenants shows tenant information.
 func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
-	slog.Info("Getting Current Tenant:", "Tenant:", cmd.String("tenant"))
-	// Create Client
+	slog.Info("Checking tenant", "tenant", cmd.String("tenant"))
+
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	// Call the method we added to your client package
 	tenantExists, err := chromaClient.GetTenant()
 	if err != nil {
-		slog.Error("Failed to list tenants", "error", err)
-		return fmt.Errorf("could not list tenants: %w", err)
+		slog.Error("Failed to check tenant", "error", err)
+		return fmt.Errorf("tenant check failed: %w", err)
 	}
 
-	slog.Info("✅ Retrieving if current tenant Exists: " + cmd.String("tenant"))
-	slog.Info("Tenant Exists: " + fmt.Sprintf("%t", tenantExists))
+	status := "✅ exists"
+	if !tenantExists {
+		status = "❌ not found"
+	}
 
+	fmt.Printf("Tenant: %s [%s]\n", cmd.String("tenant"), status)
+	slog.Info("Tenant check complete", "exists", tenantExists)
 	return nil
 }
 
-// List databases
+// handleListDatabases lists databases in the current tenant.
 func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
-	slog.Info("List All Databases:", "Tenant:", cmd.String("tenant"))
+	slog.Info("Listing databases", "tenant", cmd.String("tenant"))
 
-	// Create Client
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	// Call the method we added to your client package
 	dbs, err := chromaClient.ListDatabases()
 	if err != nil {
-		slog.Error("Failed to list Databases", "error", err)
-		return fmt.Errorf("could not list Databases: %w", err)
+		slog.Error("Failed to list databases", "error", err)
+		return fmt.Errorf("failed to list databases: %w\n\nHint: Verify your tenant has databases: chroma databases --tenant default_tenant", err)
 	}
-	slog.Info("✅ Successfully Retrieved Databases for tenant: " + cmd.String("tenant"))
 
+	if len(dbs) == 0 {
+		fmt.Println("No databases found in this tenant.")
+		fmt.Println("Hint: Create a database first or check your tenant configuration.")
+		return nil
+	}
+
+	fmt.Printf("Databases in tenant '%s':\n", cmd.String("tenant"))
 	for _, db := range dbs {
-		slog.Info("- ", "ID", db.Id, "Tenant", db.Tenant, "Name", db.Name)
+		fmt.Printf("  • %s (ID: %s)\n", db.Name, db.Id)
 	}
-
+	slog.Info("Database listing complete", "count", len(dbs))
 	return nil
 }
 
-// handleListCollection List Collection
+// handleListCollection lists collections in the current database.
 func handleListCollection(_ context.Context, cmd *cli.Command) error {
-	slog.Info("List All Collections:", "Tenant", cmd.String("tenant"), "Database", cmd.String("database"))
+	slog.Info("Listing collections", "tenant", cmd.String("tenant"), "database", cmd.String("database"))
 
-	// Create Client
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
-	// Call the method we added to your client package
+
 	collections, err := chromaClient.ListCollections()
 	if err != nil {
-		slog.Error("Failed to list Databases", "error", err)
-		return fmt.Errorf("could not list Databases: %w", err)
-	}
-	slog.Info("✅ Successfully Retrieved Collections for database: " + cmd.String("database"))
-
-	for _, collection := range collections {
-		// slog.Info("- ", "ID", db.Id, "Tenant", db.Tenant, "Name", db.Name)
-		slog.Info("-", "collection", collection.Name, "ID", collection.ID)
+		slog.Error("Failed to list collections", "error", err)
+		return fmt.Errorf("failed to list collections: %w\n\nHint: Verify database exists: chroma databases", err)
 	}
 
+	if len(collections) == 0 {
+		fmt.Println("No collections found in this database.")
+		fmt.Println("Hint: Create a collection first: chroma create <name>")
+		return nil
+	}
+
+	fmt.Printf("Collections in database '%s':\n", cmd.String("database"))
+	for _, coll := range collections {
+		fmt.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
+	}
+	slog.Info("Collection listing complete", "count", len(collections))
 	return nil
 }
 
-// handleCreateCollection Create Collection
+// handleCreateCollection creates a new collection.
 func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
-	// Get Positional Argument
 	collectionName := cmd.Args().Get(0)
-
-	// Validate if name is provided
 	if collectionName == "" {
-		return fmt.Errorf("collectionName name is required as the first argument")
+		return fmt.Errorf("collection name is required\n\nUsage: chroma create <collection_name>\n\nExample: chroma create my_docs")
 	}
 
-	slog.Info("Creating Collection", "name", collectionName, "total_args", cmd.Args().Len())
+	slog.Info("Creating collection", "name", collectionName)
 
-	// Create Client
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
@@ -135,359 +146,468 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 
 	id, err := chromaClient.CreateCollection(collectionName)
 	if err != nil {
-		return err
+		slog.Error("Collection creation failed", "error", err)
+		return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
 	}
 
-	slog.Info("✅ Collection created", "Name ", collectionName, "Id ", id)
-
+	fmt.Printf("✅ Collection '%s' created (ID: %s)\n", collectionName, id)
+	slog.Info("Collection created", "name", collectionName, "id", id)
 	return nil
 }
 
-// List Documents in collection
-func handleListDocuments(_ context.Context, c *cli.Command) error {
-	slog.Info("Inside handleListDocuments", "Tenant", c.String("tenant"), "Database", c.String("database"))
-	input := c.Args().Get(0)
-	if input == "" {
-		return fmt.Errorf("argument empty Collection name not found, Please provide collection name")
+// handleDeleteCollection deletes a collection.
+func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
+	collectionName := cmd.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma delete <collection_name>\n\nExample: chroma delete my_collection")
 	}
-	client, _ := createChromaClient(c)
 
-	// Step 1: Always try to resolve the name to an ID first
-	targetID, err := client.GetIDByName(input)
+	slog.Info("Deleting collection", "name", collectionName)
+
+	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
-		targetID = input
+		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
-	slog.Info("Resolved Collection Name to ID:", "Name", input, "ID", targetID)
 
-	// Step 2: Now call the endpoint with a guaranteed UUID (hopefully)
+	if err := chromaClient.DeleteCollection(collectionName); err != nil {
+		slog.Error("Collection deletion failed", "error", err)
+		return fmt.Errorf("failed to delete collection: %w\n\nHint: Verify collection exists and you have delete permissions", err)
+	}
+
+	fmt.Printf("✅ Collection %s deleted\n", collectionName)
+	slog.Info("Collection deleted", "name", collectionName)
+	return nil
+}
+
+// handleDeleteRecords deletes specific documents from a collection by IDs.
+func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
+	collectionName := cmd.Args().Get(0)
+	ids := cmd.StringSlice("id")
+
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma delete-records <collection> --id <id>\n\nExample: chroma delete-records my_collection --id doc-1")
+	}
+	if len(ids) == 0 {
+		return fmt.Errorf("at least one document ID is required\n\nUsage: chroma delete-records <collection> --id <id>")
+	}
+
+	slog.Info("Deleting records", "collection", collectionName, "ids", ids)
+
+	chromaClient, err := createChromaClient(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+
+	if err := chromaClient.DeleteRecords(collectionName, ids); err != nil {
+		slog.Error("Delete records failed", "error", err)
+		return fmt.Errorf("failed to delete records: %w", err)
+	}
+
+	fmt.Printf("✅ Deleted %d document(s) from '%s'\n", len(ids), collectionName)
+	slog.Info("Records deleted", "collection", collectionName, "ids", ids)
+	return nil
+}
+
+// handleListDocuments lists documents in a collection.
+func handleListDocuments(_ context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma records <collection_name>\n\nExample: chroma records my_collection")
+	}
+
+	slog.Info("Listing documents", "collection", collectionName, "tenant", c.String("tenant"), "database", c.String("database"))
+
+	client, err := createChromaClient(c)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+
+	// Resolve collection name to ID
+	targetID, err := client.GetIDByName(collectionName)
+	if err != nil {
+		targetID = collectionName
+		slog.Info("Collection name not found, using as-is", "name", collectionName)
+	}
+
 	docs, err := client.ListDocuments(targetID)
 	if err != nil {
-		return fmt.Errorf("failed to list documents: %w", err)
+		slog.Error("Failed to list documents", "error", err)
+		return fmt.Errorf("failed to list documents: %w\n\nHint: Verify collection exists and you have read permissions", err)
 	}
 
-	fmt.Printf("\n--- Documents in %s ---\n", targetID)
+	if len(docs.IDs) == 0 {
+		fmt.Printf("Collection '%s' is empty.\n", collectionName)
+		return nil
+	}
+
+	fmt.Printf("\n📄 Documents in collection '%s' (%d total):\n\n", collectionName, len(docs.IDs))
 	for i := 0; i < len(docs.IDs); i++ {
 		fmt.Printf("ID:       %s\n", docs.IDs[i])
 
-		// Check if Documents slice isn't empty
 		if len(docs.Documents) > i {
-			fmt.Printf("Content:  %s\n", docs.Documents[i])
+			content := docs.Documents[i]
+			if len(content) > 100 {
+				content = content[:100] + "..."
+			}
+			fmt.Printf("Content:  %s\n", content)
 		}
 
-		// Check if Metadata exists for this record
 		if len(docs.Metadatas) > i && docs.Metadatas[i] != nil {
 			fmt.Printf("Metadata: %v\n", docs.Metadatas[i])
 		}
-		fmt.Println("-----------------------")
+		fmt.Println(strings.Repeat("-", 40))
 	}
 
-	slog.Info(fmt.Sprintf("✅ Retrieved %d documents from %s\n", len(docs.IDs), input))
+	slog.Info("Document listing complete", "collection", collectionName, "count", len(docs.IDs))
 	return nil
 }
 
+// handleQueryBatchInCollection performs batch semantic search.
 func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
-
-	//1. Get multiple queries from the flag
 	queries := c.StringSlice("query")
 	if len(queries) == 0 {
-		return fmt.Errorf("at least one --query flag is required")
+		return fmt.Errorf("at least one query is required\n\nUsage: chroma query <collection> --query \"search terms\"\n\nExample: chroma query my_collection --query \"What is Go?\"")
 	}
+
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
-		return fmt.Errorf("collection name is required as the first argument")
+		return fmt.Errorf("collection name is required\n\nUsage: chroma query <collection_name> --query \"search\"\n\nExample: chroma query my_collection --query \"vector databases\"")
 	}
 
-	// 2. Standard Client & AI Setup (Path resolution)
+	// Setup client
 	client, err := createChromaClient(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	slog.Info("Initializing AI Engine for search...")
-	// 3. Load AI Engine (shared logic)
+	slog.Info("Initializing embedding engine...")
 	embedder, err := initEmbedder(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist or use --model-path, --tokenizer-path, --onnx-lib flags", err)
 	}
-	defer embedder.Close()
-	client.Embedder = embedder
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
 
-	// 4. Resolve Collection ID
-	targetID, err := client.GetIDByName(collectionName)
-	if err != nil {
-		return err
-	}
-
-	// 4. Execute Batch Query
 	nResults := c.Int("n-results")
 	if nResults == 0 {
-		nResults = 3
+		nResults = 5
 	}
 
-	slog.Info("Executing batch query...", "count", len(queries))
-	response, err := client.QueryBatch(targetID, queries, nResults)
+	slog.Info("Executing batch query", "collection", collectionName, "queries", len(queries), "n-results", nResults)
+	response, err := svc.QueryDocuments(collectionName, queries, nResults)
 	if err != nil {
-		return err
+		slog.Error("Query failed", "error", err)
+		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
 	}
 
-	// 5. Display Results (Iterating through the nested response)
-	//
+	// Display results
+	fmt.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
 	for i, originalQuery := range queries {
-		fmt.Printf("\n🎯 Query: %s\n", originalQuery)
-		fmt.Println(strings.Repeat("-", 40))
-
-		// Check if we have results for this specific query
+		fmt.Printf("Query %d: %s\n", i+1, originalQuery)
+		fmt.Println(strings.Repeat("-", 60))
 		for j := 0; j < len(response.IDs[i]); j++ {
-			fmt.Printf("  [%d] (Dist: %.4f) ID: %s\n", j+1, response.Distances[i][j], response.IDs[i][j])
-			fmt.Printf("      Content: %s\n\n", response.Documents[i][j])
+			fmt.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
+			fmt.Printf("      ID: %s\n", response.IDs[i][j])
+			if len(response.Documents[i]) > j {
+				content := response.Documents[i][j]
+				if len(content) > 150 {
+					content = content[:150] + "..."
+				}
+				fmt.Printf("      Content: %s\n\n", content)
+			}
+		}
+		if i < len(queries)-1 {
+			fmt.Println(strings.Repeat("=", 60) + "\n")
 		}
 	}
 
+	slog.Info("Query complete", "total_results", len(response.IDs[0]))
 	return nil
 }
 
+// handleBatchAddDocuments adds documents to a collection.
 func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	docs := c.StringSlice("doc")
 
 	if len(docs) == 0 {
-		return fmt.Errorf("no documents provided. Use --doc multiple times")
+		return fmt.Errorf("no documents provided\n\nUsage: chroma add <collection> --doc \"text\"\n\nExample: chroma add my_collection --doc \"Your document\"")
 	}
 
-	// 1. Setup Client
+	// Setup client
 	client, err := createChromaClient(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	// 2. Load AI Engine (shared logic)
+	// Load AI Engine
 	embedder, err := initEmbedder(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist", err)
 	}
-	defer embedder.Close()
-	client.Embedder = embedder
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
 
-	targetID, err := client.GetIDByName(collectionName)
-	if err != nil {
-		return err
-	}
-
-	// 2. Generate IDs (if not provided)
-	// For datasets, it's best to generate unique IDs
+	// Generate IDs (if not provided)
 	ids := make([]string, len(docs))
 	for i := range docs {
 		ids[i] = fmt.Sprintf("id-%d-%d", time.Now().UnixNano(), i)
 	}
 
-	// 3. Execute Batch Add
-	slog.Info("Uploading batch to Chroma...", "size", len(docs))
-	err = client.AddBatch(targetID, docs, ids)
-	if err != nil {
-		return err
+	// Execute
+	slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
+	if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
+		return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
 	}
 
-	fmt.Printf("✅ Successfully added %d documents to %s\n", len(docs), collectionName)
+	fmt.Printf("✅ Successfully added %d documents to '%s'\n", len(docs), collectionName)
+	slog.Info("Documents added", "collection", collectionName, "count", len(docs))
 	return nil
 }
 
+// handleImportJsonlFileInChromaDb imports a JSONL file with progress tracking.
 func handleImportJsonlFileInChromaDb(_ context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
-		return fmt.Errorf("collection name is not provided, required collection name")
+		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl>\n\nExample: chroma import my_collection data.jsonl")
 	}
 
 	fp := c.Args().Get(1)
 	if fp == "" {
-		return fmt.Errorf("filepath is not provided, Please provide jsonl file path")
+		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl>")
 	}
 
-	// Flags
-	contentKey := c.String("field-content")
-	if contentKey == "" {
-		contentKey = "text"
-	}
-
-	idKey := c.String("field-id")
-	if idKey == "" {
-		idKey = "id"
-	}
-
-	batchSize := int(c.Int("batch-size"))
-	if batchSize <= 0 {
-		batchSize = 100
-	}
-
-	allMetadata := c.Bool("all-metadata")
-	metadataKeys := c.StringSlice("field-metadata")
-
-	limit := c.Int("n-ingest")
-
-	cleanPath := filepath.Clean(fp)
-	// 1. Check if the path is absolute
-	if filepath.IsAbs(cleanPath) {
-		return fmt.Errorf("security error: absolute paths are not allowed. " +
-			"Please provide a path relative to the current directory")
-	}
-
-	// 2. Open the Root (Current Working Directory)
-	cwd, _ := os.Getwd()
-	root, err := os.OpenRoot(cwd)
+	// Validate path
+	cwd, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get working directory: %w", err)
 	}
-	defer internal.CheckDefer(root.Close)
-
-	// 3. Attempt to open the file
-	file, err := root.Open(cleanPath)
+	safePath, err := internal.SafeJoin(cwd, fp)
 	if err != nil {
-		return fmt.Errorf("cannot open file '%s': %w", fp, err)
+		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
 	}
-	defer internal.CheckDefer(file.Close)
 
-	// 3. Client & Embedder Initialization
+	// Build ingest config
+	cfg := &ingest.Config{
+		BatchSize:      int(c.Int("batch-size")),
+		ContentField:   c.String("field-content"),
+		IDField:        c.String("field-id"),
+		MetadataFields: c.StringSlice("field-metadata"),
+		AllMetadata:    c.Bool("all-metadata"),
+		Limit:          c.Int("n-ingest"),
+	}
+	// Apply defaults
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 100
+	}
+	if cfg.ContentField == "" {
+		cfg.ContentField = "text"
+	}
+	if cfg.IDField == "" {
+		cfg.IDField = "id"
+	}
+
+	// Setup service
 	client, err := createChromaClient(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
-
 	embedder, err := initEmbedder(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+	}
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
+
+	// Start import with progress
+	fmt.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
+	fmt.Printf("   Batch size: %d\n", cfg.BatchSize)
+	if cfg.Limit > 0 {
+		fmt.Printf("   Limit: %d documents\n", cfg.Limit)
+	}
+	fmt.Println()
+
+	startTime := time.Now()
+	slog.Info("Starting import", "file", safePath, "collection", collectionName)
+	if err := svc.IngestRecords(collectionName, safePath, cfg); err != nil {
+		return fmt.Errorf("import failed: %w\n\nHint: Verify file format matches expected schema", err)
 	}
 
-	client.Embedder = embedder
-
-	collectionID, err := client.GetIDByName(collectionName)
-	if err != nil {
-		return fmt.Errorf("collection '%s' not found: %w", collectionName, err)
-	}
-
-	// 4. Ingestion Loop
-	scanner := bufio.NewScanner(file)
-	const maxCapacity = 1 * 1024 * 1024
-	scanner.Buffer(make([]byte, maxCapacity), maxCapacity)
-
-	var (
-		docs  []string
-		ids   []string
-		metas []map[string]any
-		count = 0
-	)
-
-	slog.Info("Starting generic ingestion...", "file", fp, "content_field", contentKey)
-
-	for scanner.Scan() {
-		var rec map[string]any
-		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
-			slog.Error("Failed to parse line", "error", err)
-			continue
-		}
-
-		contentVal := getNestedValue(rec, contentKey)
-		if contentVal == nil {
-			continue
-		}
-		content := fmt.Sprintf("%v", contentVal)
-
-		// Extract or Generate ID
-		var currentID string
-		idVal := getNestedValue(rec, idKey)
-		if idVal != nil {
-			currentID = fmt.Sprintf("%v", idVal)
-		} else {
-			// Deterministic Hash fallback: Prevents duplicates on re-runs
-			hash := sha256.Sum256([]byte(content))
-			currentID = hex.EncodeToString(hash[:12])
-		}
-
-		// Extract Metadata
-		meta := make(map[string]any)
-		if allMetadata {
-			for k, v := range rec {
-				if k != contentKey && k != idKey {
-					meta[k] = v
-				}
-			}
-		} else {
-			for _, k := range metadataKeys {
-				if v, exists := rec[k]; exists {
-					meta[k] = v
-				}
-			}
-		}
-
-		// Accumulate
-		docs = append(docs, content)
-		ids = append(ids, currentID)
-		metas = append(metas, meta)
-		count++
-
-		// 1. Check Limit IMMEDIATELY
-		if limit > 0 && count >= limit {
-			slog.Info("Limit reached", "count", count)
-			// Flush what we have in the current batch before breaking
-			if len(docs) > 0 {
-				if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-					return err
-				}
-			}
-			docs, ids, metas = nil, nil, nil
-			break // Exit the loop
-		}
-		// Batch Flush
-		if len(docs) >= batchSize {
-			slog.Info("Sending batch to Chroma", "size", len(docs))
-			if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-				return err
-			}
-			docs, ids, metas = nil, nil, nil
-		}
-	}
-
-	// Final Flush
-	if len(docs) > 0 {
-		if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-			return err
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("scanner error: %w", err)
-	}
-
-	slog.Info("Ingestion successful", "total", count)
+	elapsed := time.Since(startTime)
+	fmt.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
+	slog.Info("Import successful", "elapsed", elapsed)
 	return nil
 }
 
-func getNestedValue(m map[string]any, path string) any {
-
-	parts := strings.Split(path, ".")
-	var current any = m
-	for _, part := range parts {
-		if next, ok := current.(map[string]any); ok {
-			current = next[part]
-		} else {
-			return nil
-		}
+// handleImportParquetFileInChromaDb imports a Parquet file with progress.
+func handleImportParquetFileInChromaDb(_ context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma import-parquet <collection> <file.parquet>\n\nExample: chroma import-parquet my_collection data.parquet")
 	}
-	return current
+
+	fp := c.Args().Get(1)
+	if fp == "" {
+		return fmt.Errorf("file path is required\n\nUsage: chroma import-parquet <collection> <file.parquet>")
+	}
+
+	// Validate path
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get working directory: %w", err)
+	}
+	safePath, err := internal.SafeJoin(cwd, fp)
+	if err != nil {
+		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
+	}
+
+	// Build parquet config
+	parquetCfg := &ingest.ParquetConfig{
+		IDColumn:   c.String("id-column"),
+		TextColumn: c.String("text-column"),
+	}
+
+	// Build ingest config
+	ingestCfg := &ingest.Config{
+		BatchSize:      int(c.Int("batch-size")),
+		MetadataFields: c.StringSlice("field-metadata"),
+		AllMetadata:    c.Bool("all-metadata"),
+		Limit:          c.Int("n-ingest"),
+	}
+	if ingestCfg.BatchSize <= 0 {
+		ingestCfg.BatchSize = 100
+	}
+
+	// Setup service
+	client, err := createChromaClient(c)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+	embedder, err := initEmbedder(c)
+	if err != nil {
+		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+	}
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
+
+	// Start import with progress
+	fmt.Printf("📥 Importing Parquet from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
+	fmt.Printf("   Text column: %s\n", parquetCfg.TextColumn)
+	fmt.Printf("   ID column: %s\n", parquetCfg.IDColumn)
+	fmt.Printf("   Batch size: %d\n", ingestCfg.BatchSize)
+	if ingestCfg.Limit > 0 {
+		fmt.Printf("   Limit: %d records\n", ingestCfg.Limit)
+	}
+	fmt.Println()
+
+	startTime := time.Now()
+	slog.Info("Starting parquet import", "file", safePath, "collection", collectionName)
+	if err := svc.IngestParquet(collectionName, safePath, parquetCfg, ingestCfg); err != nil {
+		return fmt.Errorf("parquet import failed: %w\n\nHint: Verify column names exist in the Parquet file", err)
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("\n✅ Parquet import completed in %s\n", elapsed.Round(time.Second))
+	slog.Info("Parquet import successful", "elapsed", elapsed)
+	return nil
 }
 
+// handleChat performs RAG-based question answering.
+func handleChat(_ context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma chat <collection> \"your question\"\n\nExample: chroma chat my_collection \"What is ChromaDB?\"")
+	}
+
+	question := c.Args().Get(1)
+	if question == "" {
+		return fmt.Errorf("question is required\n\nUsage: chroma chat <collection> \"your question\"")
+	}
+
+	// Setup client and embedder
+	client, err := createChromaClient(c)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+	embedder, err := initEmbedder(c)
+	if err != nil {
+		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+	}
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
+
+	// Query for context
+	nResults := c.Int("n-results")
+	if nResults <= 0 {
+		nResults = 3
+	}
+
+	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
+	slog.Info("Querying for context", "collection", collectionName, "n-results", nResults)
+	resp, err := svc.QueryDocuments(collectionName, []string{question}, nResults)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve context: %w\n\nHint: Make sure collection exists and has documents", err)
+	}
+
+	var contextBuilder strings.Builder
+	if len(resp.Documents) == 0 || len(resp.Documents[0]) == 0 {
+		fmt.Println("⚠️  No relevant documents found. The LLM will answer based on general knowledge.")
+	} else {
+		fmt.Printf("📚 Found %d relevant documents:\n\n", len(resp.Documents[0]))
+		// Build context from results
+		for i, doc := range resp.Documents[0] {
+			fmt.Printf("  [%d] Distance: %.4f\n", i+1, resp.Distances[0][i])
+			fmt.Printf("      Content: %s\n\n", doc)
+			fmt.Fprintf(&contextBuilder, "[Context %d]: %s\n", i+1, doc)
+		}
+		fmt.Println(strings.Repeat("-", 60))
+		fmt.Println()
+		fmt.Println("💭 Generating answer...")
+	}
+
+	// Build prompt
+	finalPrompt := fmt.Sprintf(`Use the following context to answer the question.
+If the context doesn't contain relevant information, say so.
+
+Context:
+%s
+
+Question: %s
+
+Provide a clear, concise answer:`,
+		contextBuilder.String(), question)
+
+	// Get model and generate
+	model := c.String("llm-model")
+	if model == "" {
+		model = "qwen:0.5b"
+	}
+
+	provider := llm.NewProvider("") // defaults to localhost:11434
+	if err := provider.Generate(context.Background(), finalPrompt, model); err != nil {
+		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
+	}
+
+	slog.Info("Chat complete")
+	return nil
+}
+
+// initEmbedder initializes the ONNX embedder with path resolution.
 func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {
 	modelPath, tokenizerPath, onnxLibPath, err := resolveAIPaths(c)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Info("Loading AI Embedding Engine...", "model", modelPath)
+	slog.Info("Loading AI embedding engine", "model", modelPath)
 	embedder, err := onnx.NewEmbedder(modelPath, tokenizerPath, onnxLibPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize AI engine: %w", err)
+		return nil, fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 	return embedder, nil
 }
 
+// resolveAIPaths determines the paths for model files with fallbacks.
 func resolveAIPaths(c *cli.Command) (string, string, string, error) {
 	ex, err := os.Executable()
 	if err != nil {
@@ -512,7 +632,12 @@ func resolveAIPaths(c *cli.Command) (string, string, string, error) {
 		onnxLibPath = filepath.Join(projectRoot, "models/onnx_runtime/lib/libonnxruntime.so")
 	}
 
+	// Validate files exist if using default paths
+	if modelPath != "" {
+		if _, err := os.Stat(modelPath); err != nil {
+			return "", "", "", fmt.Errorf("model file not found: %s\n\nHint: Use --model-path to specify the correct location or run the setup script", modelPath)
+		}
+	}
+
 	return modelPath, tokenizerPath, onnxLibPath, nil
 }
-
-type IngestRecord map[string]any

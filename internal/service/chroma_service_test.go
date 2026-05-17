@@ -35,6 +35,10 @@ func (m *mockChromaClient) AddBatch(collectionID string, docs []string, ids []st
 	return nil
 }
 
+func (m *mockChromaClient) AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+	return nil
+}
+
 func (m *mockChromaClient) QueryBatch(collectionId string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return &client.QueryResponse{
 		IDs:       [][]string{{"id1"}},
@@ -44,6 +48,21 @@ func (m *mockChromaClient) QueryBatch(collectionId string, queryTexts []string, 
 
 func (m *mockChromaClient) GetIDByName(name string) (string, error) {
 	return "test-id", nil
+}
+
+func (m *mockChromaClient) ResolveCollectionID(input string) (string, error) {
+	// Simple mock: always return the same test ID
+	return "test-id", nil
+}
+
+func (m *mockChromaClient) DeleteCollection(name string) error {
+	// Mock: always success
+	return nil
+}
+
+func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) error {
+	// Mock: always success
+	return nil
 }
 
 type mockEmbedder struct{}
