@@ -142,9 +142,12 @@ setup-deps: ## Download required native dependencies (ONNX runtime)
 	./.ci/scripts/setup.sh
 
 .PHONY: test
-test: ## Run unit tests
-	@echo "Running tests..."
-	go test -v ./...
+test: setup-deps ## Run unit tests with coverage
+	@echo "Running tests with coverage..."
+	CGO_ENABLED=1 \
+	CGO_LDFLAGS="-L$(TOKENIZER_LIB_DIR) -ltokenizers -lstdc++" \
+	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
+	go test -v -coverprofile=coverage.out -covermode=atomic ./...
 
 .PHONY: generate
 generate: ## Run go code generation (if any)
