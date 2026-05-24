@@ -26,11 +26,13 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 
 	// 2. Exatract Source (File name: struct#Method)
 	location := "unknown"
+
 	if r.PC != 0 {
 		fs := runtime.CallersFrames([]uintptr{r.PC})
 		frame, _ := fs.Next()
 		file := filepath.Base(frame.File)
 		fullFunctionName := filepath.Base(frame.Function) // e.g. "main.(*Client).GetData"
+
 		parts := strings.Split(fullFunctionName, ".")
 		if len(parts) >= 2 && strings.Contains(fullFunctionName, "(") {
 			// It's a method: e.g. "Client#GetData"
@@ -70,10 +72,12 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 		if groupPrefix != "" {
 			key = groupPrefix + a.Key
 		}
+
 		if a.Value.String() != "" {
 			fmt.Printf("	└ %s: %v\n", key, a.Value)
 		}
 	}
+
 	return nil
 }
 

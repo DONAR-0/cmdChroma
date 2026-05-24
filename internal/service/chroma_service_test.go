@@ -106,6 +106,7 @@ func TestChromaService_GetTenant(t *testing.T) {
 	if err != nil {
 		t.Errorf("GetTenant failed: %v", err)
 	}
+
 	if !result {
 		t.Errorf("Expected true, got false")
 	}
@@ -119,6 +120,7 @@ func TestChromaService_ListDatabases(t *testing.T) {
 	if err != nil {
 		t.Errorf("ListDatabases failed: %v", err)
 	}
+
 	if len(dbs) != 1 {
 		t.Errorf("Expected 1 db, got %d", len(dbs))
 	}
@@ -154,6 +156,7 @@ func TestChromaService_QueryDocuments(t *testing.T) {
 	if err != nil {
 		t.Errorf("QueryDocuments failed: %v", err)
 	}
+
 	if result == nil {
 		t.Errorf("Expected result, got nil")
 	}

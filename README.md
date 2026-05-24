@@ -43,7 +43,7 @@ That's it! 🎉
 - **Batch Operations**: High-speed batch ingestion and multi-query searching for maximum efficiency.
 - **Intuitive CLI**: Designed following [clig.dev](https://clig.dev) guidelines for a consistent, user-friendly experience.
 - **Rich Error Messages**: Actionable hints when things go wrong.
-- **Dataset Import**: Stream large datasets from JSONL or Parquet files with progress reporting.
+- **Dataset Import**: Stream large datasets from JSONL files with progress reporting.
 - **RAG-Ready**: Built-in chat command for Retrieval-Augmented Generation (requires Ollama).
 - **Cross-Platform**: Optimized for WSL/Linux with automated path resolution.
 
@@ -176,14 +176,6 @@ chroma import my_collection data.jsonl \
   --batch-size 500
 ```
 
-#### `import-parquet` — Import Parquet File
-Bulk import from Parquet format.
-```bash
-chroma import-parquet my_collection data.parquet \
-  --text-column "content" \
-  --id-column "record_id" \
-  --all-metadata
-```
 
 #### `chat` — RAG Q&A
 Ask questions about your collection using local AI.

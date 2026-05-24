@@ -46,6 +46,7 @@ func TestChromaClient_GetTenant(t *testing.T) {
 	if err != nil {
 		t.Errorf("GetTenant failed: %v", err)
 	}
+
 	if !exists {
 		t.Errorf("Expected tenant to exist")
 	}
@@ -73,6 +74,7 @@ func TestChromaClient_ListDatabases(t *testing.T) {
 	if err != nil {
 		t.Errorf("ListDatabases failed: %v", err)
 	}
+
 	if len(result) != 1 || result[0].Id != "1" {
 		t.Errorf("Unexpected result: %v", result)
 	}
@@ -90,6 +92,7 @@ func (m *mockEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([][]
 	for i := range result {
 		result[i] = []float32{0.1, 0.2}
 	}
+
 	return result, nil
 }
 

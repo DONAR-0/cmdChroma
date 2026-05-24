@@ -45,5 +45,6 @@ func createChromaClient(c *cli.Command) (*client.ChromaClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+
 	return client.NewChromaDBClient(cfg.GetChromaURL(), cfg.GetTenant(), cfg.GetDatabase()), nil
 }

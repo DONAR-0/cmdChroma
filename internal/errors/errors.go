@@ -37,6 +37,7 @@ func Is(err error, target ...error) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -47,6 +48,8 @@ func As[T error](err error) (T, bool) {
 	if errors.As(err, &t) {
 		return t, true
 	}
+
 	var zero T
+
 	return zero, false
 }

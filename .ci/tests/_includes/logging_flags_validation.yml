@@ -1,0 +1,38 @@
+version: "2"
+name: Common Logging Flags Validation
+
+testcases:
+  - name: Command accepts log-level flag
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} --log-level {{.level}} {{.subcommand}}"
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Command accepts log-format flag
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} --log-format {{.format}} {{.subcommand}}"
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Command accepts both logging flags
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} --log-level {{.level}} --log-format {{.format}} {{.subcommand}}"
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Command accepts log-level via env var
+    steps:
+      - type: exec
+        script: "CHROMA_LOG_LEVEL={{.level}} {{.cmdChroma}} {{.subcommand}}"
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Command accepts log-format via env var
+    steps:
+      - type: exec
+        script: "CHROMA_LOG_FORMAT={{.format}} {{.cmdChroma}} {{.subcommand}}"
+    assertions:
+      - result.code ShouldEqual 0
