@@ -135,6 +135,12 @@ deps: ## Download and tidy go modules
 	go mod download
 	go mod tidy
 
+.PHONY: setup-deps
+setup-deps: ## Download required native dependencies (ONNX runtime)
+	@echo "📦 Setting up dependencies..."
+	@chmod +x ./.ci/scripts/setup.sh
+	./.ci/scripts/setup.sh
+
 .PHONY: test
 test: ## Run unit tests
 	@echo "Running tests..."
