@@ -37,6 +37,7 @@ func NewProvider(baseURL string) *Provider {
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
 	}
+
 	return &Provider{
 		baseURL: baseURL,
 		client:  &http.Client{},
@@ -61,10 +62,12 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 	}
 
 	url := fmt.Sprintf("%s/api/generate", p.baseURL)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
@@ -79,6 +82,7 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 
 	// Stream output
 	scanner := bufio.NewScanner(resp.Body)
+
 	fmt.Println("\n🤖 AI Response:")
 	fmt.Println(strings.Repeat("-", 20))
 
@@ -87,16 +91,20 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
 			continue
 		}
+
 		fmt.Print(r.Response)
+
 		if r.Done {
 			break
 		}
 	}
+
 	fmt.Println("\n" + strings.Repeat("-", 20))
 
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("stream reading error: %w", err)
 	}
+
 	return nil
 }
 
@@ -120,10 +128,12 @@ func (p *Provider) GenerateSync(ctx context.Context, prompt, model string) (stri
 	}
 
 	url := fmt.Sprintf("%s/api/generate", p.baseURL)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(req)
@@ -143,5 +153,6 @@ func (p *Provider) GenerateSync(ctx context.Context, prompt, model string) (stri
 	if err := json.NewDecoder(resp.Body).Decode(&fullResp); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
+
 	return fullResp.Response, nil
 }

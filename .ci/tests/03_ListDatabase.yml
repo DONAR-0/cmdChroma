@@ -5,7 +5,7 @@ testcases:
   - name: dbs should work
     steps:
       - type: exec
-        script: cmdChroma dbs
+        script: cmdChroma --log-level info dbs
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Listing databases"
@@ -13,7 +13,7 @@ testcases:
   - name: ls-dbs should work
     steps:
       - type: exec
-        script: cmdChroma ls-dbs
+        script: cmdChroma --log-level info ls-dbs
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Listing databases"

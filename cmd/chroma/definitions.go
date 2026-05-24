@@ -13,32 +13,45 @@ import (
 // It follows clig.dev guidelines for a consistent, user-friendly CLI experience.
 func createApp() *cli.Command {
 	return &cli.Command{
-		Name:    "cmdChroma",
-		Version: fmt.Sprintf("%s (git %s, built %s)", AppVersion, version.GitCommit, version.BuildDate),
-		Usage:   "A high-performance CLI for ChromaDB with local AI embeddings",
-		Description: `cmdChroma is a command-line tool for managing ChromaDB collections
-with local vector embeddings using ONNX Runtime. It keeps your data and AI
-processing entirely on your local machine.
-
-Use it to:
-  • Test connectivity to your ChromaDB instance
-  • Create and manage collections
-  • Ingest documents from JSONL or Parquet files
-  • Add documents with local embedding generation
-  • Perform semantic search with batch queries
-  • Chat with your data using RAG (Retrieval-Augmented Generation)
-
-Get started quickly:
-  chroma ping                    # Test connection
-  chroma create my_collection    # Create a collection
-  chroma add my_collection -d "Your document text"  # Add a document
-  chroma query my_collection -q "Search query"      # Search`,
+		Name:        "cmdChroma",
+		Version:     fmt.Sprintf("%s (git %s, built %s)", AppVersion, version.GitCommit, version.BuildDate),
+		Usage:       "A high-performance CLI for ChromaDB with local AI embeddings",
+		Description: AppDescription,
 		// Global flags available to all commands
-		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, tenantFlag, databaseFlag, collectionFlag},
+		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
+			// Determine log level from flags
+			level := slog.LevelInfo
+
+			// Parse log-level flag
+			logLevel := c.String("log-level")
+			switch logLevel {
+			case "debug":
+				level = slog.LevelDebug
+			case "warn":
+				level = slog.LevelWarn
+			case "error":
+				level = slog.LevelError
+			}
+
+			// verbose flag overrides to debug
+			if c.Bool("verbose") {
+				level = slog.LevelDebug
+			}
+
+			// Parse log-format flag
+			format := c.String("log-format")
+			if format != "text" && format != "json" {
+				format = "text" // default fallback
+			}
+
+			// Initialize the logger
+			InitLogger(level, format)
+
 			if c.Bool("verbose") {
 				slog.Info("Verbose logging enabled", "version", AppVersion)
 			}
+
 			return ctx, nil
 		},
 		Commands: []*cli.Command{
@@ -53,7 +66,6 @@ Get started quickly:
 			addCommand,
 			queryCommand,
 			importJsonlCommand,
-			importParquetCommand,
 			chatCommand,
 		},
 
@@ -72,6 +84,7 @@ Get started quickly:
 			fmt.Println("Run 'chroma --help' for more information or 'chroma <command> --help'")
 			fmt.Println("for command-specific help.")
 			fmt.Println()
+
 			return cli.ShowAppHelp(c)
 		},
 	}
@@ -79,125 +92,58 @@ Get started quickly:
 
 // pingCommand tests connectivity to the ChromaDB server.
 var pingCommand = &cli.Command{
-	Name:    "ping",
-	Aliases: []string{"t", "test", "health-check"},
-	Usage:   "Test connection to ChromaDB",
-	Description: `Verify that cmdChroma can connect to your ChromaDB instance.
-
-This command sends a simple request to confirm:
-  • The server is running and reachable
-  • Network connectivity is working
-  • Authentication (if any) is configured correctly
-
-EXAMPLES:
-  # Basic connectivity test
-  chroma ping
-
-  # Test with custom host/port
-  chroma ping --host localhost --port 8000
-
-  # Test with a timeout
-  chroma ping --timeout 10`,
-	Action: handleTestConnection,
-	Flags:  []cli.Flag{timeoutFlag},
+	Name:        "ping",
+	Aliases:     []string{"t", "test", "health-check"},
+	Usage:       "Test connection to ChromaDB",
+	Description: PingCmdDescription,
+	Action:      handleTestConnection,
+	Flags:       []cli.Flag{timeoutFlag},
 }
 
 // tenantCommand shows the current tenant.
 var tenantCommand = &cli.Command{
-	Name:    "tenant",
-	Aliases: []string{"cT", "current-tenant"},
-	Usage:   "Show current tenant information",
-	Description: `Display information about the configured tenant.
-
-This command shows whether the specified tenant exists in your ChromaDB instance.
-It's useful for verifying your tenant configuration.
-
-EXAMPLES:
-  # Show default tenant
-  chroma tenant
-
-  # Check a specific tenant
-  chroma tenant --tenant my_tenant`,
-	Action: handleCurrentTenants,
+	Name:        "tenant",
+	Aliases:     []string{"cT", "current-tenant"},
+	Usage:       "Show current tenant information",
+	Description: TenantCmdDescription,
+	Action:      handleCurrentTenants,
 }
 
 // databasesCommand lists all databases in the current tenant.
 var databasesCommand = &cli.Command{
-	Name:    "databases",
-	Aliases: []string{"ls-dbs", "dbs"},
-	Usage:   "List all databases in the current tenant",
-	Description: `List all databases accessible to the current tenant.
-
-This command retrieves and displays all databases you can access
-within the tenant context.
-
-EXAMPLES:
-  # List all databases
-  chroma databases
-
-  # List databases for a specific tenant
-  chroma databases --tenant custom_tenant`,
-	Action: handleListDatabases,
+	Name:        "databases",
+	Aliases:     []string{"ls-dbs", "dbs"},
+	Usage:       "List all databases in the current tenant",
+	Description: DatabasesCmdDescription,
+	Action:      handleListDatabases,
 }
 
 // collectionsCommand lists collections in a database.
 var collectionsCommand = &cli.Command{
-	Name:    "collections",
-	Aliases: []string{"ls", "list", "colls", "ls-colls"},
-	Usage:   "List all collections in a database",
-	Description: `List all collections in the specified database.
-
-Shows collection names and IDs for the current database context.
-Useful for exploring available data before querying.
-
-EXAMPLES:
-  # List collections in default database
-  chroma collections
-
-  # List collections in a specific database and tenant
-  chroma collections --database my_db --tenant my_tenant
-
-  # Show all collections in current context
-  chroma collections`,
-	Action: handleListCollection,
+	Name:        "collections",
+	Aliases:     []string{"ls", "list", "colls", "ls-colls"},
+	Usage:       "List all collections in a database",
+	Description: CollectionsCmdDescription,
+	Action:      handleListCollection,
 }
 
 // createCollectionCommand creates a new collection.
 var createCollectionCommand = &cli.Command{
-	Name:    "create",
-	Aliases: []string{"mkdir", "mkColl"},
-	Usage:   "Create a new collection",
-	Description: `Create a new collection in the current database.
-
-Collections are where your embedded documents are stored. You need to
-create a collection before adding documents.
-
-EXAMPLES:
-  # Create a simple collection
-  chroma create my_collection
-
-  # Create with explicit tenant and database
-  chroma create my_collection --tenant my_tenant --database my_db`,
-	Action: handleCreateCollection,
+	Name:        "create",
+	Aliases:     []string{"mkdir", "mkColl"},
+	Usage:       "Create a new collection",
+	Description: CreateCollectionCmdDescription,
+	Action:      handleCreateCollection,
 }
 
 // deleteCollectionCommand deletes an existing collection.
 var deleteCollectionCommand = &cli.Command{
-	Name:      "delete",
-	Aliases:   []string{"rm", "del"},
-	Usage:     "Delete a collection",
-	ArgsUsage: "<collection_name>",
-	Description: `Permanently delete a collection and all its documents.
-
-This operation cannot be undone. The collection and all its data will be removed.
-
-EXAMPLES:
-  # Delete a collection
-  chroma delete my_collection
-
-  # Delete with explicit tenant and database
-  chroma delete my_collection --tenant my_tenant --database my_db`,
-	Action: handleDeleteCollection,
+	Name:        "delete",
+	Aliases:     []string{"rm", "del"},
+	Usage:       "Delete a collection",
+	ArgsUsage:   "<collection_name>",
+	Description: DeleteCollectionCmdDescription,
+	Action:      handleDeleteCollection,
 }
 
 // recordsCommand lists documents in a collection.
@@ -376,40 +322,6 @@ EXAMPLES:
 	},
 }
 
-// importParquetCommand ingests a Parquet file into a collection.
-var importParquetCommand = &cli.Command{
-	Name:      "import-parquet",
-	Aliases:   []string{"parquet-import"},
-	Usage:     "Import documents from a Parquet file into a collection",
-	ArgsUsage: "<collection_name> <file_path>",
-	Description: `Bulk import documents from a Parquet file.
-
-Similar to 'import' but optimized for Parquet format.
-Efficiently reads columnar data and generates embeddings in batches.
-
-EXAMPLES:
-  # Import with explicit column mapping
-  chroma import-parquet my_collection data.parquet \\
-    --text-column "text_content" \\
-    --id-column "record_id"
-
-  # Import with all other columns as metadata
-  chroma import-parquet my_collection data.parquet \\
-    --text-column "content" \\
-    --id-column "id" \\
-    --all-metadata \\
-    --batch-size 200`,
-	Action: handleImportParquetFileInChromaDb,
-	Flags: []cli.Flag{
-		nIngestDocumentFlag,
-		fieldMetadataFlag,
-		allMetadataFlag,
-		batchSizeFlag,
-		parquetIDColumnFlag,
-		parquetTextColumnFlag,
-	},
-}
-
 // chatCommand performs RAG-based chat using collection context.
 var chatCommand = &cli.Command{
 	Name:      "chat",
@@ -485,6 +397,21 @@ var (
 		Usage:   "Enable verbose logging (debug level)",
 	}
 
+	logLevelFlag = &cli.StringFlag{
+		Name:    "log-level",
+		Aliases: []string{"l"},
+		Value:   "info",
+		Usage:   "Set log level: debug, info, warn, error",
+		Sources: cli.EnvVars("CHROMA_LOG_LEVEL"),
+	}
+
+	logFormatFlag = &cli.StringFlag{
+		Name:    "log-format",
+		Value:   "text",
+		Usage:   "Log output format: text, json",
+		Sources: cli.EnvVars("CHROMA_LOG_FORMAT"),
+	}
+
 	timeoutFlag = &cli.IntFlag{
 		Name:    "timeout",
 		Aliases: []string{"t"},
@@ -534,7 +461,7 @@ var (
 		Required: true,
 	}
 
-	idSliceFlag = &cli.StringFlag{
+	idSliceFlag = &cli.StringSliceFlag{
 		Name:    "id",
 		Aliases: []string{"i"},
 		Usage:   "Custom document IDs (must match number of documents)",
@@ -574,17 +501,6 @@ var (
 		Aliases: []string{"b"},
 		Value:   100,
 		Usage:   "Number of documents to process in each batch",
-	}
-
-	// Parquet flags
-	parquetIDColumnFlag = &cli.StringFlag{
-		Name:  "id-column",
-		Usage: "Parquet column name for document IDs",
-	}
-
-	parquetTextColumnFlag = &cli.StringFlag{
-		Name:  "text-column",
-		Usage: "Parquet column name for document text",
 	}
 
 	// Chat/RAG flags

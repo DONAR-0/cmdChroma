@@ -1,0 +1,27 @@
+version: "2"
+name: Common Help Text Validation
+
+testcases:
+  - name: Command has description
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} {{.subcommand}} --help"
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "{{.expectedDescription}}"
+
+  - name: Command has usage text
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} {{.subcommand}} --help"
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Usage:"
+
+  - name: Command has examples section
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} {{.subcommand}} --help"
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "EXAMPLES:"

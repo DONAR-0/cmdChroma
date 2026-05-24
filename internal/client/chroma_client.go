@@ -37,7 +37,8 @@ type (
 )
 
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {
-	slog.Info("Initiating ChromaClient Client", "URL:", url, "Tenant:", tenant, "Database:", database)
+	slog.Info("Initializing Chroma client", "url", url, "tenant", tenant, "database", database)
+
 	return &ChromaClient{
 		URL:      url,
 		Tenant:   tenant,
@@ -47,14 +48,14 @@ func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 }
 
 func (c *ChromaClient) TestConnection() error {
-
 	endpoint := fmt.Sprintf(testEndpoint, c.URL)
-	slog.Info("Calling Endpoint", "endpoint", endpoint)
-	resp, err := c.client.Get(endpoint)
+	slog.Info("Calling endpoint", "endpoint", endpoint)
 
+	resp, err := c.client.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to connect to ChromaDB at %s: %w", c.URL, err)
 	}
+
 	defer cd(resp.Body.Close)
 
 	body, _ := io.ReadAll(resp.Body)
@@ -62,7 +63,8 @@ func (c *ChromaClient) TestConnection() error {
 		return fmt.Errorf("heartbeat failed with status: %d, response: %s", resp.StatusCode, string(body))
 	}
 
-	slog.Info(fmt.Sprintf("ChromaDB connection successful: %s\n", string(body)))
+	slog.Info("ChromaDB connection successful", "response", string(body))
+
 	return nil
 }
 
@@ -80,6 +82,7 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}
+
 	if resp.StatusCode == http.StatusNotFound {
 		return false, nil
 	}
@@ -90,7 +93,8 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	// URL includes the specific tenant from your client struct
 	endpoint := fmt.Sprintf(listDatabases, c.URL, c.Tenant)
-	slog.Info("List Databases from URL :" + endpoint)
+	slog.Info("Listing databases", "endpoint", endpoint)
+
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
 		return nil, err
@@ -120,6 +124,7 @@ func (c *ChromaClient) ListCollections() ([]Collection, error) {
 		return nil, fmt.Errorf("failed to request collections: %w", err)
 	}
 	defer cd(resp.Body.Close)
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to list collections: status %d,body%s", resp.StatusCode, string(body))
@@ -130,21 +135,24 @@ func (c *ChromaClient) ListCollections() ([]Collection, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
 		return nil, fmt.Errorf("failed to decode collections: %w", err)
 	}
+
 	return collections, nil
 }
 
 func (c *ChromaClient) CreateCollection(name string) (string, error) {
-	slog.Info("- Creating Collection with name:", "Name", name)
+	slog.Info("Creating collection", "name", name)
 	//endpoint
 	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
 	payload := CreateCollectionRequest{
 		Name:        name,
 		GetOrCreate: true,
 	}
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("error received: unable to marshal json data for payload")
 	}
+
 	resp, err := c.client.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
@@ -160,10 +168,12 @@ func (c *ChromaClient) CreateCollection(name string) (string, error) {
 		ID string `json:"id"`
 		// Name string `json:"name"`
 	}
+
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if err != nil {
 		return "", fmt.Errorf("error received: unable to decode information")
 	}
+
 	return result.ID, nil
 }
 
@@ -173,7 +183,7 @@ func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, 
 	endpoint := fmt.Sprintf(listDocuments,
 		c.URL, c.Tenant, c.Database, collectionID)
 
-	slog.Info("Listing Documents", "endpoint", endpoint)
+	slog.Info("Listing documents", "endpoint", endpoint)
 
 	// When using the scoped URL above, some Chroma versions expect a simpler body
 	payload := map[string]any{
@@ -216,17 +226,20 @@ func (c *ChromaClient) ResolveCollectionID(input string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	for _, col := range collections {
 		if col.Name == input {
 			return col.ID, nil
 		}
 	}
+
 	return "", fmt.Errorf("collection '%s' not found", input)
 }
 
 func (c *ChromaClient) GetIDByName(name string) (string, error) {
 	// Fetch all collections for the current tenant/db
 	endpoint := fmt.Sprintf("%s/api/v2/tenants/%s/databases/%s/collections", c.URL, c.Tenant, c.Database)
+
 	resp, err := c.client.Get(endpoint)
 	if err != nil {
 		return "", err
@@ -243,59 +256,72 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 			return col.ID, nil
 		}
 	}
+
 	return "", fmt.Errorf("collection '%s' not found", name)
 }
 
 func (c *ChromaClient) DeleteCollection(name string) error {
 	slog.Info("Deleting collection", "name", name)
-	id, err := c.GetIDByName(name)
-	if err != nil {
-		return fmt.Errorf("collection '%s' not found: %w", name, err)
-	}
-	endpoint := fmt.Sprintf(deleteCollection, c.URL, c.Tenant, c.Database, id)
+
+	// Resolve collection name to ID (handles both names and UUIDs)
+	// Actually, ChromaDB DELETE endpoint expects the collection name, not the UUID.
+	endpoint := fmt.Sprintf(deleteCollection, c.URL, c.Tenant, c.Database, name)
+
 	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to delete collection: %w", err)
 	}
 	defer cd(resp.Body.Close)
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("delete collection failed: %d, %s", resp.StatusCode, string(body))
 	}
+
 	return nil
 }
 
 // DeleteRecords removes specific documents from a collection by their IDs.
 func (c *ChromaClient) DeleteRecords(collectionID string, ids []string) error {
 	slog.Info("Deleting records", "collection", collectionID, "ids", ids)
-	colUUID, err := c.ResolveCollectionID(collectionID)
+
+	// Resolve collection name to ID (handles both names and UUIDs)
+	resolvedID, err := c.ResolveCollectionID(collectionID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve collection: %w", err)
 	}
-	endpoint := fmt.Sprintf(deleteRecords, c.URL, c.Tenant, c.Database, colUUID)
+
+	endpoint := fmt.Sprintf(deleteRecords, c.URL, c.Tenant, c.Database, resolvedID)
 	payload := map[string]any{"ids": ids}
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal delete payload: %w", err)
 	}
+
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to delete records: %w", err)
 	}
 	defer cd(resp.Body.Close)
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("delete records failed: %d, %s", resp.StatusCode, string(body))
 	}
+
 	return nil
 }
 
@@ -311,6 +337,7 @@ func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float
 	}
 
 	jsonData, _ := json.Marshal(payload)
+
 	resp, err := c.client.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
@@ -335,6 +362,7 @@ func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error received failed to generate embeddings: %w", err)
 	}
+
 	return vector, nil
 }
 
@@ -356,13 +384,11 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 		c.URL, c.Tenant, c.Database, collectionId)
 
 	jsonData, err := json.Marshal(payload)
-
 	if err != nil {
 		return nil, fmt.Errorf("error received: unable to marshal json")
 	}
 
 	resp, err := c.client.Post(endPoint, "application/json", bytes.NewBuffer(jsonData))
-
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +412,6 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 }
 
 func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string) error {
-
 	if c.Embedder == nil {
 		return fmt.Errorf("embedder is not initialized; check if the AI model loaded correctly")
 	}
@@ -463,9 +488,10 @@ func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, 
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
 	}

@@ -27,7 +27,6 @@ type Embedder struct {
 
 // Embedder initialize the dictionary and the brain
 func NewEmbedder(modelPath, tokenizersPath, libpath string) (*Embedder, error) {
-
 	//1. Setup the ONNX Library
 	ort.SetSharedLibraryPath(libpath)
 
@@ -44,6 +43,7 @@ func NewEmbedder(modelPath, tokenizersPath, libpath string) (*Embedder, error) {
 	//3. Load brain
 	inputNames := []string{"input_ids", "attention_mask", "token_type_ids"}
 	outputNames := []string{"last_hidden_state"}
+
 	sess, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error received when starting a session")
@@ -69,6 +69,7 @@ func (e *Embedder) Embed(text string) ([]float32, error) {
 		if id != 0 {
 			mask[i] = 1
 		}
+
 		types[i] = 0
 	}
 
@@ -101,8 +102,10 @@ func (e *Embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]floa
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed text at index %d: %w", i, err)
 		}
+
 		batchResults[i] = vec
 	}
+
 	return batchResults, nil
 }
 

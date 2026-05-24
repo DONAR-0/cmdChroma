@@ -80,15 +80,18 @@ func (cfg *Config) resolvePaths() error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
+
 	binDir := filepath.Dir(ex)
 	projectRoot := filepath.Join(binDir, "..")
 
 	if cfg.Model.ONNXModel == "" {
 		cfg.Model.ONNXModel = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/model.onnx")
 	}
+
 	if cfg.Model.Tokenizer == "" {
 		cfg.Model.Tokenizer = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/tokenizer.json")
 	}
+
 	if cfg.Model.ONNXLib == "" {
 		cfg.Model.ONNXLib = filepath.Join(projectRoot, "models/onnx_runtime/lib/libonnxruntime.so")
 	}

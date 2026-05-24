@@ -4,14 +4,14 @@ testcases:
   - name: Create Collection Error if no collectionName not given
     steps:
       - type: exec
-        script: cmdChroma mkColl
+        script: cmdChroma --log-level info mkColl
         assertions:
           - result.code ShouldEqual 1
           - result.systemout ShouldContainSubstring "collection name is required"
   - name: Create Collection Successful
     steps:
       - type: exec
-        script: cmdChroma mkColl t4_coll1
+        script: cmdChroma --log-level info mkColl t4_coll1
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Collection created"
@@ -19,7 +19,7 @@ testcases:
   - name: Create Another Collection
     steps:
       - type: exec
-        script: cmdChroma mkColl t4_coll2
+        script: cmdChroma --log-level info mkColl t4_coll2
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Collection created"
@@ -28,10 +28,10 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: cmdChroma delete t4_coll1 || true
+        script: cmdChroma --log-level info delete t4_coll1 || true
         assertions:
           - result.code ShouldEqual 0
       - type: exec
-        script: cmdChroma delete t4_coll2 || true
+        script: cmdChroma --log-level info delete t4_coll2 || true
         assertions:
           - result.code ShouldEqual 0

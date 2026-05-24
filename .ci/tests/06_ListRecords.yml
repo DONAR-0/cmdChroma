@@ -8,18 +8,18 @@ testcases:
   - name: Setup - create collection and add a document
     steps:
       - type: exec
-        script: cmdChroma mkColl t6_testcoll
+        script: cmdChroma --log-level info mkColl t6_testcoll
         assertions:
           - result.code ShouldEqual 0
       - type: exec
         timeout: 120
-        script: cmdChroma a t6_testcoll -d "Test document content"
+        script: cmdChroma --log-level info a t6_testcoll -d "Test document content"
         assertions:
           - result.code ShouldEqual 0
   - name: List Records
     steps:
       - type: exec
-        script: cmdChroma rs t6_testcoll
+        script: cmdChroma --log-level info rs t6_testcoll
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "📄 Documents in collection"
@@ -29,6 +29,6 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: cmdChroma delete t6_testcoll || true
+        script: cmdChroma --log-level info delete t6_testcoll || true
         assertions:
           - result.code ShouldEqual 0

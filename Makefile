@@ -72,7 +72,7 @@ build:
 	@echo "Building with Go Linker RPATH..."
 	@mkdir -p ./dist
 	CGO_ENABLED=1 \
-	go build -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
+	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
 
 .PHONY: clean
 clean: ## Remove build artifacts and coverage files
@@ -98,6 +98,7 @@ venom-clean: ## Remove Venom logs and reports
 	@echo "🧹 Cleaning Venom artifacts..."
 	rm -rf .ci/logs/*
 	@echo "✅ Clean complete"
+
 
 # ==============================================================================
 # Cross-Compilation Targets
@@ -147,7 +148,10 @@ generate: ## Run go code generation (if any)
 .PHONY: fmt
 fmt: ## Format source code
 	go fmt ./...
-
+	@if command -v golangci-lint > /dev/null; then \
+		golangci-lint run --no-config --enable-only wsl_v5 --fix; \
+	fi
+	
 .PHONY: lint
 lint: ## Run linter (golangci-lint)
 	@if command -v golangci-lint > /dev/null; then \

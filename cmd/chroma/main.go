@@ -21,8 +21,7 @@ var (
 )
 
 func main() {
-	// Initialize Logger first
-	InitLogger()
+	app := createApp()
 
 	// Recover from panic gracefully
 	defer func() {
@@ -32,8 +31,6 @@ func main() {
 			os.Exit(ExitError)
 		}
 	}()
-
-	app := createApp()
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		slog.Error("CLI execution failed", "error", err)
@@ -48,5 +45,6 @@ func createChromaClient(c *cli.Command) (*client.ChromaClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
+
 	return client.NewChromaDBClient(cfg.GetChromaURL(), cfg.GetTenant(), cfg.GetDatabase()), nil
 }

@@ -17,7 +17,7 @@ testcases:
   - name: setup_test_data
     steps:
       - type: exec
-        script: {{.cmdChroma}} create {{.collection}}
+        script: {{.cmdChroma}} --log-level info create {{.collection}}
         assertions:
           - result.code ShouldEqual 0
       - type: exec
@@ -33,7 +33,7 @@ testcases:
     steps:
       - type: exec
         timeout: 300
-        script: {{.cmdChroma}} ingest {{.collection}} {{.test_file}} --n-ingest {{.limit_count}}
+        script: {{.cmdChroma}} --log-level info ingest {{.collection}} {{.test_file}} --n-ingest {{.limit_count}}
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Limit reached"
@@ -52,7 +52,7 @@ testcases:
       - type: exec
         timeout: 300
         script: |
-          {{.cmdChroma}} import {{.collection}} {{.hf_style_file}} \
+          {{.cmdChroma}} --log-level info import {{.collection}} {{.hf_style_file}} \
             --field-content "instruction" \
             --all-metadata \
             --batch-size 1
@@ -63,7 +63,7 @@ testcases:
       # Step 3: Verify the metadata and content mapping via list-docs
       - type: exec
         timeout: 60
-        script: {{.cmdChroma}} rs {{.collection}}
+        script: {{.cmdChroma}} --log-level info rs {{.collection}}
         assertions:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Write a Go function"
@@ -76,7 +76,7 @@ testcases:
     always: true
     steps:
       - type: exec
-        script: {{.cmdChroma}} delete {{.collection}} || true
+        script: {{.cmdChroma}} --log-level info delete {{.collection}} || true
         assertions:
           - result.code ShouldEqual 0
       - type: exec

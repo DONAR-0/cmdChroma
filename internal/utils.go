@@ -33,5 +33,6 @@ func SafeJoin(root, relPath string) (string, error) {
 	if !strings.HasPrefix(joined, root) {
 		return "", errors.New("path outside working directory")
 	}
+
 	return joined, nil
 }
