@@ -75,9 +75,9 @@ build:
 	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
 
 .PHONY: clean
-clean: ## Remove build artifacts and coverage files
+clean: ## Remove build artifacts
 	@echo "Cleaning up..."
-	rm -rf $(BUILD_DIR) coverage.out coverage.html
+	rm -rf $(BUILD_DIR)
 	@echo "✅ Clean complete"
 
 # ==============================================================================
@@ -142,12 +142,12 @@ setup-deps: ## Download required native dependencies (ONNX runtime)
 	./.ci/scripts/setup.sh
 
 .PHONY: test
-test: setup-deps ## Run unit tests with coverage
-	@echo "Running tests with coverage..."
+test: setup-deps ## Run unit tests
+	@echo "Running unit tests..."
 	CGO_ENABLED=1 \
 	CGO_LDFLAGS="-L$(TOKENIZER_LIB_DIR) -ltokenizers -lstdc++" \
 	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
-	go test -v -coverprofile=coverage.out -covermode=atomic ./...
+	go test -v ./...
 
 .PHONY: generate
 generate: ## Run go code generation (if any)

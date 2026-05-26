@@ -1,25 +1,28 @@
 name: Go CI
 
+env:
+  CGO_ENABLED: 1
+  ONNX_LIB_DIR: ${{ github.workspace }}/models/onnx_runtime/lib
+  TOKENIZER_LIB_DIR: ${{ github.workspace }}/tokenizerLib
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [1.21.x, 1.22.x]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version-file: go.mod
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -30,6 +33,13 @@ jobs:
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
+
+    - name: Install dependencies for CGO
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc libc6-dev
+        make setup-deps
 
     - name: Run tests with coverage
       run: |
@@ -41,13 +51,14 @@ jobs:
       with:
         file: ./coverage.out
         flags: unittests
-        name: codecov-umbrella
+        name: codecov-umbrella-${{ runner.os }}
 
     - name: Run go vet
       run: go vet ./...
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v4
+      if: runner.os != 'Windows'
+      uses: golangci/golangci-lint-action@v5
       with:
         version: latest
         args: --timeout=5m
@@ -59,11 +70,12 @@ jobs:
           gofmt -s -l .
           exit 1
         fi
+      if: runner.os != 'Windows'
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-report-${{ matrix.go-version }}
+        name: coverage-report-${{ runner.os }}
         path: |
           coverage.out
           coverage.html
@@ -73,12 +85,12 @@ jobs:
     needs: test
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.22.x
+        go-version-file: go.mod
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -90,11 +102,20 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
+    - name: Install dependencies for CGO
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc libc6-dev
+        make setup-deps
+
     - name: Build
       run: make build
+      env:
+        CGO_ENABLED: 1
+        LD_LIBRARY_PATH: ${{ env.ONNX_LIB_DIR }}:${{ env.LD_LIBRARY_PATH }}
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: cmdChroma-linux-amd64
-        path: ./dist/cmdChroma
+        path: ./dist/cmdChroma*
