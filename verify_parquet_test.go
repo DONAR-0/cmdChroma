@@ -24,7 +24,11 @@ func TestParquetInspection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.Errorf("Failed to close file: %v", err)
+		}
+	}()
 
 	stat, err := f.Stat()
 	if err != nil {
@@ -57,7 +61,7 @@ func TestParquetInspection(t *testing.T) {
 	}
 
 	// Read a sample of rows using GenericReader
-	if _, err := f.Seek(io.SeekStart, 0); err != nil {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		t.Fatalf("Failed to seek: %v", err)
 	}
 

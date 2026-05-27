@@ -180,7 +180,11 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 
 	// Use GenericReader to read rows as map[string]any
 		reader := parquet.NewGenericReader[any](f)
-		defer reader.Close()
+		defer func() {
+			if err := reader.Close(); err != nil {
+				slog.Error("Failed to close parquet reader", "error", err)
+			}
+		}()
 
 		// Determine batch size for reading
 		batchSize := p.cfg.BatchSize
