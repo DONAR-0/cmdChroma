@@ -58,10 +58,11 @@ jobs:
 
     - name: Run golangci-lint
       if: runner.os != 'Windows'
-      uses: golangci/golangci-lint-action@v5
+      uses: golangci/golangci-lint-action@v6
       with:
         version: latest
-        args: --timeout=5m
+        install-mode: goinstall
+        args: --out-format=colored-line-number --timeout=5m
 
     - name: Check formatting
       run: |
