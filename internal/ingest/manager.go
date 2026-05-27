@@ -9,11 +9,11 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 
-	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/donar0/cmdChroma/internal"
+	"github.com/parquet-go/parquet-go"
 )
 
 type Record struct {
@@ -49,6 +49,37 @@ func NewProcessor(cfg *Config) *Processor {
 	}
 
 	return &Processor{cfg: cfg}
+}
+
+// primitiveTypes holds a set of reflect.Kind values that are considered primitive
+var primitiveTypes = map[reflect.Kind]bool{
+	reflect.String: true,
+	reflect.Int: true, reflect.Int8: true, reflect.Int16: true, reflect.Int32: true, reflect.Int64: true,
+	reflect.Uint: true, reflect.Uint8: true, reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true,
+	reflect.Float32: true, reflect.Float64: true,
+	reflect.Bool: true,
+}
+
+// stringifyIfComplex converts non-primitive values to strings while preserving primitive types
+func (p *Processor) stringifyIfComplex(value any) any {
+	if value == nil {
+		return nil
+	}
+	rt := reflect.TypeOf(value)
+	// Pointers: dereference and check underlying type
+	for rt.Kind() == reflect.Ptr {
+		if value == nil {
+			return nil
+		}
+		value = reflect.ValueOf(value).Elem().Interface()
+		rt = reflect.TypeOf(value)
+	}
+	// Check if primitive
+	if primitiveTypes[rt.Kind()] {
+		return value
+	}
+	// Complex type - convert to string
+	return fmt.Sprintf("%v", value)
 }
 
 // ProcessJSONL reads a JSONL file and streams records through the provided channel.
@@ -129,6 +160,78 @@ func (p *Processor) ProcessJSONLFull(filePath string) ([]*Record, error) {
 	return records, nil
 }
 
+// ProcessParquet reads a Parquet file and streams records through the provided channel.
+// It uses parquet-go's GenericReader to read rows as map[string]any, then converts
+// each row to a Record using the same extractRecord logic as JSONL.
+func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan error) {
+	records := make(chan *Record)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(records)
+		defer close(errChan)
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		errChan <- fmt.Errorf("failed to open parquet file: %w", err)
+		return
+	}
+	defer internal.CheckDefer(f.Close)
+
+	// Use GenericReader to read rows as map[string]any
+		reader := parquet.NewGenericReader[any](f)
+		defer reader.Close()
+
+		// Determine batch size for reading
+		batchSize := p.cfg.BatchSize
+		if batchSize <= 0 {
+			batchSize = 100
+		}
+		batch := make([]any, batchSize)
+
+		var total int
+		for {
+			n, err := reader.Read(batch)
+			if n > 0 {
+				for _, row := range batch[:n] {
+					rowMap, ok := row.(map[string]any)
+					if !ok {
+						slog.Error("Skipping record with unexpected type", "type", fmt.Sprintf("%T", row))
+						continue
+					}
+					rec, err := p.extractRecord(rowMap)
+					if err != nil {
+						slog.Error("Skipping record", "error", err)
+						continue
+					}
+					if rec == nil {
+						continue
+					}
+
+					records <- rec
+					total++
+
+					if p.cfg.Limit > 0 && total >= p.cfg.Limit {
+						slog.Info("Limit reached", "count", total)
+						return
+					}
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				errChan <- fmt.Errorf("parquet read error: %w", err)
+				return
+			}
+		}
+
+		slog.Info("Processing complete", "total", total)
+	}()
+
+	return records, errChan
+}
+
 // extractRecord converts raw JSON map into a Record.
 func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 	contentVal := getNestedValue(raw, p.cfg.ContentField)
@@ -156,13 +259,13 @@ func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 	if p.cfg.AllMetadata {
 		for k, v := range raw {
 			if k != p.cfg.ContentField && k != p.cfg.IDField {
-				meta[k] = v
+				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
 	} else {
 		for _, k := range p.cfg.MetadataFields {
 			if v, exists := raw[k]; exists {
-				meta[k] = v
+				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
 	}
@@ -188,38 +291,4 @@ func getNestedValue(m map[string]any, path string) any {
 	}
 
 	return current
-}
-
-// extractArrowValue safely extracts primitive values from Arrow column arrays.
-func extractArrowValue(arr arrow.Array, row int) any {
-	if arr.IsNull(row) {
-		return nil
-	}
-
-	// Arrow enforces strong typing at the array level.
-	// We type-switch on the underlying array implementation to extract the raw Go value.
-	switch a := arr.(type) {
-	case *array.String:
-		return a.Value(row)
-	case *array.LargeString:
-		return a.Value(row)
-	case *array.Int32:
-		return a.Value(row)
-	case *array.Int64:
-		return a.Value(row)
-	case *array.Float32:
-		return a.Value(row)
-	case *array.Float64:
-		return a.Value(row)
-	case *array.Boolean:
-		return a.Value(row)
-	case *array.Binary:
-		return string(a.Value(row))
-	case *array.LargeBinary:
-		return string(a.Value(row))
-	default:
-		// For complex types like Structs or Lists (Thrift Type 14),
-		// we fallback to Arrow's internal string representation of that cell.
-		return fmt.Sprintf("%v", arr)
-	}
 }

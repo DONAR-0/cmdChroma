@@ -1,0 +1,68 @@
+version: "2"
+name: Test Chroma CLI - Parquet Import Validation
+
+vars:
+  cmdChroma: cmdChroma
+  parquet_file: "train-00000-of-00001.parquet"
+  test_collection: "parquet_test_16"
+
+testcases:
+  - name: Setup test data (copy Parquet file)
+    steps:
+      - type: exec
+        script: |
+          # Copy the Parquet test file from repo root to current test directory
+          cp ../../train-00000-of-00001.parquet ./train-00000-of-00001.parquet
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Create collection for Parquet import
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} --log-level info create {{.test_collection}}"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Collection created"
+
+  - name: Import Parquet file with all-metadata
+    steps:
+      - type: exec
+        timeout: 300
+        script: |
+          {{.cmdChroma}} --log-level info import {{.test_collection}} {{.parquet_file}} \
+            --field-content question \
+            --field-id conversation_id \
+            --all-metadata \
+            --batch-size 10
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Import completed"
+
+  - name: Verify record count matches Parquet file
+    steps:
+      - type: exec
+        script: |
+          count=$({{.cmdChroma}} --log-level info records {{.test_collection}} --tenant default_tenant --database default_database 2>/dev/null | grep -c '^ID:')
+          echo "Record count: ${count}"
+          if [ "${count}" -ne 40 ]; then
+            echo "Expected 40 records, got ${count}"
+            exit 1
+          fi
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Verify metadata presence
+    steps:
+      - type: exec
+        script: |
+          {{.cmdChroma}} --log-level info records {{.test_collection}} --tenant default_tenant --database default_database 2>/dev/null | grep -q 'domain:'
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Cleanup test collection
+    always: true
+    steps:
+      - type: exec
+        script: "{{.cmdChroma}} --log-level info delete {{.test_collection}} --tenant default_tenant --database default_database || true"
+        assertions:
+          - result.code ShouldEqual 0

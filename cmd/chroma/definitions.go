@@ -65,7 +65,7 @@ func createApp() *cli.Command {
 			recordsCommand,
 			addCommand,
 			queryCommand,
-			importJsonlCommand,
+			importCommand,
 			chatCommand,
 		},
 
@@ -274,44 +274,30 @@ EXAMPLES:
 	},
 }
 
-// importJsonlCommand ingests a JSONL file into a collection.
-var importJsonlCommand = &cli.Command{
+// importCommand ingests a file (JSONL or Parquet) into a collection.
+var importCommand = &cli.Command{
 	Name:      "import",
 	Aliases:   []string{"ingest", "jsonl-import"},
-	Usage:     "Import documents from a JSONL file into a collection",
+	Usage:     "Import documents from a file (JSONL or Parquet) into a collection",
 	ArgsUsage: "<collection_name> <file_path>",
-	Description: `Bulk import documents from a JSONL (JSON Lines) file.
+	Description: `Bulk import documents from JSONL or Parquet files.
 
 This command is optimized for large datasets and will:
-  • Stream the file line by line (memory efficient)
+  • Stream the file line by line (JSONL) or row by row (Parquet)
   • Generate embeddings locally for each document
   • Upload in configurable batches
   • Show progress during import
 
 JSONL format: Each line must be a valid JSON object.
-Common schemas: Hugging Face datasets, custom exports.
+Parquet format: Column-based format; use --field-content and --field-id to map columns.
 
 EXAMPLES:
-  # Basic import with default field names (text, id)
-  chroma import my_collection data.jsonl
+  # Import JSONL
+  chroma import my_collection data.jsonl --field-content text
 
-  # Import with custom field mapping
-  chroma import my_collection data.jsonl \\
-    --field-content "content" \\
-    --field-id "uuid"
-
-  # Import with metadata and limit
-  chroma import my_collection data.jsonl \\
-    --field-metadata "author" \\
-    --field-metadata "category" \\
-    --all-metadata \\
-    --n-ingest 1000
-
-  # Import with custom batch size
-  chroma import my_collection large_data.jsonl \\
-    --batch-size 500 \\
-    --all-metadata`,
-	Action: handleImportJsonlFileInChromaDb,
+  # Import Parquet
+  chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata`,
+	Action: handleImportFileInChromaDb,
 	Flags: []cli.Flag{
 		nIngestDocumentFlag,
 		fieldContentFlag,
