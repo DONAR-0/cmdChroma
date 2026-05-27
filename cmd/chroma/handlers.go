@@ -482,8 +482,10 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 
 	processor := ingest.NewProcessor(cfg)
 
-	var recordsChan <-chan *ingest.Record
-	var errChan <-chan error
+	var (
+		recordsChan <-chan *ingest.Record
+		errChan     <-chan error
+	)
 
 	switch ext {
 	case ".jsonl":
@@ -531,6 +533,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		// Progress update every N documents
 		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
 			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
+
 			nextProgress += progressN
 		}
 
@@ -538,6 +541,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 			if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
 				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
 			}
+
 			totalUploaded += len(docs)
 			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 			docs, ids, metas = nil, nil, nil
@@ -551,6 +555,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
 			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
 		}
+
 		totalUploaded += len(docs)
 		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 	}

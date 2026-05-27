@@ -54,7 +54,7 @@ func NewProcessor(cfg *Config) *Processor {
 // primitiveTypes holds a set of reflect.Kind values that are considered primitive
 var primitiveTypes = map[reflect.Kind]bool{
 	reflect.String: true,
-	reflect.Int: true, reflect.Int8: true, reflect.Int16: true, reflect.Int32: true, reflect.Int64: true,
+	reflect.Int:    true, reflect.Int8: true, reflect.Int16: true, reflect.Int32: true, reflect.Int64: true,
 	reflect.Uint: true, reflect.Uint8: true, reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true,
 	reflect.Float32: true, reflect.Float64: true,
 	reflect.Bool: true,
@@ -65,12 +65,14 @@ func (p *Processor) stringifyIfComplex(value any) any {
 	if value == nil {
 		return nil
 	}
+
 	rt := reflect.TypeOf(value)
 	// Pointers: dereference and check underlying type
 	for rt.Kind() == reflect.Ptr {
 		if value == nil {
 			return nil
 		}
+
 		value = reflect.ValueOf(value).Elem().Interface()
 		rt = reflect.TypeOf(value)
 	}
@@ -171,15 +173,16 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 		defer close(records)
 		defer close(errChan)
 
-	f, err := os.Open(filePath)
-	if err != nil {
-		errChan <- fmt.Errorf("failed to open parquet file: %w", err)
-		return
-	}
-	defer internal.CheckDefer(f.Close)
+		f, err := os.Open(filePath)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to open parquet file: %w", err)
+			return
+		}
+		defer internal.CheckDefer(f.Close)
 
-	// Use GenericReader to read rows as map[string]any
+		// Use GenericReader to read rows as map[string]any
 		reader := parquet.NewGenericReader[any](f)
+
 		defer func() {
 			if err := reader.Close(); err != nil {
 				slog.Error("Failed to close parquet reader", "error", err)
@@ -191,9 +194,11 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 		if batchSize <= 0 {
 			batchSize = 100
 		}
+
 		batch := make([]any, batchSize)
 
 		var total int
+
 		for {
 			n, err := reader.Read(batch)
 			if n > 0 {
@@ -203,16 +208,19 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 						slog.Error("Skipping record with unexpected type", "type", fmt.Sprintf("%T", row))
 						continue
 					}
+
 					rec, err := p.extractRecord(rowMap)
 					if err != nil {
 						slog.Error("Skipping record", "error", err)
 						continue
 					}
+
 					if rec == nil {
 						continue
 					}
 
 					records <- rec
+
 					total++
 
 					if p.cfg.Limit > 0 && total >= p.cfg.Limit {
@@ -221,11 +229,14 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 					}
 				}
 			}
+
 			if err != nil {
 				if err == io.EOF {
 					break
 				}
+
 				errChan <- fmt.Errorf("parquet read error: %w", err)
+
 				return
 			}
 		}

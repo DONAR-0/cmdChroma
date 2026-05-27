@@ -24,6 +24,7 @@ func TestParquetInspection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open file: %v", err)
 	}
+
 	defer func() {
 		if err := f.Close(); err != nil {
 			t.Errorf("Failed to close file: %v", err)
@@ -51,6 +52,7 @@ func TestParquetInspection(t *testing.T) {
 	// Get top-level column names from schema
 	fields := schema.Fields()
 	t.Logf("Top-level columns (%d):", len(fields))
+
 	for i, field := range fields {
 		t.Logf("  [%d] %s (type: %v)", i, field.Name(), field.Type())
 	}
@@ -67,6 +69,7 @@ func TestParquetInspection(t *testing.T) {
 
 	reader := parquet.NewGenericReader[any](f)
 	rows := make([]any, 3)
+
 	n, err := reader.Read(rows)
 	if err != nil && err != io.EOF {
 		t.Fatalf("Failed to read sample rows: %v", err)
@@ -76,12 +79,15 @@ func TestParquetInspection(t *testing.T) {
 
 	// Print schema of the sample data
 	t.Log("Sample row structure (using parquet-go's generic reader):")
+
 	if n > 0 {
 		row := rows[0]
 		t.Logf("  Row type: %T", row)
+
 		rt := reflect.TypeOf(row)
 		if rt.Kind() == reflect.Struct {
 			t.Log("  Available fields via reflection:")
+
 			for i := 0; i < rt.NumField(); i++ {
 				field := rt.Field(i)
 				t.Logf("    %s (%s)", field.Name, field.Type)
