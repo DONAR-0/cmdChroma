@@ -75,9 +75,10 @@ build:
 	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
 
 .PHONY: clean
-clean: ## Remove build artifacts and coverage files
-	@echo "Cleaning up..."
+clean: ## Remove build artifacts, coverage profiles, and test caches
+	@echo "Cleaning up workspace..."
 	rm -rf $(BUILD_DIR) coverage.out coverage.html
+	go clean -testcache
 	@echo "✅ Clean complete"
 
 # ==============================================================================
@@ -135,10 +136,30 @@ deps: ## Download and tidy go modules
 	go mod download
 	go mod tidy
 
+.PHONY: setup-deps
+setup-deps: ## Download required native dependencies (ONNX runtime)
+	@echo "📦 Setting up dependencies..."
+	@chmod +x ./.ci/scripts/setup.sh
+	./.ci/scripts/setup.sh
+
 .PHONY: test
-test: ## Run unit tests
-	@echo "Running tests..."
-	go test -v ./...
+test: setup-deps ## Run unit tests safely skipping non-test coverage bugs
+	@echo "Running unit tests cleanly..."
+	@echo "mode: set" > coverage.out
+	@for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
+		echo "Testing package: $$dir"; \
+		CGO_ENABLED=1 \
+		CGO_LDFLAGS="-L$(TOKENIZER_LIB_DIR) -ltokenizers -lstdc++" \
+		LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
+		go test -v -coverprofile=profile.out $$dir || exit 1; \
+		if [ -f profile.out ]; then \
+			grep -v "mode: set" profile.out >> coverage.out || true; \
+			rm profile.out; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Coverage Summary ==="
+	@go tool cover -func=coverage.out || true
 
 .PHONY: generate
 generate: ## Run go code generation (if any)

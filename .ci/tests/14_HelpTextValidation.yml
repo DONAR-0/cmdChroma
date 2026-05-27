@@ -146,18 +146,19 @@ testcases:
       - result.systemout ShouldContainSubstring "Return results with similarity scores"
       - result.systemout ShouldContainSubstring "batch search"
 
-  # Test import command help displays ImportJSONLCmdDescription
-  - name: Import command help displays ImportJSONLCmdDescription
+  # Test import command help displays ImportCmdDescription (supports JSONL and Parquet)
+  - name: Import command help displays ImportCmdDescription
     steps:
       - type: exec
         script: cmdChroma import --help
     assertions:
       - result.code ShouldEqual 0
       - result.systemout ShouldContainSubstring "Bulk import documents"
-      - result.systemout ShouldContainSubstring "from a JSONL"
+      - result.systemout ShouldContainSubstring "JSONL"
+      - result.systemout ShouldContainSubstring "Parquet"
       - result.systemout ShouldContainSubstring "This command is optimized for large datasets"
       - result.systemout ShouldContainSubstring "Stream the file line by line"
-      - result.systemout ShouldContainSubstring "memory efficient"
+      - result.systemout ShouldContainSubstring "row by row"
       - result.systemout ShouldContainSubstring "Generate embeddings locally"
       - result.systemout ShouldContainSubstring "Upload in configurable batches"
       - result.systemout ShouldContainSubstring "Show progress during import"

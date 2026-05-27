@@ -5,6 +5,14 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CGO_ENABLED: 1
+  CHROMA_HOST: localhost
+  CHROMA_PORT: 8000
+  ONNX_LIB_DIR: ${{ github.workspace }}/models/onnx_runtime/lib
+  TOKENIZER_LIB_DIR: ${{ github.workspace }}/tokenizerLib
 
 jobs:
   integration:
@@ -14,20 +22,20 @@ jobs:
       chromadb:
         image: chromadb/chroma:latest
         ports:
-          - 8000:8000
+          - "8000:8000"
         options: >-
-          --health-cmd "curl -f http://localhost:8000/api/v2/heartbeat || exit 1"
+          --health-cmd "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000' || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.22.x
+        go-version-file: go.mod
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -39,8 +47,11 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
-    - name: Build
-      run: make build
+    - name: Install dependencies for CGO
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc libc6-dev
+        make setup-deps
 
     - name: Run integration tests
       run: make venom
