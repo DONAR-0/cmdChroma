@@ -24,7 +24,7 @@ jobs:
         ports:
           - "8000:8000"
         options: >-
-          --health-cmd "curl -f http://localhost:8000/api/v2/heartbeat || exit 1"
+          --health-cmd "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000' || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
