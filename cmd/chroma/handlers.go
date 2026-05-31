@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/donar0/cmdChroma/internal"
-	"github.com/donar0/cmdChroma/internal/ingest"
-	"github.com/donar0/cmdChroma/internal/llm"
-	"github.com/donar0/cmdChroma/internal/onnx"
-	"github.com/donar0/cmdChroma/internal/service"
+	"github.com/DONAR-0/cmdChroma/internal"
+	"github.com/DONAR-0/cmdChroma/internal/ingest"
+	"github.com/DONAR-0/cmdChroma/internal/llm"
+	"github.com/DONAR-0/cmdChroma/internal/onnx"
+	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 )
 

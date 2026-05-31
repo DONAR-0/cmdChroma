@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/donar0/cmdChroma/internal/version"
+	"github.com/DONAR-0/cmdChroma/internal/version"
 	"github.com/urfave/cli/v3"
 )
 

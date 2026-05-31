@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/donar0/cmdChroma/internal"
-	"github.com/donar0/cmdChroma/internal/onnx"
+	"github.com/DONAR-0/cmdChroma/internal"
+	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"github.com/google/uuid"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/daulet/tokenizers"
-	"github.com/donar0/cmdChroma/internal"
+	"github.com/DONAR-0/cmdChroma/internal"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
