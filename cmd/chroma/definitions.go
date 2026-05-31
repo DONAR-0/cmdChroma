@@ -9,6 +9,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+// ============ Application Setup ============
+
 // createApp builds the root CLI application with all commands and flags.
 // It follows clig.dev guidelines for a consistent, user-friendly CLI experience.
 func createApp() *cli.Command {
@@ -89,6 +91,8 @@ func createApp() *cli.Command {
 		},
 	}
 }
+
+// ============ Command Definitions ============
 
 // pingCommand tests connectivity to the ChromaDB server.
 var pingCommand = &cli.Command{
@@ -338,6 +342,8 @@ EXAMPLES:
 		llmModelFlag,
 	},
 }
+
+// ============ Flag Definitions ============
 
 // Flags
 var (

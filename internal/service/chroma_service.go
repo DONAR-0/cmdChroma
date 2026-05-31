@@ -10,11 +10,15 @@ import (
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
 )
 
+// ============ Service Definition ============
+
 // ChromaService handles business logic for ChromaDB operations.
 type ChromaService struct {
 	client   client.ChromaClientInterface
 	embedder onnx.EmbedderInterface
 }
+
+// ============ Constructor ============
 
 // NewChromaService creates a new service with the given client and embedder.
 // If the client is a concrete *client.ChromaClient, the embedder is injected into it.
@@ -32,6 +36,8 @@ func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) 
 		embedder: e,
 	}
 }
+
+// ============ Connection & Discovery ============
 
 // TestConnection tests the connection to ChromaDB.
 func (s *ChromaService) TestConnection() error {
@@ -90,6 +96,8 @@ func (s *ChromaService) ListCollections() ([]client.Collection, error) {
 
 	return collections, nil
 }
+
+// ============ Document Operations ============
 
 // AddDocuments adds documents to a collection with embeddings.
 func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids []string) error {
@@ -151,12 +159,16 @@ func (s *ChromaService) QueryDocuments(collectionName string, queries []string, 
 	return result, nil
 }
 
+// ============ Resource Management ============
+
 // Close releases resources used by the service.
 func (s *ChromaService) Close() {
 	if s.embedder != nil {
 		s.embedder.Close()
 	}
 }
+
+// ============ Ingestion ============
 
 // IngestRecords ingests records from a JSONL file into the collection.
 // It parses the file, extracts content and metadata, generates embeddings,
@@ -242,6 +254,8 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 
 	return nil
 }
+
+// ============ Private Helpers ============
 
 // uploadBatch uploads a batch of documents to Chroma.
 // The client's AddBatchGeneric generates embeddings internally.
