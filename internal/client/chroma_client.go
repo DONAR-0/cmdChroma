@@ -14,6 +14,24 @@ import (
 	"github.com/google/uuid"
 )
 
+// ============ Constants ============
+
+var (
+	cd = internal.CheckDefer
+	// endpoints
+	testEndpoint         = "%s/api/v2/heartbeat"
+	getTenant            = "%s/api/v2/tenants/%s"
+	listDatabases        = "%s/api/v2/tenants/%s/databases"
+	listCreateCollection = "%s/api/v2/tenants/%s/databases/%s/collections"
+	listDocuments        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/get"
+	queryEndpoint        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/query"
+	batchAdd             = "%s/api/v2/tenants/%s/databases/%s/collections/%s/add"
+	deleteCollection     = "%s/api/v2/tenants/%s/databases/%s/collections/%s"
+	deleteRecords        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/delete"
+)
+
+// ============ Core Types ============
+
 type (
 	ChromaClient struct {
 		URL, Tenant, Database string
@@ -36,6 +54,70 @@ type (
 	}
 )
 
+// ============ Data Transfer Types ============
+
+type (
+	CreateCollectionRequest struct {
+		Name        string         `json:"name"`
+		Metadata    map[string]any `json:"metadata"`
+		GetOrCreate bool           `json:"get_or_create"`
+	}
+
+	// Collection represents the detailed response from ChromaDB
+	Collection struct {
+		ID        string         `json:"id"`
+		Name      string         `json:"name"`
+		Tenant    string         `json:"tenant"`
+		Database  string         `json:"database"`
+		Metadata  map[string]any `json:"metadata"`
+		Dimension *int           `json:"dimension"` // Pointer because it can be null
+		Config    map[string]any `json:"configuration_json"`
+	}
+
+	Database struct {
+		Id     string `json:"id"`
+		Name   string `json:"name"`
+		Tenant string `json:"tenant"`
+	}
+
+	GetRecordsRequest struct {
+		Tenant   string   `json:"tenant"`
+		Database string   `json:"database"`
+		IDs      []string `json:"ids,omitempty"`
+		Include  []string `json:"include"`
+		Limit    *int     `json:"limit"`
+		Offset   *int     `json:"offset"`
+	}
+
+	GetRecordsResponse struct {
+		IDs       []string         `json:"ids"`
+		Documents []string         `json:"documents"`
+		Metadatas []map[string]any `json:"metadatas"`
+	}
+
+	AddRecordsRequest struct {
+		IDs        []string         `json:"ids"`
+		Documents  []string         `json:"documents"`
+		Embeddings [][]float32      `json:"embeddings"` // Change: No longer omitempty
+		Metadatas  []map[string]any `json:"metadatas,omitempty"`
+	}
+
+	QueryResponse struct {
+		IDs       [][]string         `json:"ids"`
+		Documents [][]string         `json:"documents"`
+		Metadatas [][]map[string]any `json:"metadatas"`
+		Distances [][]float32        `json:"distances"`
+	}
+
+	IngestRecord struct {
+		ID       string         `json:"id"`
+		Text     string         `json:"text"`
+		Metadata map[string]any `json:"metadata"`
+	}
+)
+
+// ============ Constructor ============
+
 func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 	slog.Info("Initializing Chroma client", "url", url, "tenant", tenant, "database", database)
 
@@ -46,6 +128,8 @@ func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 		client:   &http.Client{},
 	}
 }
+
+// ============ Connection & Health ============
 
 func (c *ChromaClient) TestConnection() error {
 	endpoint := fmt.Sprintf(testEndpoint, c.URL)
@@ -90,6 +174,8 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 	return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 }
 
+// ============ Databases ============
+
 func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	// URL includes the specific tenant from your client struct
 	endpoint := fmt.Sprintf(listDatabases, c.URL, c.Tenant)
@@ -114,6 +200,8 @@ func (c *ChromaClient) ListDatabases() ([]Database, error) {
 
 	return databases, nil
 }
+
+// ============ Collections ============
 
 func (c *ChromaClient) ListCollections() ([]Collection, error) {
 	// endpoint
@@ -176,6 +264,8 @@ func (c *ChromaClient) CreateCollection(name string) (string, error) {
 
 	return result.ID, nil
 }
+
+// ============ Documents ============
 
 // ListDocuments - List Documents in collection
 func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, error) {
@@ -260,6 +350,8 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 	return "", fmt.Errorf("collection '%s' not found", name)
 }
 
+// ============ Deletion ============
+
 func (c *ChromaClient) DeleteCollection(name string) error {
 	slog.Info("Deleting collection", "name", name)
 
@@ -325,6 +417,8 @@ func (c *ChromaClient) DeleteRecords(collectionID string, ids []string) error {
 	return nil
 }
 
+// ============ Embedding ============
+
 // AddDocument - Corrected Metadata tag handling
 func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float32) error {
 	endpoint := fmt.Sprintf(batchAdd,
@@ -365,6 +459,8 @@ func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
 
 	return vector, nil
 }
+
+// ============ Querying ============
 
 func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error) {
 	//1. Generate embeddings for all queries at once
@@ -410,6 +506,8 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 
 	return &result, nil
 }
+
+// ============ Batch Operations ============
 
 func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string) error {
 	if c.Embedder == nil {
@@ -504,78 +602,3 @@ func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, 
 
 	return nil
 }
-
-// Json Parser struct
-type (
-	CreateCollectionRequest struct {
-		Name        string         `json:"name"`
-		Metadata    map[string]any `json:"metadata"`
-		GetOrCreate bool           `json:"get_or_create"`
-	}
-
-	// Collection represents the detailed response from ChromaDB
-	Collection struct {
-		ID        string         `json:"id"`
-		Name      string         `json:"name"`
-		Tenant    string         `json:"tenant"`
-		Database  string         `json:"database"`
-		Metadata  map[string]any `json:"metadata"`
-		Dimension *int           `json:"dimension"` // Pointer because it can be null
-		Config    map[string]any `json:"configuration_json"`
-	}
-
-	Database struct {
-		Id     string `json:"id"`
-		Name   string `json:"name"`
-		Tenant string `json:"tenant"`
-	}
-
-	GetRecordsRequest struct {
-		Tenant   string   `json:"tenant"`
-		Database string   `json:"database"`
-		IDs      []string `json:"ids,omitempty"`
-		Include  []string `json:"include"`
-		Limit    *int     `json:"limit"`
-		Offset   *int     `json:"offset"`
-	}
-
-	GetRecordsResponse struct {
-		IDs       []string         `json:"ids"`
-		Documents []string         `json:"documents"`
-		Metadatas []map[string]any `json:"metadatas"`
-	}
-
-	AddRecordsRequest struct {
-		IDs        []string         `json:"ids"`
-		Documents  []string         `json:"documents"`
-		Embeddings [][]float32      `json:"embeddings"` // Change: No longer omitempty
-		Metadatas  []map[string]any `json:"metadatas,omitempty"`
-	}
-
-	QueryResponse struct {
-		IDs       [][]string         `json:"ids"`
-		Documents [][]string         `json:"documents"`
-		Metadatas [][]map[string]any `json:"metadatas"`
-		Distances [][]float32        `json:"distances"`
-	}
-
-	IngestRecord struct {
-		ID       string         `json:"id"`
-		Text     string         `json:"text"`
-		Metadata map[string]any `json:"metadata"`
-	}
-)
-
-var (
-	cd = internal.CheckDefer
-	// endpoints
-	testEndpoint         = "%s/api/v2/heartbeat"
-	getTenant            = "%s/api/v2/tenants/%s"
-	listDatabases        = "%s/api/v2/tenants/%s/databases"
-	listCreateCollection = "%s/api/v2/tenants/%s/databases/%s/collections"
-	listDocuments        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/get"
-	queryEndpoint        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/query"
-	batchAdd             = "%s/api/v2/tenants/%s/databases/%s/collections/%s/add"
-	deleteCollection     = "%s/api/v2/tenants/%s/databases/%s/collections/%s"
-	deleteRecords        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/delete"
-)

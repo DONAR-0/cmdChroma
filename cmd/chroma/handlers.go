@@ -17,7 +17,10 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// ============== Command Handlers ==============
+// ============ Command Handlers ============
+// Handlers are organized by functional domain.
+
+// ===== Connection & Tenant =====
 
 // handleTestConnection tests connectivity to ChromaDB.
 func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
@@ -108,6 +111,8 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+// ===== Collections =====
+
 // handleListCollection lists collections in the current database.
 func handleListCollection(_ context.Context, cmd *cli.Command) error {
 	slog.Info("Listing collections", "tenant", cmd.String("tenant"), "database", cmd.String("database"))
@@ -197,36 +202,7 @@ func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// handleDeleteRecords deletes specific documents from a collection by IDs.
-func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
-	collectionName := cmd.Args().Get(0)
-	ids := cmd.StringSlice("id")
-
-	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma delete-records <collection> --id <id>\n\nExample: chroma delete-records my_collection --id doc-1")
-	}
-
-	if len(ids) == 0 {
-		return fmt.Errorf("at least one document ID is required\n\nUsage: chroma delete-records <collection> --id <id>")
-	}
-
-	slog.Info("Deleting records", "collection", collectionName, "ids", ids)
-
-	chromaClient, err := createChromaClient(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
-
-	if err := chromaClient.DeleteRecords(collectionName, ids); err != nil {
-		slog.Error("Delete records failed", "error", err)
-		return fmt.Errorf("failed to delete records: %w", err)
-	}
-
-	fmt.Printf("✅ Deleted %d document(s) from '%s'\n", len(ids), collectionName)
-	slog.Info("Records deleted", "collection", collectionName, "ids", ids)
-
-	return nil
-}
+// ===== Documents =====
 
 // handleListDocuments lists documents in a collection.
 func handleListDocuments(_ context.Context, c *cli.Command) error {
@@ -285,6 +261,93 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 
 	return nil
 }
+
+// handleBatchAddDocuments adds documents to a collection.
+func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
+	collectionName := c.Args().Get(0)
+	docs := c.StringSlice("doc")
+
+	if len(docs) == 0 {
+		return fmt.Errorf("no documents provided\n\nUsage: chroma add <collection> --doc \"text\"\n\nExample: chroma add my_collection --doc \"Your document\"")
+	}
+
+	// Setup client
+	client, err := createChromaClient(c)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+
+	// Load AI Engine
+	embedder, err := initEmbedder(c)
+	if err != nil {
+		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist", err)
+	}
+
+	svc := service.NewChromaService(client, embedder)
+	defer svc.Close()
+
+	// Handle IDs: use provided ones or generate auto IDs
+	ids := c.StringSlice("id")
+	if len(ids) > 0 {
+		// User provided custom IDs
+		if len(ids) != len(docs) {
+			return fmt.Errorf("number of IDs (%d) must match number of documents (%d)", len(ids), len(docs))
+		}
+
+		slog.Info("Using custom document IDs", "ids", ids)
+	} else {
+		// Generate auto IDs
+		ids = make([]string, len(docs))
+		for i := range docs {
+			ids[i] = fmt.Sprintf("id-%d-%d", time.Now().UnixNano(), i)
+		}
+	}
+
+	// Execute
+	slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
+
+	if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
+		return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
+	}
+
+	fmt.Printf("✅ Successfully added %d documents to '%s'\n", len(docs), collectionName)
+	slog.Info("Documents added", "collection", collectionName, "count", len(docs))
+
+	return nil
+}
+
+// handleDeleteRecords deletes specific documents from a collection by IDs.
+func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
+	collectionName := cmd.Args().Get(0)
+	ids := cmd.StringSlice("id")
+
+	if collectionName == "" {
+		return fmt.Errorf("collection name is required\n\nUsage: chroma delete-records <collection> --id <id>\n\nExample: chroma delete-records my_collection --id doc-1")
+	}
+
+	if len(ids) == 0 {
+		return fmt.Errorf("at least one document ID is required\n\nUsage: chroma delete-records <collection> --id <id>")
+	}
+
+	slog.Info("Deleting records", "collection", collectionName, "ids", ids)
+
+	chromaClient, err := createChromaClient(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create Chroma client: %w", err)
+	}
+
+	if err := chromaClient.DeleteRecords(collectionName, ids); err != nil {
+		slog.Error("Delete records failed", "error", err)
+		return fmt.Errorf("failed to delete records: %w", err)
+	}
+
+	fmt.Printf("✅ Deleted %d document(s) from '%s'\n", len(ids), collectionName)
+	slog.Info("Records deleted", "collection", collectionName, "ids", ids)
+
+	return nil
+}
+
+// ===== Search & Query =====
 
 // handleQueryBatchInCollection performs batch semantic search.
 func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
@@ -358,59 +421,7 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
-// handleBatchAddDocuments adds documents to a collection.
-func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
-	collectionName := c.Args().Get(0)
-	docs := c.StringSlice("doc")
-
-	if len(docs) == 0 {
-		return fmt.Errorf("no documents provided\n\nUsage: chroma add <collection> --doc \"text\"\n\nExample: chroma add my_collection --doc \"Your document\"")
-	}
-
-	// Setup client
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
-
-	// Load AI Engine
-	embedder, err := initEmbedder(c)
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist", err)
-	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
-
-	// Handle IDs: use provided ones or generate auto IDs
-	ids := c.StringSlice("id")
-	if len(ids) > 0 {
-		// User provided custom IDs
-		if len(ids) != len(docs) {
-			return fmt.Errorf("number of IDs (%d) must match number of documents (%d)", len(ids), len(docs))
-		}
-
-		slog.Info("Using custom document IDs", "ids", ids)
-	} else {
-		// Generate auto IDs
-		ids = make([]string, len(docs))
-		for i := range docs {
-			ids[i] = fmt.Sprintf("id-%d-%d", time.Now().UnixNano(), i)
-		}
-	}
-
-	// Execute
-	slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
-
-	if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
-		return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
-	}
-
-	fmt.Printf("✅ Successfully added %d documents to '%s'\n", len(docs), collectionName)
-	slog.Info("Documents added", "collection", collectionName, "count", len(docs))
-
-	return nil
-}
+// ===== Import =====
 
 // handleImportFileInChromaDb imports a file (JSONL or Parquet) with progress tracking.
 func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
@@ -572,6 +583,8 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
+// ===== RAG Chat =====
+
 // handleChat performs RAG-based question answering.
 func handleChat(_ context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
@@ -657,6 +670,8 @@ Provide a clear, concise answer:`,
 
 	return nil
 }
+
+// ============ Private Helpers ============
 
 // initEmbedder initializes the ONNX embedder with path resolution.
 func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {

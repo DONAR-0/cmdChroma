@@ -16,6 +16,8 @@ import (
 	"github.com/parquet-go/parquet-go"
 )
 
+// ============ Data Types ============
+
 type Record struct {
 	ID       string
 	Content  string
@@ -31,16 +33,27 @@ type Config struct {
 	Limit          int      // max records to ingest, 0 = unlimited
 }
 
+type Processor struct {
+	cfg *Config
+}
+
+// Primitive reflect.Kinds that can be kept as-is
+var primitiveTypes = map[reflect.Kind]bool{
+	reflect.String: true,
+	reflect.Int:    true, reflect.Int8: true, reflect.Int16: true, reflect.Int32: true, reflect.Int64: true,
+	reflect.Uint: true, reflect.Uint8: true, reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true,
+	reflect.Float32: true, reflect.Float64: true,
+	reflect.Bool: true,
+}
+
+// ============ Constructors ============
+
 func DefaultConfig() *Config {
 	return &Config{
 		BatchSize:    100,
 		ContentField: "text",
 		IDField:      "id",
 	}
-}
-
-type Processor struct {
-	cfg *Config
 }
 
 func NewProcessor(cfg *Config) *Processor {
@@ -51,38 +64,7 @@ func NewProcessor(cfg *Config) *Processor {
 	return &Processor{cfg: cfg}
 }
 
-// primitiveTypes holds a set of reflect.Kind values that are considered primitive
-var primitiveTypes = map[reflect.Kind]bool{
-	reflect.String: true,
-	reflect.Int:    true, reflect.Int8: true, reflect.Int16: true, reflect.Int32: true, reflect.Int64: true,
-	reflect.Uint: true, reflect.Uint8: true, reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true,
-	reflect.Float32: true, reflect.Float64: true,
-	reflect.Bool: true,
-}
-
-// stringifyIfComplex converts non-primitive values to strings while preserving primitive types
-func (p *Processor) stringifyIfComplex(value any) any {
-	if value == nil {
-		return nil
-	}
-
-	rt := reflect.TypeOf(value)
-	// Pointers: dereference and check underlying type
-	for rt.Kind() == reflect.Ptr {
-		if value == nil {
-			return nil
-		}
-
-		value = reflect.ValueOf(value).Elem().Interface()
-		rt = reflect.TypeOf(value)
-	}
-	// Check if primitive
-	if primitiveTypes[rt.Kind()] {
-		return value
-	}
-	// Complex type - convert to string
-	return fmt.Sprintf("%v", value)
-}
+// ============ Public Processing Methods ============
 
 // ProcessJSONL reads a JSONL file and streams records through the provided channel.
 // The channel is closed when processing is complete or an unrecoverable error occurs.
@@ -247,7 +229,49 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 	return records, errChan
 }
 
-// extractRecord converts raw JSON map into a Record.
+// ============ Private Helpers ============
+
+// getNestedValue retrieves nested values using dot notation.
+func getNestedValue(m map[string]any, path string) any {
+	parts := strings.Split(path, ".")
+
+	var current any = m
+	for _, part := range parts {
+		if next, ok := current.(map[string]any); ok {
+			current = next[part]
+		} else {
+			return nil
+		}
+	}
+
+	return current
+}
+
+// stringifyIfComplex converts non-primitive values to strings while preserving primitive types.
+func (p *Processor) stringifyIfComplex(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	rt := reflect.TypeOf(value)
+	// Pointers: dereference and check underlying type
+	for rt.Kind() == reflect.Ptr {
+		if value == nil {
+			return nil
+		}
+
+		value = reflect.ValueOf(value).Elem().Interface()
+		rt = reflect.TypeOf(value)
+	}
+	// Check if primitive
+	if primitiveTypes[rt.Kind()] {
+		return value
+	}
+	// Complex type - convert to string
+	return fmt.Sprintf("%v", value)
+}
+
+// extractRecord converts raw JSON/Parquet map into a Record.
 func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 	contentVal := getNestedValue(raw, p.cfg.ContentField)
 	if contentVal == nil {
@@ -290,20 +314,4 @@ func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 		Content:  content,
 		Metadata: meta,
 	}, nil
-}
-
-// getNestedValue retrieves nested values using dot notation.
-func getNestedValue(m map[string]any, path string) any {
-	parts := strings.Split(path, ".")
-
-	var current any = m
-	for _, part := range parts {
-		if next, ok := current.(map[string]any); ok {
-			current = next[part]
-		} else {
-			return nil
-		}
-	}
-
-	return current
 }
