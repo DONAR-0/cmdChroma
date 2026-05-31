@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os"
 
-	client "github.com/donar0/cmdChroma/internal/client"
-	"github.com/donar0/cmdChroma/internal/config"
-	"github.com/donar0/cmdChroma/internal/version"
+	client "github.com/DONAR-0/cmdChroma/internal/client"
+	"github.com/DONAR-0/cmdChroma/internal/config"
+	"github.com/DONAR-0/cmdChroma/internal/version"
 	"github.com/urfave/cli/v3"
 )
 

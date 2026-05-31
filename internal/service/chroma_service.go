@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	client "github.com/donar0/cmdChroma/internal/client"
-	"github.com/donar0/cmdChroma/internal/errors"
-	"github.com/donar0/cmdChroma/internal/ingest"
-	"github.com/donar0/cmdChroma/internal/onnx"
+	client "github.com/DONAR-0/cmdChroma/internal/client"
+	"github.com/DONAR-0/cmdChroma/internal/errors"
+	"github.com/DONAR-0/cmdChroma/internal/ingest"
+	"github.com/DONAR-0/cmdChroma/internal/onnx"
 )
 
 // ChromaService handles business logic for ChromaDB operations.

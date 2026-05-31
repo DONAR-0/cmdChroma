@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/daulet/tokenizers"
-	"github.com/donar0/cmdChroma/internal"
 	ort "github.com/yalue/onnxruntime_go"
 )
 

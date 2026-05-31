@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/donar0/cmdChroma/internal"
+	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/parquet-go/parquet-go"
 )
 

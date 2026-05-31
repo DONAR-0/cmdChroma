@@ -2,11 +2,10 @@
 
 A high-performance, user-friendly command-line tool for **ChromaDB** with local AI embeddings. Designed for developers building **RAG (Retrieval-Augmented Generation)** pipelines who want to keep their data and AI processing entirely local.
 
-[![Go CI](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/ci.yml)
-[![Integration Tests](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/integration.yml)
-[![Docker Build](https://github.com/donar0/cmdChroma/actions/workflows/docker.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/docker.yml)
-[![Release](https://github.com/donar0/cmdChroma/actions/workflows/release.yml/badge.svg)](https://github.com/donar0/cmdChroma/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/donar0/cmdChroma/branch/main/graph/badge.svg)](https://codecov.io/gh/donar0/cmdChroma)
+[![Go CI](https://github.com/DONAR-0/cmdChroma/actions/workflows/ci.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/ci.yml)
+[![Integration Tests](https://github.com/DONAR-0/cmdChroma/actions/workflows/integration.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/integration.yml)
+[![Release](https://github.com/DONAR-0/cmdChroma/actions/workflows/release.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/DONAR-0/cmdChroma/branch/main/graph/badge.svg)](https://codecov.io/gh/DONAR-0/cmdChroma)
 
 ---
 
@@ -59,7 +58,7 @@ That's it! 🎉
 ### Build from Source
 ```bash
 # Clone the repository
-git clone https://github.com/donar0/cmdChroma.git
+git clone https://github.com/DONAR-0/cmdChroma.git
 cd cmdChroma
 
 # Download AI models (one-time setup)
@@ -77,10 +76,10 @@ The binary will be at `./cmdChroma`.
 ### Docker (Easiest)
 ```bash
 # Pull pre-built image [TODO]
-docker pull donar0/cmdchroma:latest
+docker pull DONAR-0/cmdchroma:latest
 
 # Run (with network access to ChromaDB)
-docker run --rm --network host donar0/cmdchroma:latest ping
+docker run --rm --network host DONAR-0/cmdchroma:latest ping
 ```
 
 ### Project Structure

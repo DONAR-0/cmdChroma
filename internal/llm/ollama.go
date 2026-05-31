@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/donar0/cmdChroma/internal"
+	"github.com/DONAR-0/cmdChroma/internal"
 )
 
 // ChatRequest is the payload sent to Ollama.

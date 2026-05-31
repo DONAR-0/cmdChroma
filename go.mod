@@ -1,4 +1,4 @@
-module github.com/donar0/cmdChroma
+module github.com/DONAR-0/cmdChroma
 
 go 1.25.7
 
@@ -15,7 +15,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.0.0 // indirect

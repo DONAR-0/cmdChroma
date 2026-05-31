@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	client "github.com/donar0/cmdChroma/internal/client"
+	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
 // Mock implementations
