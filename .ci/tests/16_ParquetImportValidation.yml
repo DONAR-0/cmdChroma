@@ -12,7 +12,7 @@ testcases:
       - type: exec
         script: |
           # Generate the Parquet file for testing
-          go run ../.ci/scripts/generate_parquet.go
+          go run ../../.ci/scripts/generate_parquet.go
         assertions:
           - result.code ShouldEqual 0
 

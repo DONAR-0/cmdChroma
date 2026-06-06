@@ -1,29 +1,39 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/parquet-go/parquet-go"
 )
 
-// TestData matches the structure expected by the Parquet import test
+// TestData matches the structure of the original Parquet file
 type TestData struct {
-	Question       string `parquet:"question"`
 	ConversationID string `parquet:"conversation_id"`
 	Domain         string `parquet:"domain"`
+	SubDomain      string `parquet:"subDomain"`
+	AuthorID       string `parquet:"author_id"`
+	Question       string `parquet:"question"`
+	Answer         string `parquet:"answer"`
+	Format         string `parquet:"format"`
+	Images         string `parquet:"images"`
 }
 
 func main() {
-	// Create test data matching what's expected by the test
+	// Create test data matching the original Parquet file structure (40 rows)
 	var rows []TestData
 
-	// Create 40 rows to match the test expectation (verify record count matches 40)
 	for i := 0; i < 40; i++ {
 		rows = append(rows, TestData{
-			Question:       "What is the meaning of life?",
-			ConversationID: "conv-" + string(rune('a'+i%26)),
+			ConversationID: fmt.Sprintf("conv-%03d", i),
 			Domain:         "test-domain",
+			SubDomain:      "test-subdomain",
+			AuthorID:       "user_001",
+			Question:       "What is the meaning of life?",
+			Answer:         "The answer to everything is 42",
+			Format:         "QA",
+			Images:         `[{"bytes":"","path":""}]`,
 		})
 	}
 
