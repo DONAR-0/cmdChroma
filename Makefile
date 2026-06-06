@@ -92,7 +92,7 @@ venom: build ## Build and run Venom integration tests
 	@chmod +x ./.ci/scripts/run-venom.sh
 	@# Run the script with necessary Library Paths for CGO/ONNX
 	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)"; \
-	./.ci/scripts/run-venom.sh
+	TEST_FILES="$(TEST_FILES)" ./.ci/scripts/run-venom.sh
 
 .PHONY: venom-clean
 venom-clean: ## Remove Venom logs and reports
