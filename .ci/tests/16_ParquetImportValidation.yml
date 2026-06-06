@@ -7,12 +7,12 @@ vars:
   test_collection: "parquet_test_16"
 
 testcases:
-  - name: Setup test data (copy Parquet file)
+  - name: Setup test data (generate Parquet file)
     steps:
       - type: exec
         script: |
-          # Copy the Parquet test file from repo root to current test directory
-          cp ../../train-00000-of-00001.parquet ./train-00000-of-00001.parquet
+          # Generate the Parquet file for testing
+          go run ../.ci/scripts/generate_parquet.go
         assertions:
           - result.code ShouldEqual 0
 
