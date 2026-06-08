@@ -256,11 +256,12 @@ func (p *Processor) stringifyIfComplex(value any) any {
 	rt := reflect.TypeOf(value)
 	// Pointers: dereference and check underlying type
 	for rt.Kind() == reflect.Ptr {
-		if value == nil {
+		v := reflect.ValueOf(value)
+		if v.IsNil() {
 			return nil
 		}
 
-		value = reflect.ValueOf(value).Elem().Interface()
+		value = v.Elem().Interface()
 		rt = reflect.TypeOf(value)
 	}
 	// Check if primitive
@@ -295,16 +296,18 @@ func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 	// Extract metadata
 	meta := make(map[string]any)
 
-	if p.cfg.AllMetadata {
+	if p.cfg.AllMetadata || len(p.cfg.MetadataFields) == 0 {
+		// Extract all fields except content and id
 		for k, v := range raw {
 			if k != p.cfg.ContentField && k != p.cfg.IDField {
-				meta[k] = p.stringifyIfComplex(v)
+				meta[k] = v
 			}
 		}
 	} else {
+		// Extract only specified metadata fields
 		for _, k := range p.cfg.MetadataFields {
 			if v, exists := raw[k]; exists {
-				meta[k] = p.stringifyIfComplex(v)
+				meta[k] = v
 			}
 		}
 	}

@@ -9,6 +9,10 @@ import (
 
 // CheckDefer logs errors from deferred Close calls.
 func CheckDefer(closeFunc func() error) {
+	if closeFunc == nil {
+		return
+	}
+
 	if err := closeFunc(); err != nil {
 		slog.Debug("error received", "err", err)
 	}

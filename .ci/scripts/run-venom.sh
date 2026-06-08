@@ -31,8 +31,8 @@ if [ ! -f "$VENOM_BIN" ]; then
   chmod +x "$VENOM_BIN"
 fi
 
-# Add the dist folder to the PATH using the absolute path
-export PATH="$REPO_ROOT/dist:$PATH"
+# Add the dist and .ci/bin folders to the PATH using the absolute path
+export PATH="$REPO_ROOT/dist:$REPO_ROOT/.ci/bin:$PATH"
 
 # Also keep this for safety until RPATH is 100% verified
 export LD_LIBRARY_PATH="$REPO_ROOT/models/onnx_runtime/lib:${LD_LIBRARY_PATH:-}"
