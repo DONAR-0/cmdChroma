@@ -232,6 +232,7 @@ EXAMPLES:
 	Flags: []cli.Flag{
 		docSliceFlag,
 		idSliceFlag,
+		upsertFlag,
 		modelOnnxFileFlag,
 		tokenizerJsonFileFlag,
 		onnxLibFlag,
@@ -323,23 +324,41 @@ var chatCommand = &cli.Command{
 This command:
   1. Finds relevant documents from the collection
   2. Builds context from search results
-  3. Generates an answer using a local LLM (via Ollama)
+  3. Generates an answer using a local LLM (via Ollama) or NVIDIA NIM (cloud API)
 
-Requires Ollama running locally (default: http://localhost:11434).
+For Ollama:
+  • Requires Ollama running locally (default: http://localhost:11434)
+  • Pull a model: ollama pull qwen:0.5b
+
+For NVIDIA NIM:
+  • Set NVIDIA_API_KEY environment variable
+  • Use model prefix: nim://<model-id> (e.g., nim://mistralai/mistral-7b-instruct-v0.3)
+  • Default endpoint: https://integrate.api.nvidia.com/v1 (override with --nim-url)
+
+Use --distance-threshold to filter out irrelevant matches. ChromaDB distances are usually 0-100+ (lower = more similar). If the best result's distance exceeds the threshold, the LLM will be told no context was found.
 
 EXAMPLES:
-  # Ask a question about your collection
+  # Ask a question about your collection (Ollama)
   chroma chat my_collection "What are the main topics?"
 
   # Use a specific Ollama model
   chroma chat my_collection "Summarize this" --llm-model llama2
+
+  # Use NVIDIA NIM (requires API key)
+  export NVIDIA_API_KEY="your-key"
+  chroma chat my_collection "Explain this" --llm-model nim://mistralai/mistral-7b-instruct-v0.3
+
+  # Set a distance threshold to treat high-distance results as irrelevant
+  chroma chat my_collection "Explain this" --distance-threshold 20
 
   # Retrieve more context for complex questions
   chroma chat my_collection "Explain in detail" --n-results 10`,
 	Action: handleChat,
 	Flags: []cli.Flag{
 		nResultsFlag,
+		distanceThresholdFlag,
 		llmModelFlag,
+		nimURLFlag,
 	},
 }
 
@@ -445,6 +464,12 @@ var (
 		Usage:   "Number of results to return per query",
 	}
 
+	distanceThresholdFlag = &cli.Float64Flag{
+		Name:  "distance-threshold",
+		Value: 0,
+		Usage: "Maximum distance for results to be considered relevant (0 = no threshold, use all results). ChromaDB distances are typically 0-100+; lower is more similar. Useful to filter irrelevant matches.",
+	}
+
 	// Add flags
 	docSliceFlag = &cli.StringSliceFlag{
 		Name:     "doc",
@@ -457,6 +482,11 @@ var (
 		Name:    "id",
 		Aliases: []string{"i"},
 		Usage:   "Custom document IDs (must match number of documents)",
+	}
+
+	upsertFlag = &cli.BoolFlag{
+		Name:  "upsert",
+		Usage: "Update existing documents if IDs already exist (uses upsert endpoint)",
 	}
 
 	// Import flags
@@ -500,6 +530,12 @@ var (
 		Name:    "llm-model",
 		Aliases: []string{"model"},
 		Value:   "qwen:0.5b",
-		Usage:   "Ollama model to use for answer generation",
+		Usage:   "LLM model to use for answer generation. For Ollama: model name (e.g., qwen:0.5b). For NVIDIA NIM: prefix with nim:// and use exact model ID from /v1/models (e.g., nim://mistralai/mistral-7b-instruct-v0.3)",
+	}
+
+	nimURLFlag = &cli.StringFlag{
+		Name:  "nim-url",
+		Value: "https://integrate.api.nvidia.com/v1",
+		Usage: "NVIDIA NIM API base URL (requires NVIDIA_API_KEY environment variable)",
 	}
 )

@@ -303,15 +303,29 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 		}
 	}
 
+	// Check if upsert flag is set
+	upsert := c.Bool("upsert")
+
 	// Execute
-	slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
+	if upsert {
+		slog.Info("Upserting batch to Chroma", "collection", collectionName, "count", len(docs))
 
-	if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
-		return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
+		if err := svc.UpsertDocuments(collectionName, docs, ids); err != nil {
+			return fmt.Errorf("failed to upsert documents: %w\n\nHint: Check collection exists and you have write permissions", err)
+		}
+
+		fmt.Printf("✅ Successfully upserted %d documents to '%s'\n", len(docs), collectionName)
+		slog.Info("Documents upserted", "collection", collectionName, "count", len(docs))
+	} else {
+		slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
+
+		if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
+			return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
+		}
+
+		fmt.Printf("✅ Successfully added %d documents to '%s'\n", len(docs), collectionName)
+		slog.Info("Documents added", "collection", collectionName, "count", len(docs))
 	}
-
-	fmt.Printf("✅ Successfully added %d documents to '%s'\n", len(docs), collectionName)
-	slog.Info("Documents added", "collection", collectionName, "count", len(docs))
 
 	return nil
 }
@@ -627,8 +641,28 @@ func handleChat(_ context.Context, c *cli.Command) error {
 
 	var contextBuilder strings.Builder
 
-	if len(resp.Documents) == 0 || len(resp.Documents[0]) == 0 {
-		fmt.Println("⚠️  No relevant documents found. The LLM will answer based on general knowledge.")
+	distanceThreshold := c.Float64("distance-threshold")
+
+	// Check if we have results and if they pass the distance threshold
+	hasRelevantResults := false
+
+	if len(resp.Documents) > 0 && len(resp.Documents[0]) > 0 {
+		// If threshold is set (>0), check if best result is within threshold
+		if distanceThreshold > 0 {
+			bestDistance := float64(resp.Distances[0][0])
+			if bestDistance <= distanceThreshold {
+				hasRelevantResults = true
+			} else {
+				fmt.Printf("⚠️  Best result distance (%.4f) exceeds threshold (%.4f). Treating as no relevant context.\n", bestDistance, distanceThreshold)
+			}
+		} else {
+			// No threshold set, all results are considered relevant
+			hasRelevantResults = true
+		}
+	}
+
+	if !hasRelevantResults {
+		fmt.Println("⚠️  No relevant documents found. The LLM will be instructed to say so.")
 	} else {
 		fmt.Printf("📚 Found %d relevant documents:\n\n", len(resp.Documents[0]))
 		// Build context from results
@@ -643,8 +677,19 @@ func handleChat(_ context.Context, c *cli.Command) error {
 		fmt.Println("💭 Generating answer...")
 	}
 
-	// Build prompt
-	finalPrompt := fmt.Sprintf(`Use the following context to answer the question.
+	// Build prompt based on whether we have context
+	var finalPrompt string
+	if contextBuilder.Len() == 0 {
+		// No relevant documents found
+		finalPrompt = fmt.Sprintf(`The user asked: "%s"
+
+No relevant documents were found in the knowledge base.
+
+Instructions: Respond with a clear statement that the answer cannot be found in the provided context. Do not guess or provide information from general knowledge. Simply indicate that the query does not match any available context.`,
+			question)
+	} else {
+		// We have context, use the standard RAG prompt
+		finalPrompt = fmt.Sprintf(`Use the following context to answer the question.
 If the context doesn't contain relevant information, say so.
 
 Context:
@@ -653,7 +698,8 @@ Context:
 Question: %s
 
 Provide a clear, concise answer:`,
-		contextBuilder.String(), question)
+			contextBuilder.String(), question)
+	}
 
 	// Get model and generate
 	model := c.String("llm-model")
@@ -661,8 +707,27 @@ Provide a clear, concise answer:`,
 		model = "qwen:0.5b"
 	}
 
-	provider := llm.NewProvider("") // defaults to localhost:11434
+	// Create provider based on model prefix
+	var provider llm.ProviderInterface
+
+	if strings.HasPrefix(model, "nim://") {
+		// NVIDIA NIM provider
+		nimURL := c.String("nim-url")
+		provider = llm.NewNIMProvider(nimURL, "")
+
+		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
+	} else {
+		// Default: Ollama provider
+		provider = llm.NewProvider("") // defaults to localhost:11434
+
+		fmt.Println("\n🤖 Using Ollama for generation")
+	}
+
 	if err := provider.Generate(context.Background(), finalPrompt, model); err != nil {
+		if strings.HasPrefix(model, "nim://") {
+			return fmt.Errorf("NIM generation failed: %w\n\nHints:\n  • Ensure NVIDIA_API_KEY is set\n  • Verify model name (e.g., nim://mistralai/mistral-7b-instruct)\n  • Check your NIM endpoint URL", err)
+		}
+
 		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
 	}
 

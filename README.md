@@ -43,7 +43,7 @@ That's it! 🎉
 - **Intuitive CLI**: Designed following [clig.dev](https://clig.dev) guidelines for a consistent, user-friendly experience.
 - **Rich Error Messages**: Actionable hints when things go wrong.
 - **Dataset Import**: Stream large datasets from JSONL files with progress reporting.
-- **RAG-Ready**: Built-in chat command for Retrieval-Augmented Generation (requires Ollama).
+- **RAG-Ready**: Built-in chat command for Retrieval-Augmented Generation (supports both Ollama and NVIDIA NIM).
 - **Cross-Platform**: Optimized for WSL/Linux with automated path resolution.
 
 ---
@@ -177,7 +177,9 @@ chroma import my_collection data.jsonl \
 
 
 #### `chat` — RAG Q&A
-Ask questions about your collection using local AI.
+Ask questions about your collection using AI-powered retrieval (supports Ollama and NVIDIA NIM).
+
+**Ollama (local):**
 ```bash
 # Requires Ollama running (default: localhost:11434)
 chroma chat my_collection "What are the main topics?"
@@ -187,6 +189,22 @@ chroma chat my_collection "Summarize this" --llm-model llama2
 
 # Retrieve more context for complex questions
 chroma chat my_collection "Explain in detail" --n-results 10
+```
+
+**NVIDIA NIM (cloud API):**
+```bash
+# Set your NVIDIA API key
+export NVIDIA_API_KEY="your-api-key-here"
+
+# Use a NIM model (prefix with nim://)
+# Check available models: curl -H "Authorization: Bearer $NVIDIA_API_KEY" https://integrate.api.nvidia.com/v1/models
+chroma chat my_collection "What are the main topics?" --llm-model nim://mistralai/mistral-7b-instruct-v0.3
+
+# Custom NIM endpoint (default: https://integrate.api.nvidia.com/v1)
+chroma chat my_collection "Explain this" --llm-model nim://meta/llama-3.1-8b-instruct
+
+# Filter irrelevant matches by distance (e.g., only accept results with distance <= 20)
+chroma chat my_collection "Explain this" --llm-model nim://meta/llama-3.1-8b-instruct --distance-threshold 20
 ```
 
 #### `records` — List Documents
@@ -264,9 +282,17 @@ cmdChroma follows the [clig.dev](https://clig.dev) guidelines:
 - Create collection first: `chroma create <name>`
 
 ### LLM chat fails (`chroma chat`)
+
+**For Ollama:**
 - Is Ollama running? Start it: `ollama serve`
 - Pull a model: `ollama pull qwen:0.5b`
 - Check Ollama is at `http://localhost:11434`
+
+**For NVIDIA NIM:**
+- Ensure `NVIDIA_API_KEY` environment variable is set
+- Verify the model name uses `nim://` prefix (e.g., `nim://mistralai/mistral-7b-instruct`)
+- Check your internet connection and API key permissions
+- Default endpoint is `https://api.nvidia.com/v1`; override with `--nim-url` if needed
 
 ---
 

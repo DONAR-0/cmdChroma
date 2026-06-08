@@ -27,10 +27,11 @@ testcases:
         script: |
           cmdChroma a t12_update_coll \
             -d "Updated content for doc1" \
-            -i "doc-1"
+            -i "doc-1" \
+            --upsert
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Successfully added 1 document"
+          - result.systemout ShouldContainSubstring "Successfully upserted 1 document"
   - name: Verify update by listing
     steps:
       - type: exec

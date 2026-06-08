@@ -128,6 +128,35 @@ func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids [
 	return err
 }
 
+// UpsertDocuments upserts documents to a collection with embeddings (insert or update).
+func (s *ChromaService) UpsertDocuments(collectionName string, docs []string, ids []string) error {
+	if s.embedder == nil {
+		err := errors.ErrEmbedderNotInitialized
+		slog.Error("Cannot upsert documents: embedder not initialized", "error", err)
+
+		return err
+	}
+
+	slog.Info("Upserting documents",
+		"collection", collectionName,
+		"document_count", len(docs))
+	// Resolve collection name (or ID) to a valid collection ID
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
+		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	err = s.client.UpsertBatchGeneric(collectionID, docs, ids, nil)
+	if err != nil {
+		slog.Error("Failed to upsert batch", "collection", collectionName, "batch_size", len(docs), "error", err)
+	} else {
+		slog.Info("Documents upserted successfully", "collection", collectionName, "count", len(docs))
+	}
+
+	return err
+}
+
 // QueryDocuments queries documents in a collection.
 func (s *ChromaService) QueryDocuments(collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
 	if s.embedder == nil {

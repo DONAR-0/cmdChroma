@@ -45,6 +45,15 @@ run: ## Run in dev mode (Handles LD_LIBRARY_PATH for ONNX)
 	@echo "Running in development mode..."
 	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" go run $(MAIN_PATH)
 
+.PHONY: dev
+dev: ## Run full development cycle: format, lint, test, and venom
+	$(MAKE) fmt
+	$(MAKE) lint
+	$(MAKE) clean
+	$(MAKE) build
+	$(MAKE) test
+	$(MAKE) venom
+
 # .PHONY: build
 # build: ## Build the binary for current OS
 # 	@echo "Building $(BINARY_NAME)..."
@@ -145,6 +154,7 @@ setup-deps: ## Download required native dependencies (ONNX runtime)
 .PHONY: test
 test: setup-deps ## Run unit tests safely skipping non-test coverage bugs
 	@echo "Running unit tests cleanly..."
+	go clean -testcache
 	@echo "mode: set" > coverage.out
 	@for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 		echo "Testing package: $$dir"; \
@@ -159,8 +169,11 @@ test: setup-deps ## Run unit tests safely skipping non-test coverage bugs
 	done
 	@echo ""
 	@echo "=== Coverage Summary ==="
-	@go tool cover -func=coverage.out || true
-
+	@go tool cover -func=coverage.out | tee coverage-summary.txt; \
+	total=$$(grep '^total:' coverage-summary.txt | awk '{print $$NF}' | tr -d '%'); \
+	echo "Total coverage: $${total}%"; \
+	awk "BEGIN {if ($$total < 80) { print \"\\nCoverage $${total}% below 80% threshold\"; exit 1 } }" || exit 1
+	
 .PHONY: generate
 generate: ## Run go code generation (if any)
 	@echo "Running go generate..."
@@ -188,4 +201,3 @@ install: build ## Install binary to /usr/local/bin
 .PHONY: uninstall
 uninstall: ## Remove binary from /usr/local/bin
 	sudo rm -f /usr/local/bin/$(BINARY_NAME)
-
