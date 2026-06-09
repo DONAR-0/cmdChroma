@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 )
@@ -40,15 +42,19 @@ func NewProvider(baseURL string) *Provider {
 
 	return &Provider{
 		baseURL: baseURL,
-		client:  &http.Client{},
+		client:  &http.Client{Timeout: 120 * time.Second}, // Default timeout for LLM calls
 	}
 }
 
 // Generate streams response from the LLM.
 func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
+	start := time.Now()
+
 	if model == "" {
 		model = "qwen:0.5b"
 	}
+
+	slog.Info("ollama_generate_start", "model", model, "prompt_len", len(prompt))
 
 	reqBody := ChatRequest{
 		Model:  model,
@@ -104,6 +110,8 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("stream reading error: %w", err)
 	}
+
+	slog.Info("ollama_generate_complete", "model", model, "duration_ms", time.Since(start).Milliseconds())
 
 	return nil
 }

@@ -8,7 +8,7 @@ testcases:
         script: cmdChroma --log-level info t
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
   - name: Chroma test
     steps:
@@ -16,7 +16,7 @@ testcases:
         script: cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "default_tenant"
 
@@ -26,7 +26,7 @@ testcases:
         script: cmdChroma --log-level info test -tenant some_tenant
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
   - name: Chroma test global tenant flag with environment variable
@@ -35,7 +35,7 @@ testcases:
         script: TENANT=some_tenant cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
   - name: Chroma test global tenant and database flag with environment variable
@@ -44,7 +44,7 @@ testcases:
         script: TENANT=some_tenant DATABASE=some_database cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
           - result.systemout ShouldContainSubstring "some_database"
@@ -55,7 +55,7 @@ testcases:
         script: cmdChroma --log-level info test -tenant some_tenant -database some_database
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Testing connection"
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
           - result.systemout ShouldContainSubstring "some_database"

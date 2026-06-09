@@ -14,7 +14,7 @@ testcases:
         script: cmdChroma --log-level info mkColl t4_coll1
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Collection created"
+          - result.systemout ShouldContainSubstring "'t4_coll1' created"
           - result.systemout ShouldContainSubstring "t4_coll1"
   - name: Create Another Collection
     steps:
@@ -22,7 +22,7 @@ testcases:
         script: cmdChroma --log-level info mkColl t4_coll2
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Collection created"
+          - result.systemout ShouldContainSubstring "'t4_coll2' created"
           - result.systemout ShouldContainSubstring "t4_coll2"
   - name: cleanup
     always: true
