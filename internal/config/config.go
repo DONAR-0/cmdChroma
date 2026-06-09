@@ -39,6 +39,48 @@ type LoggingConfig struct {
 	Level   string
 }
 
+// ConfigFile represents the structure of a YAML configuration file on disk.
+type ConfigFile struct {
+	Version  string `yaml:"version"`
+	Chroma   ConfigFileChroma `yaml:"chroma"`
+	Model    ConfigFileModel `yaml:"model"`
+	Logging  ConfigFileLogging `yaml:"logging"`
+	Features ConfigFileFeatures `yaml:"features"`
+}
+
+// ConfigFileChroma represents the chroma section in the YAML config file.
+type ConfigFileChroma struct {
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Tenant   string `yaml:"tenant"`
+	Database string `yaml:"database"`
+	Timeout  int    `yaml:"timeout"`
+}
+
+// ConfigFileModel represents the model section in the YAML config file.
+type ConfigFileModel struct {
+	ONNXModel string `yaml:"onnx_model"`
+	Tokenizer string `yaml:"tokenizer"`
+	ONNXLib   string `yaml:"onnx_lib"`
+}
+
+// ConfigFileLogging represents the logging section in the YAML config file.
+type ConfigFileLogging struct {
+	Level   string `yaml:"level"`
+	Format  string `yaml:"format"`
+	Verbose bool   `yaml:"verbose"`
+}
+
+// ConfigFileFeatures represents the features section in the YAML config file.
+type ConfigFileFeatures struct {
+	CreateCollection ConfigFileCreateCollection `yaml:"create_collection"`
+}
+
+// ConfigFileCreateCollection represents feature flags for create_collection.
+type ConfigFileCreateCollection struct {
+	AutoCreateDatabase bool `yaml:"auto_create_database"`
+}
+
 // LoadFromCLI builds a Config from a cli.Command.
 // It resolves paths, validates settings, and applies defaults.
 func LoadFromCLI(c *cli.Command) (*Config, error) {
