@@ -22,6 +22,7 @@ var (
 	testEndpoint         = "%s/api/v2/heartbeat"
 	getTenant            = "%s/api/v2/tenants/%s"
 	listDatabases        = "%s/api/v2/tenants/%s/databases"
+	createDatabase       = "%s/api/v2/tenants/%s/databases"
 	listCreateCollection = "%s/api/v2/tenants/%s/databases/%s/collections"
 	listDocuments        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/get"
 	queryEndpoint        = "%s/api/v2/tenants/%s/databases/%s/collections/%s/query"
@@ -44,6 +45,7 @@ type (
 		TestConnection() error
 		GetTenant() (bool, error)
 		ListDatabases() ([]Database, error)
+		CreateDatabase(name string) error
 		ListCollections() ([]Collection, error)
 		AddBatch(collectionID string, docs []string, ids []string) error
 		AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
@@ -201,6 +203,36 @@ func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	}
 
 	return databases, nil
+}
+
+// CreateDatabase creates a new database in the current tenant.
+func (c *ChromaClient) CreateDatabase(name string) error {
+	slog.Info("Creating database", "name", name, "tenant", c.Tenant)
+
+	endpoint := fmt.Sprintf(createDatabase, c.URL, c.Tenant)
+
+	// ChromaDB expects a simple POST with empty body or minimal JSON
+	payload := map[string]any{"name": name}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal database payload: %w", err)
+	}
+
+	resp, err := c.client.Post(endpoint, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create database: %w", err)
+	}
+	defer cd(resp.Body.Close)
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create database '%s': status %d, body: %s", name, resp.StatusCode, string(body))
+	}
+
+	slog.Info("Database created successfully", "name", name, "tenant", c.Tenant)
+
+	return nil
 }
 
 // ============ Collections ============

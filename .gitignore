@@ -6,6 +6,8 @@ dist/
 *.dll
 *.so
 *.dylib
+*.jsonl
+*.parquet
 
 # ----- Local AI Models (High Priority) -----
 # We exclude the actual model files but keep the folder structure
@@ -32,3 +34,5 @@ tests/output/
 .ci/logs/
 .ci/bin/
 .ci/models/
+test_data/
+docs/

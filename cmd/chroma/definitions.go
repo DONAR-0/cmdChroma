@@ -138,6 +138,9 @@ var createCollectionCommand = &cli.Command{
 	Usage:       "Create a new collection",
 	Description: CreateCollectionCmdDescription,
 	Action:      handleCreateCollection,
+	Flags: []cli.Flag{
+		createDBFlag,
+	},
 }
 
 // deleteCollectionCommand deletes an existing collection.
@@ -523,6 +526,12 @@ var (
 		Aliases: []string{"b"},
 		Value:   100,
 		Usage:   "Number of documents to process in each batch",
+	}
+
+	// Database auto-creation flag
+	createDBFlag = &cli.BoolFlag{
+		Name:  "create-db",
+		Usage: "Automatically create the database if it doesn't exist (useful for custom tenants)",
 	}
 
 	// Chat/RAG flags

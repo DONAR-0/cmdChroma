@@ -1,0 +1,112 @@
+version: "2"
+name: Test Chroma CLI - Custom Tenant and Database
+
+testcases:
+  # ============ Custom Tenant via Flag (Ping Tests Only) ============
+
+  - name: Ping with custom tenant via flag
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --tenant custom_tenant_flag
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "custom_tenant_flag"
+
+  - name: Ping with custom database via flag
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --database custom_db_flag
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "custom_db_flag"
+
+  - name: Ping with custom tenant and database via flags
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --tenant prod_tenant --database prod_db
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "prod_tenant"
+          - result.systemout ShouldContainSubstring "prod_db"
+
+  # ============ Custom Tenant/Database via Env Vars ============
+
+  - name: Ping with custom tenant via environment variable
+    steps:
+      - type: exec
+        script: TENANT=env_tenant cmdChroma --log-level error t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "env_tenant"
+
+  - name: Ping with custom database via environment variable
+    steps:
+      - type: exec
+        script: DATABASE=env_database cmdChroma --log-level error t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "env_database"
+
+  - name: Ping with both via environment variables
+    steps:
+      - type: exec
+        script: TENANT=env_prod DATABASE=env_prod_db cmdChroma --log-level error t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "env_prod"
+          - result.systemout ShouldContainSubstring "env_prod_db"
+
+  # ============ Mixed Flag/Env Override ============
+
+  - name: Flag overrides env var for tenant
+    steps:
+      - type: exec
+        script: TENANT=env_tenant cmdChroma --log-level error t --tenant flag_tenant
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "flag_tenant"
+          - result.systemout ShouldNotContainSubstring "env_tenant"
+
+  - name: Flag overrides env var for database
+    steps:
+      - type: exec
+        script: DATABASE=env_database cmdChroma --log-level error t --database flag_database
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "flag_database"
+          - result.systemout ShouldNotContainSubstring "env_database"
+
+  # ============ All Non-Default Values Together ============
+
+  - name: All non-default values via flags
+    steps:
+      - type: exec
+        script: |
+          cmdChroma --log-level error t \
+            --host localhost \
+            --port 8000 \
+            --tenant all_custom_tenant \
+            --database all_custom_db
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "all_custom_tenant"
+          - result.systemout ShouldContainSubstring "all_custom_db"
+
+  # ============ Collection Creation (Default Database Only) ============
+
+  - name: Create collection on default tenant and database
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error create test_coll_default
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "'test_coll_default' created"
+
+  # ============ Cleanup ============
+  - name: Cleanup - Delete test collections
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error delete test_coll_default || true
+        assertions:
+          - result.code ShouldEqual 0

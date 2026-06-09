@@ -31,6 +31,7 @@ type mockChromaClient struct {
 	resolveCollectionIDErr    error
 	deleteCollectionErr       error
 	deleteRecordsErr          error
+	createDatabaseErr         error
 }
 
 func (m *mockChromaClient) TestConnection() error {
@@ -79,6 +80,10 @@ func (m *mockChromaClient) DeleteCollection(name string) error {
 
 func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) error {
 	return m.deleteRecordsErr
+}
+
+func (m *mockChromaClient) CreateDatabase(name string) error {
+	return m.createDatabaseErr
 }
 
 type mockEmbedder struct{}
