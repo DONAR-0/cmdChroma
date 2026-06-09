@@ -18,17 +18,6 @@ jobs:
   integration:
     runs-on: ubuntu-latest
 
-    services:
-      chromadb:
-        image: chromadb/chroma:latest
-        ports:
-          - "8000:8000"
-        options: >-
-          --health-cmd "timeout 1 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/8000' || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
     - uses: actions/checkout@v6
 
