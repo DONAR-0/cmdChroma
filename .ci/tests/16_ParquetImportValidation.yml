@@ -22,7 +22,7 @@ testcases:
         script: "{{.cmdChroma}} --log-level info create {{.test_collection}}"
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Collection created"
+          - result.systemout ShouldContainSubstring "'{{.test_collection}}' created"
 
   - name: Import Parquet file with all-metadata
     steps:

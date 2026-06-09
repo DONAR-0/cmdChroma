@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,12 +11,49 @@ import (
 	"time"
 
 	"github.com/DONAR-0/cmdChroma/internal"
+	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 )
+
+// ============ Input Validation Errors ============
+
+var (
+	// Validation errors with actionable hints
+	errCollectionNameRequired = "collection name is required\n\nUsage: chroma create <collection_name>\n\nExample: chroma create my_docs"
+	errInvalidNIMModel        = "invalid NIM model format: use nim://<model-id>\n\nExample: --llm-model nim://mistralai/mistral-7b-instruct-v0.3"
+	errNIMAPIKeyMissing       = "NVIDIA_API_KEY environment variable is required for NIM\n\nSet it with: export NVIDIA_API_KEY=your-key"
+)
+
+// validateNIMModel validates and extracts model ID from nim:// prefix.
+func validateNIMModel(model string) (modelID string, err error) {
+	if model == "" {
+		return "", fmt.Errorf("model is required")
+	}
+
+	if !strings.HasPrefix(model, "nim://") {
+		return model, nil // Not NIM, return as-is
+	}
+
+	modelID = strings.TrimPrefix(model, "nim://")
+	if modelID == "" {
+		return "", errors.New(errInvalidNIMModel)
+	}
+
+	return modelID, nil
+}
+
+// validateCollectionName checks if collection name is valid.
+func validateCollectionName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New(errCollectionNameRequired)
+	}
+
+	return nil
+}
 
 // ============ Command Handlers ============
 // Handlers are organized by functional domain.
@@ -24,10 +62,17 @@ import (
 
 // handleTestConnection tests connectivity to ChromaDB.
 func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
-	slog.Info("Testing connection", "host", cmd.String("host"), "port", cmd.String("port"))
+	start := time.Now()
+	opName := "test_connection"
+
+	host := cmd.String("host")
+	port := cmd.String("port")
+
+	slog.Info("operation_start", "op", opName, "host", host, "port", port)
 
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
+		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
@@ -35,17 +80,24 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 
 	timeout := cmd.Int("timeout")
 
-	_, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	rlCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
 	if err := svc.TestConnection(); err != nil {
-		slog.Error("Connection test failed", "error", err)
-		return fmt.Errorf("connection failed: %w\n\nHints:\n  • Is ChromaDB running? Try: docker ps\n  • Check host/port: --host %s --port %s\n  • Verify network connectivity", err, cmd.String("host"), cmd.String("port"))
+		// Check context deadline
+		if rlCtx.Err() == context.DeadlineExceeded {
+			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
+			return fmt.Errorf("connection timed out after %ds\n\nHints:\n  • Check if ChromaDB is running\n  • Verify host/port: --host %s --port %s", timeout, host, port)
+		}
+
+		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+
+		return fmt.Errorf("connection failed: %w\n\nHints:\n  • Is ChromaDB running? Try: docker ps\n  • Check host/port: --host %s --port %s\n  • Verify network connectivity", err, host, port)
 	}
 
-	slog.Info("Connection test successful")
+	slog.Info("operation_complete", "op", opName, "duration_ms", time.Since(start).Milliseconds())
 	fmt.Println("✅ Successfully connected to ChromaDB")
-	fmt.Printf("   Server: %s:%s\n", cmd.String("host"), cmd.String("port"))
+	fmt.Printf("   Server: %s:%s\n", host, port)
 	fmt.Printf("   Tenant: %s\n", cmd.String("tenant"))
 	fmt.Printf("   Database: %s\n", cmd.String("database"))
 
@@ -148,12 +200,15 @@ func handleListCollection(_ context.Context, cmd *cli.Command) error {
 
 // handleCreateCollection creates a new collection.
 func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
+	start := time.Now()
+	opName := "create_collection"
+
 	collectionName := cmd.Args().Get(0)
-	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma create <collection_name>\n\nExample: chroma create my_docs")
+	if err := validateCollectionName(collectionName); err != nil {
+		return err
 	}
 
-	slog.Info("Creating collection", "name", collectionName)
+	slog.Info("operation_start", "op", opName, "name", collectionName)
 
 	chromaClient, err := createChromaClient(cmd)
 	if err != nil {
@@ -162,12 +217,12 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 
 	id, err := chromaClient.CreateCollection(collectionName)
 	if err != nil {
-		slog.Error("Collection creation failed", "error", err)
+		slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
 	}
 
+	slog.Info("operation_complete", "op", opName, "name", collectionName, "id", id, "duration_ms", time.Since(start).Milliseconds())
 	fmt.Printf("✅ Collection '%s' created (ID: %s)\n", collectionName, id)
-	slog.Info("Collection created", "name", collectionName, "id", id)
 
 	return nil
 }
@@ -365,23 +420,31 @@ func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
 
 // handleQueryBatchInCollection performs batch semantic search.
 func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
+	start := time.Now()
+	opName := "query"
+
 	queries := c.StringSlice("query")
 	if len(queries) == 0 {
 		return fmt.Errorf("at least one query is required\n\nUsage: chroma query <collection> --query \"search terms\"\n\nExample: chroma query my_collection --query \"What is Go?\"")
 	}
 
 	collectionName := c.Args().Get(0)
-	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma query <collection_name> --query \"search\"\n\nExample: chroma query my_collection --query \"vector databases\"")
+	if err := validateCollectionName(collectionName); err != nil {
+		return err
 	}
+
+	nResults := c.Int("n-results")
+	if nResults <= 0 {
+		nResults = 5
+	}
+
+	slog.Info("operation_start", "op", opName, "collection", collectionName, "query_count", len(queries), "n_results", nResults)
 
 	// Setup client
 	client, err := createChromaClient(c)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
-
-	slog.Info("Initializing embedding engine...")
 
 	embedder, err := initEmbedder(c)
 	if err != nil {
@@ -391,16 +454,9 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 	svc := service.NewChromaService(client, embedder)
 	defer svc.Close()
 
-	nResults := c.Int("n-results")
-	if nResults == 0 {
-		nResults = 5
-	}
-
-	slog.Info("Executing batch query", "collection", collectionName, "queries", len(queries), "n-results", nResults)
-
 	response, err := svc.QueryDocuments(collectionName, queries, nResults)
 	if err != nil {
-		slog.Error("Query failed", "error", err)
+		slog.Error("operation_failed", "op", opName, "collection", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
 	}
 
@@ -430,7 +486,7 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 		}
 	}
 
-	slog.Info("Query complete", "total_results", len(response.IDs[0]))
+	slog.Info("operation_complete", "op", opName, "collection", collectionName, "result_count", len(response.IDs[0]), "duration_ms", time.Since(start).Milliseconds())
 
 	return nil
 }
@@ -597,19 +653,51 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	return nil
 }
 
-// ===== RAG Chat =====
+// ===== RAG Chat ==========
 
 // handleChat performs RAG-based question answering.
-func handleChat(_ context.Context, c *cli.Command) error {
+func handleChat(ctx context.Context, c *cli.Command) error {
+	start := time.Now()
+	opName := "chat"
+
 	collectionName := c.Args().Get(0)
-	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma chat <collection> \"your question\"\n\nExample: chroma chat my_collection \"What is ChromaDB?\"")
+	if err := validateCollectionName(collectionName); err != nil {
+		return err
 	}
 
 	question := c.Args().Get(1)
-	if question == "" {
+	if strings.TrimSpace(question) == "" {
 		return fmt.Errorf("question is required\n\nUsage: chroma chat <collection> \"your question\"")
 	}
+
+	// Get model and validate
+	model := c.String("llm-model")
+	if model == "" {
+		model = "qwen:0.5b"
+	}
+
+	// Validate model format
+	if _, err := validateNIMModel(model); err != nil {
+		return err
+	}
+
+	// Get n-results with validation
+	nResults := c.Int("n-results")
+	if nResults <= 0 {
+		nResults = 3
+	}
+
+	distanceThreshold := c.Float64("distance-threshold")
+	if distanceThreshold < 0 {
+		return fmt.Errorf("distance-threshold must be >= 0")
+	}
+
+	slog.Info("operation_start",
+		"op", opName,
+		"collection", collectionName,
+		"model", model,
+		"n_results", nResults,
+		"distance_threshold", distanceThreshold)
 
 	// Setup client and embedder
 	client, err := createChromaClient(c)
@@ -625,71 +713,135 @@ func handleChat(_ context.Context, c *cli.Command) error {
 	svc := service.NewChromaService(client, embedder)
 	defer svc.Close()
 
-	// Query for context
-	nResults := c.Int("n-results")
-	if nResults <= 0 {
-		nResults = 3
-	}
-
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
-	slog.Info("Querying for context", "collection", collectionName, "n-results", nResults)
 
+	// Query for context
 	resp, err := svc.QueryDocuments(collectionName, []string{question}, nResults)
 	if err != nil {
+		slog.Error("operation_failed", "op", opName, "stage", "query", "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to retrieve context: %w\n\nHint: Make sure collection exists and has documents", err)
 	}
 
-	var contextBuilder strings.Builder
+	// Build context from response
+	contextStr, hasRelevant, bestDistance := buildContextFromResponse(resp, distanceThreshold)
 
-	distanceThreshold := c.Float64("distance-threshold")
-
-	// Check if we have results and if they pass the distance threshold
-	hasRelevantResults := false
-
-	if len(resp.Documents) > 0 && len(resp.Documents[0]) > 0 {
-		// If threshold is set (>0), check if best result is within threshold
-		if distanceThreshold > 0 {
-			bestDistance := float64(resp.Distances[0][0])
-			if bestDistance <= distanceThreshold {
-				hasRelevantResults = true
-			} else {
-				fmt.Printf("⚠️  Best result distance (%.4f) exceeds threshold (%.4f). Treating as no relevant context.\n", bestDistance, distanceThreshold)
-			}
-		} else {
-			// No threshold set, all results are considered relevant
-			hasRelevantResults = true
-		}
-	}
-
-	if !hasRelevantResults {
+	if !hasRelevant {
 		fmt.Println("⚠️  No relevant documents found. The LLM will be instructed to say so.")
 	} else {
-		fmt.Printf("📚 Found %d relevant documents:\n\n", len(resp.Documents[0]))
-		// Build context from results
-		for i, doc := range resp.Documents[0] {
-			fmt.Printf("  [%d] Distance: %.4f\n", i+1, resp.Distances[0][i])
-			fmt.Printf("      Content: %s\n\n", doc)
-			fmt.Fprintf(&contextBuilder, "[Context %d]: %s\n", i+1, doc)
-		}
-
-		fmt.Println(strings.Repeat("-", 60))
-		fmt.Println()
 		fmt.Println("💭 Generating answer...")
 	}
 
 	// Build prompt based on whether we have context
-	var finalPrompt string
-	if contextBuilder.Len() == 0 {
-		// No relevant documents found
-		finalPrompt = fmt.Sprintf(`The user asked: "%s"
+	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
+
+	// Get LLM provider
+	provider, err := getLLMProvider(c, model)
+	if err != nil {
+		slog.Error("operation_failed", "op", opName, "stage", "provider_init", "error", err, "duration_ms", time.Since(start).Milliseconds())
+		return err
+	}
+
+	// Generate response
+	if err := provider.Generate(ctx, finalPrompt, model); err != nil {
+		slog.Error("operation_failed", "op", opName, "stage", "generate", "error", err, "duration_ms", time.Since(start).Milliseconds())
+
+		if strings.HasPrefix(model, "nim://") {
+			return fmt.Errorf("NIM generation failed: %w\n\nHints:\n  • Ensure NVIDIA_API_KEY is set\n  • Verify model name (e.g., nim://mistralai/mistral-7b-instruct)\n  • Check your NIM endpoint URL", err)
+		}
+
+		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
+	}
+
+	slog.Info("operation_complete",
+		"op", opName,
+		"has_context", hasRelevant,
+		"best_distance", bestDistance,
+		"duration_ms", time.Since(start).Milliseconds())
+
+	return nil
+}
+
+// ============ RAG Helpers ============
+
+// getLLMProvider creates the appropriate LLM provider based on model prefix.
+func getLLMProvider(c *cli.Command, model string) (llm.ProviderInterface, error) {
+	if strings.HasPrefix(model, "nim://") {
+		nimURL := c.String("nim-url")
+
+		provider, err := llm.NewNIMProvider(nimURL, "")
+		if err != nil {
+			// Provide helpful error message for missing API key
+			if strings.Contains(err.Error(), "API key is required") {
+				return nil, errors.New(errNIMAPIKeyMissing)
+			}
+
+			return nil, err
+		}
+
+		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
+
+		return provider, nil
+	}
+
+	// Default: Ollama provider
+	provider := llm.NewProvider("")
+
+	fmt.Println("\n🤖 Using Ollama for generation")
+
+	return provider, nil
+}
+
+// buildContextFromResponse extracts relevant context from query response.
+func buildContextFromResponse(resp *client.QueryResponse, distanceThreshold float64) (context string, hasRelevant bool, bestDistance float64) {
+	var sb strings.Builder
+
+	if len(resp.Documents) == 0 || len(resp.Documents[0]) == 0 {
+		return "", false, 0
+	}
+
+	// Check distance threshold if set
+	if distanceThreshold > 0 {
+		bestDistance = float64(resp.Distances[0][0])
+		if bestDistance > distanceThreshold {
+			slog.Info("results_excluded_by_threshold",
+				"best_distance", bestDistance,
+				"threshold", distanceThreshold)
+
+			return "", false, bestDistance
+		}
+	}
+
+	// All results pass threshold (or no threshold set)
+	if len(resp.Distances) > 0 && len(resp.Distances[0]) > 0 {
+		bestDistance = float64(resp.Distances[0][0])
+	}
+
+	fmt.Printf("📚 Found %d relevant documents:\n\n", len(resp.Documents[0]))
+
+	for i, doc := range resp.Documents[0] {
+		fmt.Printf("  [%d] Distance: %.4f\n", i+1, resp.Distances[0][i])
+		fmt.Printf("      Content: %s\n\n", doc)
+		sb.WriteString(fmt.Sprintf("[Context %d]: %s\n", i+1, doc))
+	}
+
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Println()
+
+	return sb.String(), true, bestDistance
+}
+
+// buildRAGPrompt creates the prompt based on available context.
+func buildRAGPrompt(question, context string, hasContext bool) string {
+	if !hasContext || context == "" {
+		return fmt.Sprintf(`The user asked: "%s"
 
 No relevant documents were found in the knowledge base.
 
 Instructions: Respond with a clear statement that the answer cannot be found in the provided context. Do not guess or provide information from general knowledge. Simply indicate that the query does not match any available context.`,
 			question)
-	} else {
-		// We have context, use the standard RAG prompt
-		finalPrompt = fmt.Sprintf(`Use the following context to answer the question.
+	}
+
+	return fmt.Sprintf(`Use the following context to answer the question.
 If the context doesn't contain relevant information, say so.
 
 Context:
@@ -698,42 +850,7 @@ Context:
 Question: %s
 
 Provide a clear, concise answer:`,
-			contextBuilder.String(), question)
-	}
-
-	// Get model and generate
-	model := c.String("llm-model")
-	if model == "" {
-		model = "qwen:0.5b"
-	}
-
-	// Create provider based on model prefix
-	var provider llm.ProviderInterface
-
-	if strings.HasPrefix(model, "nim://") {
-		// NVIDIA NIM provider
-		nimURL := c.String("nim-url")
-		provider = llm.NewNIMProvider(nimURL, "")
-
-		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
-	} else {
-		// Default: Ollama provider
-		provider = llm.NewProvider("") // defaults to localhost:11434
-
-		fmt.Println("\n🤖 Using Ollama for generation")
-	}
-
-	if err := provider.Generate(context.Background(), finalPrompt, model); err != nil {
-		if strings.HasPrefix(model, "nim://") {
-			return fmt.Errorf("NIM generation failed: %w\n\nHints:\n  • Ensure NVIDIA_API_KEY is set\n  • Verify model name (e.g., nim://mistralai/mistral-7b-instruct)\n  • Check your NIM endpoint URL", err)
-		}
-
-		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
-	}
-
-	slog.Info("Chat complete")
-
-	return nil
+		context, question)
 }
 
 // ============ Private Helpers ============

@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 )
@@ -69,33 +71,40 @@ type NIMProvider struct {
 // NewNIMProvider creates a new NVIDIA NIM provider.
 // The baseURL should be the API endpoint (e.g., "https://api.nvidia.com/v1")
 // The apiKey is the NVIDIA API key. If empty, it reads from NVIDIA_API_KEY env var.
-func NewNIMProvider(baseURL, apiKey string) *NIMProvider {
-	if baseURL == "" {
-		baseURL = "https://api.nvidia.com/v1"
+// Returns an error if the API key is missing.
+func NewNIMProvider(baseURL, apiKey string) (*NIMProvider, error) {
+	if apiKey == "" {
+		apiKey = os.Getenv("NVIDIA_API_KEY")
 	}
 
 	if apiKey == "" {
-		apiKey = os.Getenv("NVIDIA_API_KEY")
+		return nil, fmt.Errorf("NVIDIA API key is required: set NVIDIA_API_KEY environment variable")
+	}
+
+	if baseURL == "" {
+		baseURL = "https://api.nvidia.com/v1"
 	}
 
 	return &NIMProvider{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		apiKey:  apiKey,
-		client:  &http.Client{},
-	}
+		client:  &http.Client{Timeout: 120 * time.Second}, // Default timeout for LLM calls
+	}, nil
 }
 
 // Generate streams response from the NIM API.
 func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error {
-	if model == "" {
-		return fmt.Errorf("NIM model must be specified")
+	start := time.Now()
+
+	modelID, err := p.validateModel(model)
+	if err != nil {
+		return err
 	}
 
-	// Ensure model doesn't have nim:// prefix
-	model = strings.TrimPrefix(model, "nim://")
+	slog.Info("nim_generate_start", "model", modelID, "prompt_len", len(prompt))
 
 	reqBody := NIMChatRequest{
-		Model: model,
+		Model: modelID,
 		Messages: []NIMChatMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -126,8 +135,18 @@ func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error 
 	}
 	defer internal.CheckDefer(resp.Body.Close)
 
+	// Handle specific HTTP status codes
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		return fmt.Errorf("NIM authentication failed: invalid or expired API key")
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("NIM rate limit exceeded: try again later")
+	case http.StatusBadGateway, http.StatusServiceUnavailable:
+		return fmt.Errorf("NIM service unavailable (status %d): try again later", resp.StatusCode)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("NIM API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -138,6 +157,13 @@ func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error 
 	fmt.Println(strings.Repeat("-", 20))
 
 	for scanner.Scan() {
+		// Check context cancellation during streaming
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("generation cancelled: %w", ctx.Err())
+		default:
+		}
+
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || !strings.HasPrefix(line, "data: ") {
 			continue
@@ -164,20 +190,24 @@ func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error 
 		return fmt.Errorf("stream reading error: %w", err)
 	}
 
+	slog.Info("nim_generate_complete", "model", modelID, "duration_ms", time.Since(start).Milliseconds())
+
 	return nil
 }
 
 // GenerateSync returns the full response as a string (non-streaming).
 func (p *NIMProvider) GenerateSync(ctx context.Context, prompt, model string) (string, error) {
-	if model == "" {
-		return "", fmt.Errorf("NIM model must be specified")
+	start := time.Now()
+
+	modelID, err := p.validateModel(model)
+	if err != nil {
+		return "", err
 	}
 
-	// Ensure model doesn't have nim:// prefix
-	model = strings.TrimPrefix(model, "nim://")
+	slog.Info("nim_generate_sync_start", "model", modelID)
 
 	reqBody := NIMChatRequest{
-		Model: model,
+		Model: modelID,
 		Messages: []NIMChatMessage{
 			{Role: "user", Content: prompt},
 		},
@@ -218,6 +248,7 @@ func (p *NIMProvider) GenerateSync(ctx context.Context, prompt, model string) (s
 	}
 
 	if len(fullResp.Choices) > 0 {
+		slog.Info("nim_generate_sync_complete", "model", modelID, "duration_ms", time.Since(start).Milliseconds())
 		return fullResp.Choices[0].Message.Content, nil
 	}
 
@@ -226,4 +257,19 @@ func (p *NIMProvider) GenerateSync(ctx context.Context, prompt, model string) (s
 	}
 
 	return "", fmt.Errorf("no response from NIM API")
+}
+
+// validateModel validates the model string and extracts the model ID.
+func (p *NIMProvider) validateModel(model string) (string, error) {
+	if model == "" {
+		return "", fmt.Errorf("NIM model must be specified")
+	}
+
+	// Strip nim:// prefix if present
+	model = strings.TrimPrefix(model, "nim://")
+	if model == "" {
+		return "", fmt.Errorf("NIM model ID is empty after stripping prefix")
+	}
+
+	return model, nil
 }

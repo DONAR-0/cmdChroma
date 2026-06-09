@@ -201,14 +201,32 @@ func TestNewNIMProvider(t *testing.T) {
 		}
 	}()
 
-	p := NewNIMProvider("", "")
+	p, err := NewNIMProvider("", "")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	if p.baseURL != "https://api.nvidia.com/v1" || p.apiKey != "env-key" {
 		t.Errorf("unexpected defaults: %s %s", p.baseURL, p.apiKey)
 	}
 
-	p2 := NewNIMProvider("http://custom.ai/v1", "my-key")
+	p2, err := NewNIMProvider("http://custom.ai/v1", "my-key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	if p2.baseURL != "http://custom.ai/v1" || p2.apiKey != "my-key" {
 		t.Errorf("unexpected values: %s %s", p2.baseURL, p2.apiKey)
+	}
+}
+
+func TestNewNIMProvider_MissingAPIKey(t *testing.T) {
+	// Ensure API key env var is not set
+	_ = os.Unsetenv("NVIDIA_API_KEY")
+
+	_, err := NewNIMProvider("", "")
+	if err == nil {
+		t.Error("expected error when API key is missing")
 	}
 }
 
@@ -240,7 +258,11 @@ func TestNIMProvider_GenerateSync_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "dummy-key")
+	prov, err := NewNIMProvider(server.URL, "dummy-key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
 	out, err := prov.GenerateSync(ctx, "hello", "gpt-3.5-turbo")
@@ -263,10 +285,14 @@ func TestNIMProvider_GenerateSync_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "bad-key")
+	prov, err := NewNIMProvider(server.URL, "bad-key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
-	_, err := prov.GenerateSync(ctx, "hello", "gpt-3.5-turbo")
+	_, err = prov.GenerateSync(ctx, "hello", "gpt-3.5-turbo")
 	if err == nil {
 		t.Errorf("expected error for GenerateSync")
 	}
@@ -293,10 +319,14 @@ func TestNIMProvider_Generate_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "dummy-key")
+	prov, err := NewNIMProvider(server.URL, "dummy-key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
-	err := prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
+	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -308,20 +338,35 @@ func TestNIMProvider_Generate_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "dummy")
+	prov, err := NewNIMProvider(server.URL, "dummy")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
-	err := prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
+	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
 	if err == nil {
 		t.Errorf("expected error for Generate")
 	}
 }
 
 func TestNIMProvider_GenerateSync_RequiresModel(t *testing.T) {
-	prov := NewNIMProvider("", "")
+	// Set up a mock server that accepts the request (for auth validation)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer server.Close()
+
+	prov, err := NewNIMProvider(server.URL, "dummy-key-for-test")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
-	_, err := prov.GenerateSync(ctx, "prompt", "")
+	_, err = prov.GenerateSync(ctx, "prompt", "")
 	if err == nil {
 		t.Errorf("expected error when model empty")
 	}
@@ -349,7 +394,11 @@ func TestNIMProvider_GenerateSync_TrimPrefix(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "key")
+	prov, err := NewNIMProvider(server.URL, "key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
 	out, err := prov.GenerateSync(ctx, "test", "nim://my-model")
@@ -378,10 +427,14 @@ func TestNIMProvider_Generate_AuthorizationHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	prov := NewNIMProvider(server.URL, "my-secret-key")
+	prov, err := NewNIMProvider(server.URL, "my-secret-key")
+	if err != nil {
+		t.Fatalf("NewNIMProvider failed: %v", err)
+	}
+
 	ctx := context.Background()
 
-	_, err := prov.GenerateSync(ctx, "test", "any-model")
+	_, err = prov.GenerateSync(ctx, "test", "any-model")
 	if err != nil {
 		t.Fatalf("GenerateSync failed: %v", err)
 	}
