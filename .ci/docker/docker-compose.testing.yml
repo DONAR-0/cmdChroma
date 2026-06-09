@@ -1,0 +1,70 @@
+version: '3.9'
+
+# Docker Compose for Integration Testing
+# This configuration provides multiple ChromaDB instances on different ports
+# to test CLI with non-default configuration values.
+
+services:
+  # Primary ChromaDB instance (port 8000 - default)
+  chromadb:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+    volumes:
+      - chroma_primary:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Secondary ChromaDB instance (port 8099) for non-default port testing
+  chromadb-test-8099:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb-test-8099
+    ports:
+      - "8099:8000"
+    environment:
+      - IS_PERSISTENT=FALSE
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Tertiary ChromaDB instance (port 8097) for parallel testing
+  chromadb-test-8097:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb-test-8097
+    ports:
+      - "8097:8000"
+    environment:
+      - IS_PERSISTENT=FALSE
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Quaternary ChromaDB instance (port 8098) for parallel testing
+  chromadb-test-8098:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb-test-8098
+    ports:
+      - "8098:8000"
+    environment:
+      - IS_PERSISTENT=FALSE
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  chroma_primary:

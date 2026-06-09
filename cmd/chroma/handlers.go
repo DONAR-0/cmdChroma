@@ -215,10 +215,56 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
+	// Try to create the collection
 	id, err := chromaClient.CreateCollection(collectionName)
 	if err != nil {
-		slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
-		return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
+		// Check if the error is due to missing database
+		errMsg := err.Error()
+		isDatabaseError := strings.Contains(errMsg, "does not exist") ||
+			strings.Contains(errMsg, "Database") && strings.Contains(errMsg, "not found")
+
+		if isDatabaseError && cmd.Bool("create-db") {
+			// User requested automatic database creation
+			dbName := cmd.String("database")
+			slog.Info("Auto-creating database", "database", dbName)
+
+			if createErr := chromaClient.CreateDatabase(dbName); createErr != nil {
+				slog.Error("Failed to create database", "error", createErr)
+				return fmt.Errorf("failed to create database '%s': %w", dbName, createErr)
+			}
+
+			fmt.Printf("✅ Database '%s' created\n", dbName)
+
+			// Retry collection creation
+			id, err = chromaClient.CreateCollection(collectionName)
+			if err != nil {
+				slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+				return fmt.Errorf("failed to create collection after database creation: %w", err)
+			}
+		} else if isDatabaseError {
+			// Provide helpful error message with available databases
+			dbs, listErr := chromaClient.ListDatabases()
+
+			var hint string
+			if listErr == nil && len(dbs) > 0 {
+				dbList := make([]string, len(dbs))
+				for i, db := range dbs {
+					dbList[i] = db.Name
+				}
+
+				hint = fmt.Sprintf("\n\nAvailable databases in tenant '%s':\n  • %s\n\nUse --database <name> to specify an existing database, or --create-db to create it automatically.",
+					cmd.String("tenant"), strings.Join(dbList, "\n  • "))
+			} else {
+				hint = "\n\nHint: Run 'chroma databases' to list available databases, or use --create-db to create the database automatically."
+			}
+
+			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+
+			return fmt.Errorf("database '%s' does not exist in tenant '%s'%s", cmd.String("database"), cmd.String("tenant"), hint)
+		} else {
+			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+			return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
+		}
 	}
 
 	slog.Info("operation_complete", "op", opName, "name", collectionName, "id", id, "duration_ms", time.Since(start).Milliseconds())
