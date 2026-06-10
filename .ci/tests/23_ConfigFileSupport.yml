@@ -130,8 +130,14 @@ testcases:
     steps:
       - type: exec
         script: |
-          echo 'chroma:\n  host: dotfile' > .cmdChroma.yaml
-          echo 'chroma:\n  host: altfile' > cmdChroma.yaml
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: dotfile
+          EOF
+          cat > cmdChroma.yaml << 'EOF'
+          chroma:
+            host: altfile
+          EOF
           ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
         assertions:
           - result.code ShouldEqual 0
