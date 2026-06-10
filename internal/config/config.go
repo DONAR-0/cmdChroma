@@ -306,18 +306,18 @@ func LoadConfig(c *cli.Command) (*Config, error) {
 	cfg := &Config{}
 
 	// 1. Load config file(s) – respects --config flag if set
-	if cfgPath := c.String("config"); cfgPath != "" {
-		// Explicit path provided via --config
-		if cfgPath == "" {
-			// --config "" disables config files
-			// (nothing to load)
-		} else {
+	if c.IsSet("config") {
+		// --config flag was explicitly provided
+		cfgPath := c.String("config")
+		if cfgPath != "" {
+			// Non-empty path: load from that file
 			if err := cfg.loadFromFile(cfgPath); err != nil {
 				return nil, fmt.Errorf("config file error: %w", err)
 			}
 		}
+		// If cfgPath == "" (i.e., --config ""), config loading is disabled
 	} else {
-		// Search default locations (local then global)
+		// No explicit --config flag; search default locations (local then global)
 		if filePath, err := findConfigFile(); err == nil {
 			if err := cfg.loadFromFile(filePath); err != nil {
 				return nil, fmt.Errorf("config file error: %w", err)
