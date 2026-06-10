@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,11 +13,13 @@ import (
 
 	"github.com/DONAR-0/cmdChroma/internal"
 	client "github.com/DONAR-0/cmdChroma/internal/client"
+	config "github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
+	"gopkg.in/yaml.v3"
 )
 
 // ============ Input Validation Errors ============
@@ -951,4 +954,135 @@ func resolveAIPaths(c *cli.Command) (string, string, string, error) {
 	}
 
 	return modelPath, tokenizerPath, onnxLibPath, nil
+}
+
+// ============ Config Command Handlers ============
+
+// handleConfigShow displays the effective configuration after merging all sources.
+func handleConfigShow(_ context.Context, c *cli.Command) error {
+	slog.Info("Displaying effective configuration")
+
+	// Load config from all sources
+	cfg, err := config.LoadConfig(c)
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Determine output format
+	outputFormat := c.String("output")
+	if outputFormat == "" {
+		outputFormat = "yaml" // default format
+	}
+
+	switch outputFormat {
+	case "json":
+		// Output as JSON
+		jsonData, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config to JSON: %w", err)
+		}
+
+		fmt.Println(string(jsonData))
+	case "env":
+		// Output as environment variables
+		fmt.Printf("# Effective configuration as environment variables\n")
+		fmt.Printf("CHROMA_HOST=%s\n", cfg.Chroma.Host)
+		fmt.Printf("CHROMA_PORT=%s\n", cfg.Chroma.Port)
+		fmt.Printf("CHROMA_TENANT=%s\n", cfg.Chroma.Tenant)
+		fmt.Printf("CHROMA_DATABASE=%s\n", cfg.Chroma.Database)
+		fmt.Printf("CHROMA_LOG_LEVEL=%s\n", cfg.Logging.Level)
+		fmt.Printf("CHROMA_LOG_FORMAT=%s\n", cfg.Logging.Format)
+		fmt.Printf("CHROMA_MODEL_PATH=%s\n", cfg.Model.ONNXModel)
+		fmt.Printf("CHROMA_TOKENIZER_PATH=%s\n", cfg.Model.Tokenizer)
+		fmt.Printf("CHROMA_ONNX_LIB=%s\n", cfg.Model.ONNXLib)
+	default:
+		// Output as YAML (default)
+		yamlData, err := yaml.Marshal(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal config to YAML: %w", err)
+		}
+
+		fmt.Println(string(yamlData))
+	}
+
+	return nil
+}
+
+// handleConfigInit creates a configuration file with sensible defaults.
+func handleConfigInit(_ context.Context, c *cli.Command) error {
+	slog.Info("Initializing configuration file")
+
+	// Determine output path
+	outputPath := c.String("output")
+	global := c.Bool("global")
+
+	// Set default output path based on flags
+	if outputPath == "" {
+		if global {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to get home directory: %w", err)
+			}
+
+			outputPath = filepath.Join(homeDir, ".config", "cmdChroma", "config.yaml")
+		} else {
+			// Default to local (either --local specified or neither --global nor --local)
+			outputPath = "./.cmdChroma.yaml"
+		}
+	}
+
+	// Check if file already exists
+	if _, err := os.Stat(outputPath); err == nil {
+		return fmt.Errorf("configuration file already exists at %s\nUse --output to specify a different location or remove the existing file first", outputPath)
+	}
+
+	// Create default configuration
+	defaultConfig := config.ConfigFile{
+		Version: "1.0",
+		Chroma: config.ConfigFileChroma{
+			Host:     "localhost",
+			Port:     "8000",
+			Tenant:   "default_tenant",
+			Database: "default_database",
+			Timeout:  30,
+		},
+		Model: config.ConfigFileModel{
+			ONNXModel: "models/all-MiniLM-L6-v2/model.onnx",
+			Tokenizer: "models/all-MiniLM-L6-v2/tokenizer.json",
+			ONNXLib:   "models/onnx_runtime/lib/libonnxruntime.so",
+		},
+		Logging: config.ConfigFileLogging{
+			Level:   "info",
+			Format:  "text",
+			Verbose: false,
+		},
+		Features: config.ConfigFileFeatures{
+			CreateCollection: config.ConfigFileCreateCollection{
+				AutoCreateDatabase: false,
+			},
+		},
+	}
+
+	// Create directory if needed
+	if dir := filepath.Dir(outputPath); dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+
+	// Write configuration file
+	yamlData, err := yaml.Marshal(defaultConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal default config to YAML: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write configuration file %s: %w", outputPath, err)
+	}
+
+	fmt.Printf("✅ Configuration file created at %s\n", outputPath)
+	fmt.Printf("   Edit this file to customize your settings\n")
+	fmt.Printf("   Use 'cmdChroma config show' to view effective configuration\n")
+
+	return nil
 }

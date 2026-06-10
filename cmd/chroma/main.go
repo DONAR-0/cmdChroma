@@ -41,7 +41,7 @@ func main() {
 
 // createChromaClient creates a Chroma client based on CLI context
 func createChromaClient(c *cli.Command) (*client.ChromaClient, error) {
-	cfg, err := config.LoadFromCLI(c)
+	cfg, err := config.LoadConfig(c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
