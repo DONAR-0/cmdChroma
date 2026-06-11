@@ -159,7 +159,7 @@ test: setup-deps ## Run unit tests safely skipping non-test coverage bugs
 	@for dir in $$(find . -name "*_test.go" -exec dirname {} \; | sort -u); do \
 		echo "Testing package: $$dir"; \
 		CGO_ENABLED=1 \
-		CGO_LDFLAGS="-L$(TOKENIZER_LIB_DIR) -ltokenizers -lstdc++" \
+		LIBRARY_PATH="$(TOKENIZER_LIB_DIR):$${LIBRARY_PATH}" \
 		LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
 		go test -v -coverprofile=profile.out $$dir || exit 1; \
 		if [ -f profile.out ]; then \

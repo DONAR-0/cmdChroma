@@ -761,3 +761,41 @@ func TestChromaClient_AddBatch_MismatchedLengths(t *testing.T) {
 	_ = client.AddBatch("test", []string{"doc1", "doc2"}, []string{"id1"})
 	// No assertion on error; just ensure no panic
 }
+
+func TestChromaClient_CreateDatabase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases" {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	err := client.CreateDatabase("newdb")
+	if err != nil {
+		t.Errorf("CreateDatabase failed: %v", err)
+	}
+}
+
+func TestChromaClient_CreateDatabase_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"creation failed"}`))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	err := client.CreateDatabase("newdb")
+	if err == nil {
+		t.Error("Expected error for CreateDatabase when server returns 500")
+	}
+}

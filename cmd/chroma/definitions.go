@@ -20,7 +20,7 @@ func createApp() *cli.Command {
 		Usage:       "A high-performance CLI for ChromaDB with local AI embeddings",
 		Description: AppDescription,
 		// Global flags available to all commands
-		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag},
+		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag, configFlag},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			// Determine log level from flags
 			level := slog.LevelInfo
@@ -69,6 +69,7 @@ func createApp() *cli.Command {
 			queryCommand,
 			importCommand,
 			chatCommand,
+			configCommand,
 		},
 
 		// Default action when no command is provided: show help
@@ -369,6 +370,10 @@ EXAMPLES:
 
 // Flags
 var (
+	configFlag = &cli.StringFlag{
+		Name:  "config",
+		Usage: "Path to configuration file (overrides default search locations)",
+	}
 	tenantFlag = &cli.StringFlag{
 		Name:    "tenant",
 		Value:   "default_tenant",
@@ -548,3 +553,41 @@ var (
 		Usage: "NVIDIA NIM API base URL (requires NVIDIA_API_KEY environment variable)",
 	}
 )
+
+// configCommand manages configuration files
+var configCommand = &cli.Command{
+	Name:  "config",
+	Usage: "Configuration management",
+	Commands: []*cli.Command{
+		{
+			Name:   "show",
+			Usage:  "Display effective configuration",
+			Action: handleConfigShow,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "output",
+					Usage: "Output format: yaml, json, or env (default: yaml)",
+				},
+			},
+		},
+		{
+			Name:  "init",
+			Usage: "Create a configuration file",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "output",
+					Usage: "Output file path (default: .cmdChroma.yaml for --local, ~/.config/cmdChroma/config.yaml for --global)",
+				},
+				&cli.BoolFlag{
+					Name:  "global",
+					Usage: "Create global config in ~/.config/cmdChroma/",
+				},
+				&cli.BoolFlag{
+					Name:  "local",
+					Usage: "Create local config in current directory (default if neither --global nor --local specified)",
+				},
+			},
+			Action: handleConfigInit,
+		},
+	},
+}
