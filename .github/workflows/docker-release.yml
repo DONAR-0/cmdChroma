@@ -1,0 +1,74 @@
+name: Docker Release
+
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      push_to_registry:
+        description: 'Push to Docker Hub?'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write  # Needed for Docker Hub push via actions/upload-artifact if using token
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Only run if push_to_registry is true (checkbox in workflow_dispatch)
+    if: ${{ github.event.inputs.push_to_registry == 'true' }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # needed for version calculation if needed
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma
+        tags: |
+          # Use the provided tag as primary
+          ${{ github.event.inputs.tag }}
+          # Also tag as latest
+          latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        platforms: linux/amd64,linux/arm64  # Build multi-arch
+        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma:buildcache
+        cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma:buildcache,mode=max
+
+    - name: Generate and print image digest
+      run: |
+        echo "Docker image pushed successfully!"
+        echo "Image: ${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma:${{ github.event.inputs.tag }}"
+        echo "Also tagged as: ${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma:latest"
+
+    - name: Optional: Create GitHub release with Docker image info
+      if: ${{ github.event.inputs.create_release == 'true' }}
+      run: |
+        echo "Release ${{ github.event.inputs.tag }} includes Docker image:"
+        echo "${{ secrets.DOCKERHUB_USERNAME }}/cmdchroma:${{ github.event.inputs.tag }}"
