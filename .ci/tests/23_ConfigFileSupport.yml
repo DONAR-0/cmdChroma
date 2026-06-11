@@ -15,6 +15,7 @@ testcases:
             tenant: conf_tenant
             database: conf_db
           EOF
+          unset CHROMA_HOST CHROMA_PORT
           ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
         assertions:
           - result.code ShouldEqual 0
@@ -36,6 +37,7 @@ testcases:
             tenant: custom_tenant
             database: custom_db
           EOF
+          unset CHROMA_HOST CHROMA_PORT
           ${CMDCHROMA_BIN:-cmdChroma} --log-level error --config custom-config.yaml config show
         assertions:
           - result.code ShouldEqual 0
@@ -54,6 +56,7 @@ testcases:
           chroma:
             host: partialhost
           EOF
+          unset CHROMA_HOST CHROMA_PORT
           ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
         assertions:
           - result.code ShouldEqual 0
@@ -138,6 +141,7 @@ testcases:
           chroma:
             host: altfile
           EOF
+          unset CHROMA_HOST CHROMA_PORT
           ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
         assertions:
           - result.code ShouldEqual 0
