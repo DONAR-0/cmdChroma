@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+.github
+
+# Build artifacts
+dist/
+coverage.out
+coverage.html
+
+# Test artifacts
+.ci/logs/
+.ci/tests/
+venom.log
+
+# Documentation (not needed in image)
+docs/
+*.md
+!README.md  # maybe include README as label
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# CI scripts (not needed in image)
+.ci/scripts/
+
+# Local test files
+test/
+tests/
+
+# Prompts CSV (from research)
+prompts.csv
+
+# Claude specific
+CLAUDE.md
