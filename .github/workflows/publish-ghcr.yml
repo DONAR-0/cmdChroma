@@ -37,14 +37,14 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/cmdchroma:${{ github.event.inputs.image_tag }}
-          ghcr.io/${{ github.repository_owner }}/cmdchroma:latest
+          ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:${{ github.event.inputs.image_tag }}
+          ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:latest
         platforms: linux/amd64,linux/arm64
-        cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cmdchroma:buildcache
-        cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cmdchroma:buildcache,mode=max
+        cache-from: type=registry,ref=ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:buildcache
+        cache-to: type=registry,ref=ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:buildcache,mode=max
 
     - name: Output image reference
       run: |
         echo "Successfully published:"
-        echo "ghcr.io/${{ github.repository_owner }}/cmdchroma:${{ github.event.inputs.image_tag }}"
-        echo "ghcr.io/${{ github.repository_owner }}/cmdchroma:latest"
+        echo "ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:${{ github.event.inputs.image_tag }}"
+        echo "ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:latest"
