@@ -20,6 +20,10 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
+    - name: Set lowercase owner environment variable
+      run: |
+        echo "LOWER_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
     - name: Log in to GHCR
       uses: docker/login-action@v3
       with:
@@ -37,14 +41,27 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: |
+<<<<<<< HEAD
+          ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:${{ github.event.inputs.image_tag }}
+          ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:latest
+        platforms: linux/amd64,linux/arm64
+        cache-from: type=registry,ref=ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:buildcache
+        cache-to: type=registry,ref=ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:buildcache,mode=max
+=======
           ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:${{ github.event.inputs.image_tag }}
           ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:latest
         platforms: linux/amd64,linux/arm64
         cache-from: type=registry,ref=ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:buildcache
         cache-to: type=registry,ref=ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:buildcache,mode=max
+>>>>>>> e9a65b5 (ci: fixing docker ghcr.io issue)
 
     - name: Output image reference
       run: |
         echo "Successfully published:"
+<<<<<<< HEAD
+        echo "ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:${{ github.event.inputs.image_tag }}"
+        echo "ghcr.io/${{ env.LOWER_OWNER }}/cmdchroma:latest"
+=======
         echo "ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:${{ github.event.inputs.image_tag }}"
         echo "ghcr.io/${{ toLower(github.repository_owner) }}/cmdchroma:latest"
+>>>>>>> e9a65b5 (ci: fixing docker ghcr.io issue)
