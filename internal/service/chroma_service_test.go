@@ -8,6 +8,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	internalErrors "github.com/DONAR-0/cmdChroma/internal/errors"
 	ingest "github.com/DONAR-0/cmdChroma/internal/ingest"
+	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"os"
 )
 
@@ -85,6 +86,12 @@ func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) erro
 func (m *mockChromaClient) CreateDatabase(name string) error {
 	return m.createDatabaseErr
 }
+
+func (m *mockChromaClient) CreateCollection(name string) (string, error) {
+	return "test-collection-id", nil
+}
+
+func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {}
 
 type mockEmbedder struct{}
 

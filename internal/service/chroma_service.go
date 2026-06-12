@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/errors"
@@ -21,15 +22,13 @@ type ChromaService struct {
 // ============ Constructor ============
 
 // NewChromaService creates a new service with the given client and embedder.
-// If the client is a concrete *client.ChromaClient, the embedder is injected into it.
 func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
 	slog.Info("Creating ChromaService",
 		"client_type", fmt.Sprintf("%T", c),
 		"embedder_type", fmt.Sprintf("%T", e))
-	// Inject embedder into the client if possible
-	if ch, ok := c.(*client.ChromaClient); ok {
-		ch.Embedder = e
-	}
+
+	// Inject embedder into the client via the interface method
+	c.SetEmbedder(e)
 
 	return &ChromaService{
 		client:   c,
@@ -199,9 +198,9 @@ func (s *ChromaService) Close() {
 
 // ============ Ingestion ============
 
-// IngestRecords ingests records from a JSONL file into the collection.
-// It parses the file, extracts content and metadata, generates embeddings,
-// and uploads in batches. collectionName can be a name or UUID.
+// IngestRecords ingests records from a file (JSONL or Parquet) into the collection.
+// It detects the file format, parses the file, extracts content and metadata,
+// generates embeddings, and uploads in batches. collectionName can be a name or UUID.
 // If cfg is nil, sensible defaults are used.
 func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *ingest.Config) error {
 	if s.embedder == nil {
@@ -221,8 +220,22 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 
 	processor := ingest.NewProcessor(cfg)
 
-	// Stream records
-	records, errChan := processor.ProcessJSONL(filePath)
+	// Detect file format and stream records
+	ext := getFileExt(filePath)
+
+	var (
+		records <-chan *ingest.Record
+		errChan <-chan error
+	)
+
+	switch ext {
+	case ".jsonl":
+		records, errChan = processor.ProcessJSONL(filePath)
+	case ".parquet":
+		records, errChan = processor.ProcessParquet(filePath)
+	default:
+		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet)", ext)
+	}
 
 	// Batch accumulation with progress tracking
 	var (
@@ -285,6 +298,22 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 }
 
 // ============ Private Helpers ============
+
+// getFileExt returns the lowercase file extension for format detection.
+func getFileExt(filePath string) string {
+	// Find the last dot to handle files with dots in their name
+	for i := len(filePath) - 1; i >= 0; i-- {
+		if filePath[i] == '.' {
+			return strings.ToLower(filePath[i:])
+		}
+
+		if filePath[i] == '/' || filePath[i] == '\\' {
+			break
+		}
+	}
+
+	return ""
+}
 
 // uploadBatch uploads a batch of documents to Chroma.
 // The client's AddBatchGeneric generates embeddings internally.

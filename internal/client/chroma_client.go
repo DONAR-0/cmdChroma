@@ -47,6 +47,7 @@ type (
 		ListDatabases() ([]Database, error)
 		CreateDatabase(name string) error
 		ListCollections() ([]Collection, error)
+		CreateCollection(name string) (string, error)
 		AddBatch(collectionID string, docs []string, ids []string) error
 		AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 		UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
@@ -55,6 +56,7 @@ type (
 		ResolveCollectionID(input string) (string, error)
 		DeleteCollection(name string) error
 		DeleteRecords(collectionID string, ids []string) error
+		SetEmbedder(e onnx.EmbedderInterface)
 	}
 )
 
@@ -102,7 +104,7 @@ type (
 	AddRecordsRequest struct {
 		IDs        []string         `json:"ids"`
 		Documents  []string         `json:"documents"`
-		Embeddings [][]float32      `json:"embeddings"` // Change: No longer omitempty
+		Embeddings [][]float32      `json:"embeddings"`
 		Metadatas  []map[string]any `json:"metadatas,omitempty"`
 	}
 
@@ -303,7 +305,6 @@ func (c *ChromaClient) CreateCollection(name string) (string, error) {
 
 // ListDocuments - List Documents in collection
 func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, error) {
-	// CHANGE: Use the fully scoped path, just like your AddDocument function
 	endpoint := fmt.Sprintf(listDocuments,
 		c.URL, c.Tenant, c.Database, collectionID)
 
@@ -387,6 +388,13 @@ func (c *ChromaClient) ResolveCollectionID(input string) (string, error) {
 
 	// If not found as a name, return the input as ID (assuming it's already an ID)
 	return input, nil
+}
+
+// ============ SetEmbedder ============
+
+// SetEmbedder injects the embedder into the client for batch operations that need embeddings.
+func (c *ChromaClient) SetEmbedder(e onnx.EmbedderInterface) {
+	c.Embedder = e
 }
 
 // ============ Deletion ============

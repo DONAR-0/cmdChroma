@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/factory"
 	"github.com/DONAR-0/cmdChroma/internal"
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	config "github.com/DONAR-0/cmdChroma/internal/config"
@@ -73,7 +74,9 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "host", host, "port", port)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to create Chroma client: %w", err)
@@ -111,7 +114,9 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 	slog.Info("Checking tenant", "tenant", cmd.String("tenant"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -137,7 +142,9 @@ func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 	slog.Info("Listing databases", "tenant", cmd.String("tenant"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -172,7 +179,9 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 func handleListCollection(_ context.Context, cmd *cli.Command) error {
 	slog.Info("Listing collections", "tenant", cmd.String("tenant"), "database", cmd.String("database"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -213,7 +222,9 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "name", collectionName)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -285,7 +296,9 @@ func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("Deleting collection", "name", collectionName)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -543,14 +556,15 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 // ===== Import =====
 
 // handleImportFileInChromaDb imports a file (JSONL or Parquet) with progress tracking.
+// All batching logic is handled by the service layer.
 func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
 		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>\n\nExample: chroma import my_collection data.jsonl")
 	}
 
-	fp := c.Args().Get(1)
-	if fp == "" {
+	filePathArg := c.Args().Get(1)
+	if filePathArg == "" {
 		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>")
 	}
 
@@ -560,7 +574,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	safePath, err := internal.SafeJoin(cwd, fp)
+	safePath, err := internal.SafeJoin(cwd, filePathArg)
 	if err != nil {
 		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
 	}
@@ -574,7 +588,6 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		AllMetadata:    c.Bool("all-metadata"),
 		Limit:          c.Int("n-ingest"),
 	}
-	// Apply defaults
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 100
 	}
@@ -601,32 +614,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	svc := service.NewChromaService(client, embedder)
 	defer svc.Close()
 
-	// Resolve collection ID
-	collectionID, err := client.ResolveCollectionID(collectionName)
-	if err != nil {
-		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
-	}
-
-	// Determine file type by extension
-	ext := strings.ToLower(filepath.Ext(safePath))
-
-	processor := ingest.NewProcessor(cfg)
-
-	var (
-		recordsChan <-chan *ingest.Record
-		errChan     <-chan error
-	)
-
-	switch ext {
-	case ".jsonl":
-		recordsChan, errChan = processor.ProcessJSONL(safePath)
-	case ".parquet":
-		recordsChan, errChan = processor.ProcessParquet(safePath)
-	default:
-		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet)", ext)
-	}
-
-	// Start import with progress
+	// Print import info
 	fmt.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
 	fmt.Printf("   Batch size: %d\n", cfg.BatchSize)
 
@@ -638,66 +626,14 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 
 	startTime := time.Now()
 
-	slog.Info("Starting import", "file", safePath, "collection", collectionName, "format", ext)
+	slog.Info("Starting import", "file", safePath, "collection", collectionName)
 
-	// Batch accumulation with progress tracking
-	var (
-		docs          []string
-		ids           []string
-		metas         []map[string]any
-		batchIdx      int
-		totalUploaded int
-		progressN     = 10 // log progress every N documents processed
-		nextProgress  = progressN
-	)
-
-	for record := range recordsChan {
-		docs = append(docs, record.Content)
-		ids = append(ids, record.ID)
-		metas = append(metas, record.Metadata)
-		batchIdx++
-
-		// Current total processed (including current batch)
-		currentTotal := totalUploaded + batchIdx
-
-		// Progress update every N documents
-		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
-			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
-
-			nextProgress += progressN
-		}
-
-		if batchIdx >= cfg.BatchSize {
-			if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
-			}
-
-			totalUploaded += len(docs)
-			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
-			docs, ids, metas = nil, nil, nil
-			batchIdx = 0
-			nextProgress = totalUploaded + progressN // set next milestone
-		}
-	}
-
-	// Final batch
-	if len(docs) > 0 {
-		if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
-		}
-
-		totalUploaded += len(docs)
-		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
-	}
-
-	// Check for errors from processor
-	if err, ok := <-errChan; ok && err != nil {
-		return fmt.Errorf("ingestion error: %w", err)
+	if err := svc.IngestRecords(collectionName, safePath, cfg); err != nil {
+		return fmt.Errorf("import failed: %w", err)
 	}
 
 	elapsed := time.Since(startTime)
 	fmt.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
-	slog.Info("Import successful", "elapsed", elapsed, "total_documents", totalUploaded)
 
 	return nil
 }

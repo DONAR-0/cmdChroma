@@ -23,6 +23,9 @@ var (
 func main() {
 	app := createApp()
 
+	// Apply panic recovery to all commands
+	ApplyRecovery(app.Commands)
+
 	// Recover from panic gracefully
 	defer func() {
 		if r := recover(); r != nil {

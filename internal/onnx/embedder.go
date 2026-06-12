@@ -3,6 +3,8 @@ package onnx
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"sync"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/daulet/tokenizers"
@@ -20,13 +22,23 @@ type EmbedderInterface interface {
 	Close()
 }
 
+// EmbedderOption configures an Embedder.
+type EmbedderOption func(*Embedder)
+
+// WithNumWorkers sets the number of parallel workers for batch embedding.
+// If not set, defaults to the number of CPU cores.
+func WithNumWorkers(n int) EmbedderOption {
+	return func(e *Embedder) { e.numWorkers = n }
+}
+
 type Embedder struct {
-	session   *ort.DynamicAdvancedSession
-	tokenizer *tokenizers.Tokenizer
+	session    *ort.DynamicAdvancedSession
+	tokenizer  *tokenizers.Tokenizer
+	numWorkers int
 }
 
 // Embedder initialize the dictionary and the brain
-func NewEmbedder(modelPath, tokenizersPath, libpath string) (*Embedder, error) {
+func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOption) (*Embedder, error) {
 	//1. Setup the ONNX Library
 	ort.SetSharedLibraryPath(libpath)
 
@@ -49,7 +61,14 @@ func NewEmbedder(modelPath, tokenizersPath, libpath string) (*Embedder, error) {
 		return nil, fmt.Errorf("error received when starting a session")
 	}
 
-	return &Embedder{tokenizer: tk, session: sess}, nil
+	e := &Embedder{tokenizer: tk, session: sess, numWorkers: runtime.NumCPU()}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(e)
+	}
+
+	return e, nil
 }
 
 // Embed converts text into a 384-dimmension vector
@@ -95,18 +114,80 @@ func (e *Embedder) Embed(text string) ([]float32, error) {
 }
 
 func (e *Embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
-	batchResults := make([][]float32, len(texts))
+	if len(texts) == 0 {
+		return [][]float32{}, nil
+	}
+
+	// Small batches: sequential (avoid goroutine overhead)
+	if len(texts) < e.numWorkers {
+		return e.embedSequential(texts)
+	}
+
+	return e.embedParallel(ctx, texts)
+}
+
+// embedSequential processes texts one at a time (optimized for small batches).
+func (e *Embedder) embedSequential(texts []string) ([][]float32, error) {
+	results := make([][]float32, len(texts))
 	for i, text := range texts {
-		// Use existing sing-embedding logic here
 		vec, err := e.Embed(text)
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed text at index %d: %w", i, err)
 		}
+		results[i] = vec
+	}
+	return results, nil
+}
 
-		batchResults[i] = vec
+// embedParallel processes texts concurrently using a worker pool.
+func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float32, error) {
+	results := make([][]float32, len(texts))
+	errors := make([]error, len(texts))
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, e.numWorkers)
+
+	for i, text := range texts {
+		wg.Add(1)
+		go func(idx int, txt string) {
+			defer wg.Done()
+
+			// Acquire semaphore slot (limits concurrency)
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				errors[idx] = ctx.Err()
+				return
+			}
+
+			// Check context again after acquiring slot
+			select {
+			case <-ctx.Done():
+				errors[idx] = ctx.Err()
+				return
+			default:
+			}
+
+			vec, err := e.Embed(txt)
+			if err != nil {
+				errors[idx] = err
+				return
+			}
+			results[idx] = vec
+		}(i, text)
 	}
 
-	return batchResults, nil
+	wg.Wait()
+
+	// Return first error encountered
+	for _, err := range errors {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
 }
 
 func (e *Embedder) Close() {
