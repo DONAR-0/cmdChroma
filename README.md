@@ -4,7 +4,7 @@ A high-performance, user-friendly command-line tool for **ChromaDB** with local 
 
 [![Go CI](https://github.com/DONAR-0/cmdChroma/actions/workflows/ci.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/DONAR-0/cmdChroma/actions/workflows/integration.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/integration.yml)
-[![Release](https://github.com/DONAR-0/cmdChroma/actions/workflows/release.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/release.yml)
+[![Release](https://github.com/DONAR-0/cmdChroma/actions/workflows/release.yml/badge.svg)](https://github.com/DONAR-0/cmdChroma/actions/workflows/publish-ghcr.yml)
 [![codecov](https://codecov.io/gh/DONAR-0/cmdChroma/branch/main/graph/badge.svg)](https://codecov.io/gh/DONAR-0/cmdChroma)
 
 ---
