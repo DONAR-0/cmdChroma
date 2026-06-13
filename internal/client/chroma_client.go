@@ -17,7 +17,7 @@ import (
 // ============ Constants ============
 
 var (
-	cd = internal.CheckDefer
+	MustClose = internal.CheckDefer
 	// endpoints
 	testEndpoint         = "%s/api/v2/heartbeat"
 	getTenant            = "%s/api/v2/tenants/%s"
@@ -53,6 +53,7 @@ type (
 		UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 		QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
 		GetIDByName(name string) (string, error)
+		ListDocuments(collectionID string) (*GetRecordsResponse, error)
 		ResolveCollectionID(input string) (string, error)
 		DeleteCollection(name string) error
 		DeleteRecords(collectionID string, ids []string) error
@@ -146,7 +147,7 @@ func (c *ChromaClient) TestConnection() error {
 		return fmt.Errorf("failed to connect to ChromaDB at %s: %w", c.URL, err)
 	}
 
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -166,7 +167,7 @@ func (c *ChromaClient) GetTenant() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	// 200 means exists, 404 means it doesn't
 	if resp.StatusCode == http.StatusOK {
@@ -191,7 +192,7 @@ func (c *ChromaClient) ListDatabases() ([]Database, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -225,7 +226,7 @@ func (c *ChromaClient) CreateDatabase(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -247,7 +248,7 @@ func (c *ChromaClient) ListCollections() ([]Collection, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to request collections: %w", err)
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -281,7 +282,7 @@ func (c *ChromaClient) CreateCollection(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
@@ -325,7 +326,7 @@ func (c *ChromaClient) ListDocuments(collectionID string) (*GetRecordsResponse, 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -349,7 +350,7 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 		// This matches the test expectation for error cases too
 		return name, nil
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	var collections []Collection // Use the struct with ID and Name tags
 	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
@@ -415,7 +416,7 @@ func (c *ChromaClient) DeleteCollection(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete collection: %w", err)
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
@@ -454,7 +455,7 @@ func (c *ChromaClient) DeleteRecords(collectionID string, ids []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete records: %w", err)
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
@@ -483,7 +484,7 @@ func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float
 	if err != nil {
 		return err
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -536,7 +537,7 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 		return nil, err
 	}
 
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -588,7 +589,7 @@ func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string
 	if err != nil {
 		return err
 	}
-	defer cd(resp.Body.Close)
+	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

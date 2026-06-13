@@ -37,6 +37,8 @@ func (f *ServiceFactory) CreateChromaService(cmd *cli.Command) (*service.ChromaS
 		return nil, nil, nil, err
 	}
 
+	slog.Info("Loading AI embedding engine", "model", cfg.modelPath)
+
 	// Create Chroma client
 	chromaHost := fmt.Sprintf("http://%s:%s", cmd.String("host"), cmd.String("port"))
 	chromaClient := client.NewChromaDBClient(chromaHost, cmd.String("tenant"), cmd.String("database"))

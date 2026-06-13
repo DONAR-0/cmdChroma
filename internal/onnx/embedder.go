@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	cd = internal.CheckDefer
+	MustClose = internal.CheckDefer
 )
 
 // EmbedderInterface defines the contract for embedding text into vectors.
@@ -96,13 +96,13 @@ func (e *Embedder) Embed(text string) ([]float32, error) {
 	maT, _ := ort.NewTensor(shape, mask)
 	tyT, _ := ort.NewTensor(shape, types)
 
-	defer cd(inT.Destroy)
-	defer cd(maT.Destroy)
-	defer cd(tyT.Destroy)
+	defer MustClose(inT.Destroy)
+	defer MustClose(maT.Destroy)
+	defer MustClose(tyT.Destroy)
 
 	// Step C: Run Brain (Math -> Raw Output)
 	outT, _ := ort.NewEmptyTensor[float32](ort.NewShape(1, lenght, 384))
-	defer cd(outT.Destroy)
+	defer MustClose(outT.Destroy)
 
 	err := e.session.Run([]ort.ArbitraryTensor{inT, maT, tyT}, []ort.ArbitraryTensor{outT})
 	if err != nil {
@@ -196,7 +196,7 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 }
 
 func (e *Embedder) Close() {
-	cd(e.tokenizer.Close)
-	cd(e.session.Destroy)
-	cd(ort.DestroyEnvironment)
+	MustClose(e.tokenizer.Close)
+	MustClose(e.session.Destroy)
+	MustClose(ort.DestroyEnvironment)
 }

@@ -18,7 +18,6 @@ import (
 	config "github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
-	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -340,7 +339,9 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 
 	slog.Info("Listing documents", "collection", collectionName, "tenant", c.String("tenant"), "database", c.String("database"))
 
-	client, err := createChromaClient(c)
+	f := factory.NewServiceFactory()
+
+	client, err := f.CreateChromaClient(c)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -398,20 +399,14 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("no documents provided\n\nUsage: chroma add <collection> --doc \"text\"\n\nExample: chroma add my_collection --doc \"Your document\"")
 	}
 
-	// Setup client
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	// Load AI Engine
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	// Handle IDs: use provided ones or generate auto IDs
 	ids := c.StringSlice("id")
@@ -472,7 +467,9 @@ func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("Deleting records", "collection", collectionName, "ids", ids)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -512,19 +509,14 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "collection", collectionName, "query_count", len(queries), "n_results", nResults)
 
-	// Setup client
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist or use --model-path, --tokenizer-path, --onnx-lib flags", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	// Show loading indicator in interactive mode
 	ui := output.NewUI()
@@ -616,19 +608,14 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		cfg.IDField = "id"
 	}
 
-	// Setup service
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	// Print import info using printer
 	printer.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
@@ -706,19 +693,14 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 		"n_results", nResults,
 		"distance_threshold", distanceThreshold)
 
-	// Setup client and embedder
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
 
@@ -858,60 +840,6 @@ Question: %s
 
 Provide a clear, concise answer:`,
 		context, question)
-}
-
-// ============ Private Helpers ============
-
-// initEmbedder initializes the ONNX embedder with path resolution.
-func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {
-	modelPath, tokenizerPath, onnxLibPath, err := resolveAIPaths(c)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Info("Loading AI embedding engine", "model", modelPath)
-
-	embedder, err := onnx.NewEmbedder(modelPath, tokenizerPath, onnxLibPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
-	return embedder, nil
-}
-
-// resolveAIPaths determines the paths for model files with fallbacks.
-func resolveAIPaths(c *cli.Command) (string, string, string, error) {
-	ex, err := os.Executable()
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to resolve executable path: %w", err)
-	}
-
-	binDir := filepath.Dir(ex)
-	projectRoot := filepath.Join(binDir, "..")
-
-	modelPath := c.String("model-path")
-	if modelPath == "" {
-		modelPath = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/model.onnx")
-	}
-
-	tokenizerPath := c.String("tokenizer-path")
-	if tokenizerPath == "" {
-		tokenizerPath = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/tokenizer.json")
-	}
-
-	onnxLibPath := c.String("onnx-lib")
-	if onnxLibPath == "" {
-		onnxLibPath = filepath.Join(projectRoot, "models/onnx_runtime/lib/libonnxruntime.so")
-	}
-
-	// Validate files exist if using default paths
-	if modelPath != "" {
-		if _, err := os.Stat(modelPath); err != nil {
-			return "", "", "", fmt.Errorf("model file not found: %s\n\nHint: Use --model-path to specify the correct location or run the setup script", modelPath)
-		}
-	}
-
-	return modelPath, tokenizerPath, onnxLibPath, nil
 }
 
 // ============ Config Command Handlers ============

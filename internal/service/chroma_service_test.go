@@ -21,6 +21,8 @@ type mockChromaClient struct {
 	listDatabasesErr          error
 	listCollectionsResult     []client.Collection
 	listCollectionsErr        error
+	listDocumentsResult       *client.GetRecordsResponse
+	listDocumentsErr          error
 	addBatchErr               error
 	addBatchGenericErr        error
 	upsertBatchGenericErr     error
@@ -73,6 +75,10 @@ func (m *mockChromaClient) GetIDByName(name string) (string, error) {
 
 func (m *mockChromaClient) ResolveCollectionID(input string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
+}
+
+func (m *mockChromaClient) ListDocuments(collectionID string) (*client.GetRecordsResponse, error) {
+	return m.listDocumentsResult, m.listDocumentsErr
 }
 
 func (m *mockChromaClient) DeleteCollection(name string) error {

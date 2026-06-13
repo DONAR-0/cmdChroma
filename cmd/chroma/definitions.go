@@ -27,7 +27,7 @@ func createApp() *cli.Command {
 			// Load config file early to get defaults for logging
 			// Note: LoadConfig handles flag precedence, but we need config values
 			// for logger initialization before handlers run
-			var cfg *config.Config
+			var cfg *config.RuntimeConfig
 			if appCfg, err := config.LoadConfig(c); err == nil {
 				cfg = appCfg
 			}

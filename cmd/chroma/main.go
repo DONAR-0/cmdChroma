@@ -7,10 +7,7 @@ import (
 	"os"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
-	client "github.com/DONAR-0/cmdChroma/internal/client"
-	"github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/version"
-	"github.com/urfave/cli/v3"
 )
 
 var (
@@ -44,14 +41,4 @@ func main() {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(ExitError)
 	}
-}
-
-// createChromaClient creates a Chroma client based on CLI context
-func createChromaClient(c *cli.Command) (*client.ChromaClient, error) {
-	cfg, err := config.LoadConfig(c)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	return client.NewChromaDBClient(cfg.GetChromaURL(), cfg.GetTenant(), cfg.GetDatabase()), nil
 }
