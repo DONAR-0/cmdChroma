@@ -32,6 +32,7 @@ func (e *AppError) Error() string {
 	if e.Err == nil {
 		return e.Context
 	}
+
 	return fmt.Sprintf("%s: %v", e.Context, e.Err)
 }
 
@@ -56,6 +57,7 @@ func Wrap(err error, code ErrorCode, context string) *AppError {
 	if err == nil {
 		return nil
 	}
+
 	return &AppError{Err: err, Code: code, Context: context, Hints: []string{}}
 }
 

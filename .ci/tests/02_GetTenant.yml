@@ -10,7 +10,7 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "default_tenant"
-          - result.systemout ShouldContainSubstring "✅ exists"
+          - result.systemout ShouldContainSubstring "[exists]"
   - name: Current Tenant with -tenant flag
     steps:
       - type: exec
@@ -19,7 +19,7 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "some_tenant"
-          - result.systemout ShouldContainSubstring "❌ not found"
+          - result.systemout ShouldContainSubstring "[not found]"
 
   - name: Current Tenant with Env Variable
     steps:
@@ -29,5 +29,5 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "some_tenant"
-          - result.systemout ShouldContainSubstring "❌ not found"
+          - result.systemout ShouldContainSubstring "[not found]"
 

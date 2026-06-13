@@ -93,19 +93,26 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
-			return fmt.Errorf("connection timed out after %ds\n\nHints:\n  • Check if ChromaDB is running\n  • Verify host/port: --host %s --port %s", timeout, host, port)
+			printer.Error("Connection timed out after %d seconds", timeout)
+			printer.Info("Check if ChromaDB is running")
+			printer.Info("Verify host/port: --host %s --port %s", host, port)
+
+			return fmt.Errorf("connection timed out after %ds", timeout)
 		}
 
 		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+		printer.Error("Connection failed: %v", err)
+		printer.Info("Check if ChromaDB is running with: docker ps")
+		printer.Info("Verify host/port: --host %s --port %s", host, port)
 
-		return fmt.Errorf("connection failed: %w\n\nHints:\n  • Is ChromaDB running? Try: docker ps\n  • Check host/port: --host %s --port %s\n  • Verify network connectivity", err, host, port)
+		return err
 	}
 
 	slog.Info("operation_complete", "op", opName, "duration_ms", time.Since(start).Milliseconds())
-	fmt.Println("✅ Successfully connected to ChromaDB")
-	fmt.Printf("   Server: %s:%s\n", host, port)
-	fmt.Printf("   Tenant: %s\n", cmd.String("tenant"))
-	fmt.Printf("   Database: %s\n", cmd.String("database"))
+	printer.Success("Successfully connected to ChromaDB")
+	printer.Printf("   Server: %s:%s\n", host, port)
+	printer.Printf("   Tenant: %s\n", cmd.String("tenant"))
+	printer.Printf("   Database: %s\n", cmd.String("database"))
 
 	return nil
 }
@@ -124,15 +131,17 @@ func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 	tenantExists, err := chromaClient.GetTenant()
 	if err != nil {
 		slog.Error("Failed to check tenant", "error", err)
-		return fmt.Errorf("tenant check failed: %w", err)
+		printer.Error("Tenant check failed: %v", err)
+
+		return err
 	}
 
-	status := "✅ exists"
-	if !tenantExists {
-		status = "❌ not found"
+	if tenantExists {
+		printer.Success("Tenant: %s [exists]", cmd.String("tenant"))
+	} else {
+		printer.Warn("Tenant: %s [not found]", cmd.String("tenant"))
 	}
 
-	fmt.Printf("Tenant: %s [%s]\n", cmd.String("tenant"), status)
 	slog.Info("Tenant check complete", "exists", tenantExists)
 
 	return nil
@@ -152,21 +161,21 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 	dbs, err := chromaClient.ListDatabases()
 	if err != nil {
 		slog.Error("Failed to list databases", "error", err)
-		return fmt.Errorf("failed to list databases: %w\n\nHint: Verify your tenant has databases: chroma databases --tenant default_tenant", err)
+		printer.Error("Failed to list databases: %v", err)
+		printer.Info("Verify your tenant has databases")
+
+		return err
 	}
 
 	if len(dbs) == 0 {
-		fmt.Println("No databases found in this tenant.")
-		fmt.Println("Hint: Create a database first or check your tenant configuration.")
+		printer.Info("No databases found in this tenant.")
+		printer.Info("Create a database first or check your tenant configuration.")
 
 		return nil
 	}
 
-	fmt.Printf("Databases in tenant '%s':\n", cmd.String("tenant"))
-
-	for _, db := range dbs {
-		fmt.Printf("  • %s (ID: %s)\n", db.Name, db.Id)
-	}
+	printer.Printf("Databases in tenant '%s':\n", cmd.String("tenant"))
+	printer.PrintTable([]string{"Name", "ID"}, toStringRows(dbs))
 
 	slog.Info("Database listing complete", "count", len(dbs))
 
@@ -193,16 +202,16 @@ func handleListCollection(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if len(collections) == 0 {
-		fmt.Println("No collections found in this database.")
-		fmt.Println("Hint: Create a collection first: chroma create <name>")
+		printer.Info("No collections found in this database.")
+		printer.Info("Hint: Create a collection first: chroma create <name>")
 
 		return nil
 	}
 
-	fmt.Printf("Collections in database '%s':\n", cmd.String("database"))
+	printer.Printf("Collections in database '%s':\n", cmd.String("database"))
 
 	for _, coll := range collections {
-		fmt.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
+		printer.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
 	}
 
 	slog.Info("Collection listing complete", "count", len(collections))
@@ -1016,9 +1025,21 @@ func handleConfigInit(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to write configuration file %s: %w", outputPath, err)
 	}
 
-	fmt.Printf("✅ Configuration file created at %s\n", outputPath)
-	fmt.Printf("   Edit this file to customize your settings\n")
-	fmt.Printf("   Use 'cmdChroma config show' to view effective configuration\n")
+	printer.Success("Configuration file created at %s", outputPath)
+	printer.Info("Edit this file to customize your settings")
+	printer.Info("Use 'chroma config show' to view effective configuration")
 
 	return nil
+}
+
+// ============ Helper Functions ============
+
+// toStringRows converts a list of Database to table rows.
+func toStringRows(dbs []client.Database) [][]string {
+	rows := make([][]string, len(dbs))
+	for i, db := range dbs {
+		rows[i] = []string{db.Name, db.Id}
+	}
+
+	return rows
 }

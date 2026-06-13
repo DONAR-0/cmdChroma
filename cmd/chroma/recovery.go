@@ -24,6 +24,7 @@ func withRecovery(fn func(context.Context, *cli.Command) error) func(context.Con
 				fmt.Fprintf(os.Stderr, "Internal error: command '%s' failed unexpectedly\n", c.Name)
 			}
 		}()
+
 		return fn(ctx, c)
 	}
 }

@@ -134,8 +134,10 @@ func (e *Embedder) embedSequential(texts []string) ([][]float32, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed text at index %d: %w", i, err)
 		}
+
 		results[i] = vec
 	}
+
 	return results, nil
 }
 
@@ -145,10 +147,12 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 	errors := make([]error, len(texts))
 
 	var wg sync.WaitGroup
+
 	semaphore := make(chan struct{}, e.numWorkers)
 
 	for i, text := range texts {
 		wg.Add(1)
+
 		go func(idx int, txt string) {
 			defer wg.Done()
 
@@ -174,6 +178,7 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 				errors[idx] = err
 				return
 			}
+
 			results[idx] = vec
 		}(i, text)
 	}

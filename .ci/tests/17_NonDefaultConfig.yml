@@ -78,7 +78,7 @@ testcases:
         script: cmdChroma --log-level error t --port 60999
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on closed port
     steps:
@@ -87,7 +87,7 @@ testcases:
         script: cmdChroma --log-level error t --port 19999
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on invalid host
     steps:

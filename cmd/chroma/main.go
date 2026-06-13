@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/version"
@@ -18,6 +19,9 @@ var (
 	AppVersion  = version.Version
 	ExitSuccess = 0
 	ExitError   = 1
+
+	// printer is the global console printer for user-facing output.
+	printer *output.ConsolePrinter
 )
 
 func main() {

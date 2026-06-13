@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
 	"github.com/DONAR-0/cmdChroma/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -20,7 +21,7 @@ func createApp() *cli.Command {
 		Usage:       "A high-performance CLI for ChromaDB with local AI embeddings",
 		Description: AppDescription,
 		// Global flags available to all commands
-		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag, configFlag},
+		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag, configFlag, quietFlag, jsonFlag, noColorFlag, noTUIFlag},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			// Determine log level from flags
 			level := slog.LevelInfo
@@ -41,6 +42,11 @@ func createApp() *cli.Command {
 				level = slog.LevelDebug
 			}
 
+			// quiet flag suppresses INFO and DEBUG logs
+			if c.Bool("quiet") && level >= slog.LevelInfo {
+				level = slog.LevelWarn
+			}
+
 			// Parse log-format flag
 			format := c.String("log-format")
 			if format != "text" && format != "json" {
@@ -49,6 +55,10 @@ func createApp() *cli.Command {
 
 			// Initialize the logger
 			InitLogger(level, format)
+
+			// Initialize output printer
+			outputCfg := output.NewOutputConfig(c)
+			printer = output.NewConsolePrinter(outputCfg)
 
 			if c.Bool("verbose") {
 				slog.Info("Verbose logging enabled", "version", AppVersion)
@@ -551,6 +561,31 @@ var (
 		Name:  "nim-url",
 		Value: "https://integrate.api.nvidia.com/v1",
 		Usage: "NVIDIA NIM API base URL (requires NVIDIA_API_KEY environment variable)",
+	}
+
+	// Output control flags
+	quietFlag = &cli.BoolFlag{
+		Name:    "quiet",
+		Aliases: []string{"q"},
+		Usage:   "Suppress diagnostic logs (errors still shown to stderr)",
+		Sources: cli.EnvVars("CHROMA_QUIET"),
+	}
+
+	jsonFlag = &cli.BoolFlag{
+		Name:    "json",
+		Usage:   "Output as JSON for machine parsing",
+		Sources: cli.EnvVars("CHROMA_JSON"),
+	}
+
+	noColorFlag = &cli.BoolFlag{
+		Name:    "no-color",
+		Usage:   "Disable colored output",
+		Sources: cli.EnvVars("CHROMA_NO_COLOR"),
+	}
+
+	noTUIFlag = &cli.BoolFlag{
+		Name:  "no-tui",
+		Usage: "Disable TUI elements (spinners, progress bars) and use simple text output",
 	}
 )
 
