@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
+	"github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/version"
 	"github.com/urfave/cli/v3"
 )
@@ -23,11 +24,23 @@ func createApp() *cli.Command {
 		// Global flags available to all commands
 		Flags: []cli.Flag{hostFlag, portFlag, verboseFlag, logLevelFlag, logFormatFlag, tenantFlag, databaseFlag, collectionFlag, configFlag, quietFlag, jsonFlag, noColorFlag, noTUIFlag},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
-			// Determine log level from flags
-			level := slog.LevelInfo
+			// Load config file early to get defaults for logging
+			// Note: LoadConfig handles flag precedence, but we need config values
+			// for logger initialization before handlers run
+			var cfg *config.Config
+			if appCfg, err := config.LoadConfig(c); err == nil {
+				cfg = appCfg
+			}
 
-			// Parse log-level flag
+			// Determine log level: CLI flag > config file > default
+			level := slog.LevelInfo
 			logLevel := c.String("log-level")
+
+			// Use config file value as base if CLI flag wasn't explicitly set
+			if cfg != nil && !c.IsSet("log-level") && cfg.Logging.Level != "" {
+				logLevel = cfg.Logging.Level
+			}
+
 			switch logLevel {
 			case "debug":
 				level = slog.LevelDebug
@@ -47,10 +60,14 @@ func createApp() *cli.Command {
 				level = slog.LevelWarn
 			}
 
-			// Parse log-format flag
+			// Parse log-format flag (use config file value if not set)
 			format := c.String("log-format")
-			if format != "text" && format != "json" {
-				format = "text" // default fallback
+			if format == "text" || format == "json" {
+				// valid
+			} else if cfg != nil && cfg.Logging.Format != "" {
+				format = cfg.Logging.Format
+			} else {
+				format = "text"
 			}
 
 			// Initialize the logger

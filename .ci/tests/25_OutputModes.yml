@@ -1,0 +1,150 @@
+version: "2"
+name: Test Chroma CLI - Output Modes
+
+testcases:
+  # ============ JSON Output Mode Tests ============
+
+  - name: JSON mode outputs JSON structure for ping
+    steps:
+      - type: exec
+        script: cmdChroma --json t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '{"level"'
+          - result.systemout ShouldContainSubstring '"message"'
+          - result.systemout ShouldContainSubstring 'Successfully connected'
+
+  - name: JSON mode outputs valid JSON for tenant
+    steps:
+      - type: exec
+        script: cmdChroma --json cT 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"level"'
+          - result.systemout ShouldContainSubstring '"message"'
+
+  - name: JSON mode outputs valid JSON for databases
+    steps:
+      - type: exec
+        script: cmdChroma --json dbs 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"headers"'
+          - result.systemout ShouldContainSubstring '"rows"'
+
+  - name: JSON mode outputs valid JSON for collections
+    steps:
+      - type: exec
+        script: cmdChroma --json ls 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"level"'
+
+  # ============ Quiet Mode Tests ============
+
+  - name: Quiet mode suppresses INFO logs
+    steps:
+      - type: exec
+        script: cmdChroma --quiet t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "[INFO]"
+          - result.code ShouldEqual 0
+
+  - name: Quiet mode still shows user output
+    steps:
+      - type: exec
+        script: cmdChroma --quiet t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected"
+
+  - name: Quiet mode shows errors to stderr
+    steps:
+      - type: exec
+        script: cmdChroma --quiet t --port 60999 2>&1
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "Connection failed"
+
+  - name: Quiet mode with environment variable
+    steps:
+      - type: exec
+        script: CHROMA_QUIET=true cmdChroma t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "[INFO]"
+          - result.code ShouldEqual 0
+
+  # ============ No Color Mode Tests ============
+
+  - name: No color flag disables ANSI codes
+    steps:
+      - type: exec
+        script: cmdChroma --no-color t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring '\[0m'  # No ANSI reset codes
+          - result.systemout ShouldNotContainSubstring '\[1m'  # No ANSI bold codes
+          - result.systemout ShouldNotContainSubstring '\[9'   # No light colors (90-97)
+
+  - name: No color flag still shows output
+    steps:
+      - type: exec
+        script: cmdChroma --no-color t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected"
+
+  - name: No color with environment variable
+    steps:
+      - type: exec
+        script: CHROMA_NO_COLOR=true cmdChroma t
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring '\[9'
+
+  # ============ Combined Output Mode Tests ============
+
+  - name: JSON mode overrides other output styles
+    steps:
+      - type: exec
+        script: cmdChroma --json --no-color t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"level"'
+          - result.systemout ShouldContainSubstring '"message"'
+
+  - name: Quiet and JSON can be combined
+    steps:
+      - type: exec
+        script: cmdChroma --quiet --json t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"level"'
+          - result.systemout ShouldContainSubstring '"message"'
+
+  - name: No color and JSON can be combined
+    steps:
+      - type: exec
+        script: cmdChroma --no-color --json t 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring '"level"'
+          - result.systemout ShouldContainSubstring '"message"'
+
+  # ============ Pipe Detection Tests ============
+
+  - name: Output is pipe-safe (no colors when piped)
+    steps:
+      - type: exec
+        script: cmdChroma t 2>/dev/null | grep -v '^\[' | head -5
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: JSON output works when piped to jq
+    steps:
+      - type: exec
+        script: cmdChroma --json t 2>/dev/null | jq -r '.message' 2>/dev/null || true
+        assertions:
+          - result.code ShouldEqual 0

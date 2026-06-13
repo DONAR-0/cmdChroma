@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chroma/factory"
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
 	"github.com/DONAR-0/cmdChroma/internal"
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	config "github.com/DONAR-0/cmdChroma/internal/config"
@@ -525,22 +526,28 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 	svc := service.NewChromaService(client, embedder)
 	defer svc.Close()
 
+	// Show loading indicator in interactive mode
+	ui := output.NewUI()
+	if ui.IsInteractive() && !c.Bool("no-tui") {
+		printer.Info("Searching...")
+	}
+
 	response, err := svc.QueryDocuments(collectionName, queries, nResults)
 	if err != nil {
 		slog.Error("operation_failed", "op", opName, "collection", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
 	}
 
-	// Display results
-	fmt.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
+	// Display results using printer
+	printer.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
 
 	for i, originalQuery := range queries {
-		fmt.Printf("Query %d: %s\n", i+1, originalQuery)
-		fmt.Println(strings.Repeat("-", 60))
+		printer.Printf("Query %d: %s\n", i+1, originalQuery)
+		printer.Print(strings.Repeat("-", 60))
 
 		for j := 0; j < len(response.IDs[i]); j++ {
-			fmt.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
-			fmt.Printf("      ID: %s\n", response.IDs[i][j])
+			printer.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
+			printer.Printf("      ID: %s\n", response.IDs[i][j])
 
 			if len(response.Documents[i]) > j {
 				content := response.Documents[i][j]
@@ -548,12 +555,12 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 					content = content[:150] + "..."
 				}
 
-				fmt.Printf("      Content: %s\n\n", content)
+				printer.Printf("      Content: %s\n\n", content)
 			}
 		}
 
 		if i < len(queries)-1 {
-			fmt.Println(strings.Repeat("=", 60) + "\n")
+			printer.Print(strings.Repeat("=", 60) + "\n")
 		}
 	}
 
@@ -623,26 +630,32 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	svc := service.NewChromaService(client, embedder)
 	defer svc.Close()
 
-	// Print import info
-	fmt.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
-	fmt.Printf("   Batch size: %d\n", cfg.BatchSize)
+	// Print import info using printer
+	printer.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
+	printer.Printf("   Batch size: %d\n", cfg.BatchSize)
 
 	if cfg.Limit > 0 {
-		fmt.Printf("   Limit: %d documents\n", cfg.Limit)
+		printer.Printf("   Limit: %d documents\n", cfg.Limit)
 	}
 
-	fmt.Println()
+	printer.Print("")
 
 	startTime := time.Now()
 
 	slog.Info("Starting import", "file", safePath, "collection", collectionName)
+
+	// Show working indicator in interactive mode
+	ui := output.NewUI()
+	if ui.IsInteractive() && !c.Bool("no-tui") {
+		printer.Info("Processing...")
+	}
 
 	if err := svc.IngestRecords(collectionName, safePath, cfg); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
 
 	elapsed := time.Since(startTime)
-	fmt.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
+	printer.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
 
 	return nil
 }
