@@ -5,6 +5,7 @@ testcases:
   # ============ Config File Loading ============
 
   - name: Config file loaded from local .cmdChroma.yaml
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -27,6 +28,7 @@ testcases:
         script: rm -f .cmdChroma.yaml
 
   - name: --config flag specifies custom config file
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -49,6 +51,7 @@ testcases:
         script: rm -f custom-config.yaml
 
   - name: Config file with partial values uses defaults for missing
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -69,6 +72,7 @@ testcases:
   # ============ Precedence: CLI > Env > Config > Default ============
 
   - name: CLI flag overrides config file
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -88,6 +92,7 @@ testcases:
         script: rm -f .cmdChroma.yaml
 
   - name: Environment variable overrides config file
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -107,6 +112,7 @@ testcases:
         script: rm -f .cmdChroma.yaml
 
   - name: "Full precedence chain: default < config < env < flag"
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -130,6 +136,7 @@ testcases:
   # ============ Config File Search Locations ============
 
   - name: .cmdChroma.yaml preferred over cmdChroma.yaml
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -151,6 +158,7 @@ testcases:
         script: rm -f .cmdChroma.yaml cmdChroma.yaml
 
   - name: --config "" disables config files
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -165,6 +173,7 @@ testcases:
   # ============ Error Handling ============
 
   - name: Invalid YAML produces error
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -177,6 +186,7 @@ testcases:
         script: rm -f .cmdChroma.yaml
 
   - name: Non-existent --config file produces error
+    tags: ["integration"]
     steps:
       - type: exec
         script: ${CMDCHROMA_BIN:-cmdChroma} --log-level error --config /nonexistent/config.yaml config show

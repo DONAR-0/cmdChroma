@@ -2,12 +2,14 @@ version: "2"
 name: Test Chroma CLI - Update Records (Add with same ID)
 testcases:
   - name: Setup - create collection
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma mkColl t12_update_coll
         assertions:
           - result.code ShouldEqual 0
   - name: Add initial document
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 120
@@ -21,6 +23,7 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Successfully added 2 documents"
   - name: Update document by same ID
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 120
@@ -33,6 +36,7 @@ testcases:
           - result.code ShouldEqual 0
           - result.systemout ShouldContainSubstring "Successfully upserted 1 document"
   - name: Verify update by listing
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 60
@@ -44,6 +48,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Second doc"
           - result.systemout ShouldContainSubstring "doc-2"
   - name: cleanup
+    tags: ["integration"]
     always: true
     steps:
       - type: exec

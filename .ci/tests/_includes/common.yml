@@ -1,0 +1,12 @@
+# Common test variables
+# These can be imported by tests to avoid repetition.
+# Usage in a test file:
+#   import:
+#     - ../_includes/common.yml
+#
+# Then reference with {{.defaultHost}}, {{.defaultPort}}, etc.
+
+defaultHost: localhost
+defaultPort: 8000
+defaultTenant: default_tenant
+defaultDatabase: default_database

@@ -1,11 +1,12 @@
 version: "2"
 import:
-  - _includes/collection_required.yml
+  - ../_includes/collection_required.yml
 vars:
   subcommand: rs
 name: Test Chroma CLI - List Records
 testcases:
   - name: Setup - create collection and add a document
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info mkColl t6_testcoll
@@ -17,6 +18,7 @@ testcases:
         assertions:
           - result.code ShouldEqual 0
   - name: List Records
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info rs t6_testcoll
@@ -26,6 +28,7 @@ testcases:
           - result.systemout ShouldContainSubstring "t6_testcoll"
           - result.systemout ShouldContainSubstring "ID:"
   - name: cleanup
+    tags: ["integration"]
     always: true
     steps:
       - type: exec

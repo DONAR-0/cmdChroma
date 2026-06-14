@@ -5,6 +5,7 @@ testcases:
   # ============ Setup: Create custom tenant for testing ============
   
   - name: Setup - Ping to ensure ChromaDB is running
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t
@@ -14,6 +15,7 @@ testcases:
   # ============ Test: Create collection WITHOUT --create-db (should fail for new tenant/db) ============
 
   - name: Create collection without --create-db on nonexistent database fails
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_no_autodb --tenant test_autodb_tenant --database nonexistent_coll_db
@@ -23,6 +25,7 @@ testcases:
           - result.systemout ShouldContainSubstring "create-db"
 
   - name: Error message provides helpful hint
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_no_autodb2 --tenant test_autodb_tenant --database nonexistent_coll_db2
@@ -33,6 +36,7 @@ testcases:
   # ============ Test: Create collection WITH --create-db ============
 
   - name: Create collection with --create-db auto-creates database
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_with_autodb2 --tenant test_autodb_tenant2 --database autodb_test_db2 --create-db
@@ -41,6 +45,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Collection 'coll_with_autodb2' created"
 
   - name: Verify database was created
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error databases --tenant test_autodb_tenant2
@@ -49,6 +54,7 @@ testcases:
           - result.systemout ShouldContainSubstring "autodb_test_db2"
 
   - name: Verify collection exists in auto-created database
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error collections --tenant test_autodb_tenant2 --database autodb_test_db2
@@ -59,6 +65,7 @@ testcases:
   # ============ Test: --create-db on existing database (should work but not create duplicate) ============
 
   - name: Create collection with --create-db on existing database works
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_existing_db --tenant default_tenant --database default_database --create-db
@@ -69,6 +76,7 @@ testcases:
   # ============ Test: --create-db with all custom values ============
 
   - name: Create collection with all custom values and --create-db
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create full_custom_coll2 --tenant custom_full_tenant2 --database custom_full_db2 --create-db --host localhost --port 8000
@@ -77,6 +85,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Collection 'full_custom_coll2' created"
 
   - name: Verify full custom tenant/database were created
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error databases --tenant custom_full_tenant2
@@ -87,6 +96,7 @@ testcases:
   # ============ Test: Multiple collections in same auto-created database ============
 
   - name: Create multiple collections in same auto-created database
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create multi_coll_1a --tenant multi_coll_tenant2 --database multi_db2 --create-db
@@ -100,6 +110,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Collection 'multi_coll_2a' created"
 
   - name: Verify both collections exist in same database
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error collections --tenant multi_coll_tenant2 --database multi_db2
@@ -111,6 +122,7 @@ testcases:
   # ============ Test: --create-db via environment variable (future enhancement) ============
 
   - name: create-db flag is recognized in help
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma create --help
@@ -120,6 +132,7 @@ testcases:
 
   # ============ Cleanup ============
   - name: Cleanup - Delete test collections and databases
+    tags: ["integration"]
     always: true
     steps:
       # Collections in test_autodb_tenant/autodb_test_db

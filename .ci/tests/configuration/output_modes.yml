@@ -5,6 +5,7 @@ testcases:
   # ============ JSON Output Mode Tests ============
 
   - name: JSON mode outputs JSON structure for ping
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json t 2>/dev/null
@@ -15,6 +16,7 @@ testcases:
           - result.systemout ShouldContainSubstring 'Successfully connected'
 
   - name: JSON mode outputs valid JSON for tenant
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json cT 2>/dev/null
@@ -24,6 +26,7 @@ testcases:
           - result.systemout ShouldContainSubstring '"message"'
 
   - name: JSON mode outputs valid JSON for databases
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json dbs 2>/dev/null
@@ -33,6 +36,7 @@ testcases:
           - result.systemout ShouldContainSubstring '"rows"'
 
   - name: JSON mode outputs valid JSON for collections
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json ls 2>/dev/null
@@ -43,6 +47,7 @@ testcases:
   # ============ Quiet Mode Tests ============
 
   - name: Quiet mode suppresses INFO logs
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --quiet t 2>/dev/null
@@ -52,6 +57,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: Quiet mode still shows user output
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --quiet t 2>/dev/null
@@ -60,6 +66,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected"
 
   - name: Quiet mode shows errors to stderr
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --quiet t --port 60999 2>&1
@@ -68,6 +75,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Quiet mode with environment variable
+    tags: ["integration"]
     steps:
       - type: exec
         script: CHROMA_QUIET=true cmdChroma t 2>/dev/null
@@ -79,6 +87,7 @@ testcases:
   # ============ No Color Mode Tests ============
 
   - name: No color flag disables ANSI codes
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --no-color t
@@ -89,6 +98,7 @@ testcases:
           - result.systemout ShouldNotContainSubstring '\[9'   # No light colors (90-97)
 
   - name: No color flag still shows output
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --no-color t
@@ -97,6 +107,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected"
 
   - name: No color with environment variable
+    tags: ["integration"]
     steps:
       - type: exec
         script: CHROMA_NO_COLOR=true cmdChroma t
@@ -107,6 +118,7 @@ testcases:
   # ============ Combined Output Mode Tests ============
 
   - name: JSON mode overrides other output styles
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json --no-color t 2>/dev/null
@@ -116,6 +128,7 @@ testcases:
           - result.systemout ShouldContainSubstring '"message"'
 
   - name: Quiet and JSON can be combined
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --quiet --json t 2>/dev/null
@@ -125,6 +138,7 @@ testcases:
           - result.systemout ShouldContainSubstring '"message"'
 
   - name: No color and JSON can be combined
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --no-color --json t 2>/dev/null
@@ -136,6 +150,7 @@ testcases:
   # ============ Pipe Detection Tests ============
 
   - name: Output is pipe-safe (no colors when piped)
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma t 2>/dev/null | grep -v '^\[' | head -5
@@ -143,6 +158,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: JSON output works when piped to jq
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --json t 2>/dev/null | jq -r '.message' 2>/dev/null || true

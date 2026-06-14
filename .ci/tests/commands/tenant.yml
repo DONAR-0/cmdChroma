@@ -3,6 +3,7 @@ name: Test Chroma CLI - Get Current Tenant
 
 testcases:
   - name: Current Default_tenant should Exists
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info cT
@@ -12,6 +13,7 @@ testcases:
           - result.systemout ShouldContainSubstring "default_tenant"
           - result.systemout ShouldContainSubstring "[exists]"
   - name: Current Tenant with -tenant flag
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info cT -tenant some_tenant
@@ -22,6 +24,7 @@ testcases:
           - result.systemout ShouldContainSubstring "[not found]"
 
   - name: Current Tenant with Env Variable
+    tags: ["integration"]
     steps:
       - type: exec
         script: TENANT=some_tenant cmdChroma --log-level info cT

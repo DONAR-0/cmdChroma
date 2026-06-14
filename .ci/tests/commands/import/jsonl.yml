@@ -1,7 +1,7 @@
 version: "2"
 import:
-  - _includes/collection_required.yml
-  - _includes/file_required.yml
+  - ../_includes/collection_required.yml
+  - ../_includes/file_required.yml
 vars:
   cmdChroma: cmdChroma
   subcommand: ingest
@@ -15,6 +15,7 @@ name: Test Chroma CLI - Ingestion Records
 
 testcases:
   - name: setup_test_data
+    tags: ["integration"]
     steps:
       - type: exec
         script: {{.cmdChroma}} --log-level info create {{.collection}}
@@ -30,6 +31,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: run_ingest_with_limit
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 300
@@ -39,6 +41,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Limit reached"
 
   - name: test_generic_mapping_and_metadata
+    tags: ["integration"]
     steps:
       # Step 1: Create a mock Hugging Face style file (Nested and custom keys)
       - type: exec
@@ -73,6 +76,7 @@ testcases:
           - result.systemout ShouldContainSubstring "func main() {}"
 
   - name: cleanup
+    tags: ["integration"]
     always: true
     steps:
       - type: exec

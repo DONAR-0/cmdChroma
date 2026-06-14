@@ -5,6 +5,7 @@ testcases:
   # ============ Instance on Port 8097 ============
 
   - name: Instance A - Ping on port 8097
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8097
@@ -14,6 +15,7 @@ testcases:
           - result.systemout ShouldContainSubstring "localhost:8097"
 
   - name: Instance A - Create collection
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_port8097 --port 8097
@@ -22,6 +24,7 @@ testcases:
           - result.systemout ShouldContainSubstring "'coll_port8097' created"
 
   - name: Instance A - Verify collection exists
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8097 --port 8097
@@ -32,6 +35,7 @@ testcases:
   # ============ Instance on Port 8098 ============
 
   - name: Instance B - Ping on port 8098
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8098
@@ -41,6 +45,7 @@ testcases:
           - result.systemout ShouldContainSubstring "localhost:8098"
 
   - name: Instance B - Create collection (same name, different instance)
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_port8098 --port 8098
@@ -49,6 +54,7 @@ testcases:
           - result.systemout ShouldContainSubstring "'coll_port8098' created"
 
   - name: Instance B - Verify collection exists
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8098 --port 8098
@@ -59,6 +65,7 @@ testcases:
   # ============ Instance on Port 8099 ============
 
   - name: Instance C - Ping on port 8099
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8099
@@ -68,6 +75,7 @@ testcases:
           - result.systemout ShouldContainSubstring "localhost:8099"
 
   - name: Instance C - Create collection
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error create coll_port8099 --port 8099
@@ -76,6 +84,7 @@ testcases:
           - result.systemout ShouldContainSubstring "'coll_port8099' created"
 
   - name: Instance C - Verify collection exists
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8099 --port 8099
@@ -86,6 +95,7 @@ testcases:
   # ============ Isolation Verification ============
 
   - name: Verify collections are isolated between instances
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8097 --port 8097
@@ -96,6 +106,7 @@ testcases:
           - result.systemout ShouldNotContainSubstring "coll_port8099"
 
   - name: Instance A does not have B's collection
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8098 --port 8097
@@ -103,6 +114,7 @@ testcases:
           - result.code ShouldNotEqual 0
 
   - name: Instance B does not have A's collection
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error records coll_port8097 --port 8098
@@ -112,6 +124,7 @@ testcases:
   # ============ Multiple Operations on Different Instances ============
 
   - name: Ping multiple instances with different tenants
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8097 --tenant tenant_a
@@ -125,6 +138,7 @@ testcases:
           - result.systemout ShouldContainSubstring "tenant_b"
 
   - name: Verify tenant isolation across instances
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8097 --tenant tenant_a
@@ -139,6 +153,7 @@ testcases:
 
   # ============ Cleanup ============
   - name: Cleanup - Delete all test collections
+    tags: ["integration"]
     always: true
     steps:
       - type: exec

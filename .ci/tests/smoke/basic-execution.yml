@@ -3,6 +3,7 @@ name: Test Chroma CLI - Successful Connection
 
 testcases:
   - name: Chroma t
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info t
@@ -11,6 +12,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
   - name: Chroma test
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info test
@@ -21,6 +23,7 @@ testcases:
           - result.systemout ShouldContainSubstring "default_tenant"
 
   - name: Chroma test global tenant flag
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info test -tenant some_tenant
@@ -30,6 +33,7 @@ testcases:
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
   - name: Chroma test global tenant flag with environment variable
+    tags: ["integration"]
     steps:
       - type: exec
         script: TENANT=some_tenant cmdChroma --log-level info test
@@ -39,6 +43,7 @@ testcases:
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
   - name: Chroma test global tenant and database flag with environment variable
+    tags: ["integration"]
     steps:
       - type: exec
         script: TENANT=some_tenant DATABASE=some_database cmdChroma --log-level info test
@@ -50,6 +55,7 @@ testcases:
           - result.systemout ShouldContainSubstring "some_database"
 
   - name: Chroma test global database flag
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info test -tenant some_tenant -database some_database

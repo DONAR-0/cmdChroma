@@ -1,0 +1,20 @@
+# Standard success assertion sets
+# These are examples; tests can import and reference these patterns.
+#
+# Example usage (hypothetical):
+#   testcases:
+#     - name: Example
+#       steps:
+#         - type: exec
+#           script: cmdChroma t
+#           assertions:
+#             - *success_code
+#
+# However, Venom YAML anchoring syntax may vary.
+
+success_code: &success_code
+  result.code ShouldEqual 0
+
+connection_success: &connection_success
+  result.code ShouldEqual 0
+  result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"

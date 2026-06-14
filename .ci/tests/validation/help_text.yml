@@ -4,6 +4,7 @@ name: Test Help Text and Descriptions
 testcases:
   # Test root command help displays the new AppDescription
   - name: Root help displays AppDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --help
@@ -24,6 +25,7 @@ testcases:
 
   # Test ping command help displays PingCmdDescription
   - name: Ping command help displays PingCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma ping --help
@@ -39,6 +41,7 @@ testcases:
 
   # Test tenant command help displays TenantCmdDescription
   - name: Tenant command help displays TenantCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma tenant --help
@@ -53,6 +56,7 @@ testcases:
 
   # Test databases command help displays DatabasesCmdDescription
   - name: Databases command help displays DatabasesCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma databases --help
@@ -66,6 +70,7 @@ testcases:
 
   # Test collections command help displays CollectionsCmdDescription
   - name: Collections command help displays CollectionsCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma collections --help
@@ -79,6 +84,7 @@ testcases:
 
   # Test create command help displays CreateCollectionCmdDescription
   - name: Create command help displays CreateCollectionCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma create --help
@@ -92,6 +98,7 @@ testcases:
 
   # Test delete command help displays DeleteCollectionCmdDescription
   - name: Delete command help displays DeleteCollectionCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma delete --help
@@ -104,6 +111,7 @@ testcases:
 
   # Test records command help displays RecordsCmdDescription
   - name: Records command help displays RecordsCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma records --help
@@ -118,6 +126,7 @@ testcases:
 
   # Test add command help displays AddCmdDescription
   - name: Add command help displays AddCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma add --help
@@ -133,6 +142,7 @@ testcases:
 
   # Test query command help displays QueryCmdDescription
   - name: Query command help displays QueryCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma query --help
@@ -148,6 +158,7 @@ testcases:
 
   # Test import command help displays ImportCmdDescription (supports JSONL and Parquet)
   - name: Import command help displays ImportCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma import --help
@@ -166,6 +177,7 @@ testcases:
 
   # Test chat command help displays ChatCmdDescription
   - name: Chat command help displays ChatCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma chat --help
@@ -182,6 +194,7 @@ testcases:
 
   # Test delete-records command help displays DeleteRecordsCmdDescription
   - name: Delete-records command help displays DeleteRecordsCmdDescription
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma delete-records --help
@@ -196,6 +209,7 @@ testcases:
 
   # Verify all main commands are listed in root help
   - name: All commands have descriptions in root help
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --help

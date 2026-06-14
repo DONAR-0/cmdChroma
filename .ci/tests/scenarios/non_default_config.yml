@@ -5,6 +5,7 @@ testcases:
   # ============ Custom Port Tests ============
 
   - name: Ping with custom port 8099
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host localhost --port 8099
@@ -13,6 +14,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
 
   - name: Ping with custom port 8097
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8097
@@ -21,6 +23,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
 
   - name: Ping with custom port 8098
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --port 8098
@@ -31,6 +34,7 @@ testcases:
   # ============ Custom Host Tests ============
 
   - name: Ping with IP address 127.0.0.1
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host 127.0.0.1
@@ -39,6 +43,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
 
   - name: Ping with IP address 0.0.0.0
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host 0.0.0.0 --port 8099
@@ -46,6 +51,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: Ping with localhost
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host localhost --port 8000
@@ -55,6 +61,7 @@ testcases:
   # ============ Custom Host + Port Combinations ============
 
   - name: Ping with custom host and port together
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host localhost --port 8099
@@ -63,6 +70,7 @@ testcases:
           - result.systemout ShouldContainSubstring "localhost:8099"
 
   - name: Ping with IP and non-default port
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host 127.0.0.1 --port 8097
@@ -72,6 +80,7 @@ testcases:
   # ============ Connection Error Tests ============
 
   - name: Connection refused on invalid port
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 15
@@ -81,6 +90,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on closed port
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 15
@@ -90,6 +100,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on invalid host
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host doesnotexist.invalid --timeout 3
@@ -100,6 +111,7 @@ testcases:
   # ============ Tenant/Database Display Tests ============
 
   - name: Display shows correct host and port
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host localhost --port 8099
@@ -108,6 +120,7 @@ testcases:
           - result.systemout ShouldContainSubstring "localhost:8099"
 
   - name: Display shows IP and port
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level error t --host 127.0.0.1 --port 8097

@@ -8,15 +8,17 @@ vars:
 
 testcases:
   - name: Setup test data (generate Parquet file)
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
           # Generate the Parquet file for testing
-          go run ../../.ci/scripts/generate_parquet.go
+          go run ../../../scripts/generate_parquet.go
         assertions:
           - result.code ShouldEqual 0
 
   - name: Create collection for Parquet import
+    tags: ["integration"]
     steps:
       - type: exec
         script: "{{.cmdChroma}} --log-level info create {{.test_collection}}"
@@ -25,6 +27,7 @@ testcases:
           - result.systemout ShouldContainSubstring "'{{.test_collection}}' created"
 
   - name: Import Parquet file with all-metadata
+    tags: ["integration"]
     steps:
       - type: exec
         timeout: 300
@@ -39,6 +42,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Import completed"
 
   - name: Verify record count matches Parquet file
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -52,6 +56,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: Verify metadata presence
+    tags: ["integration"]
     steps:
       - type: exec
         script: |
@@ -60,6 +65,7 @@ testcases:
           - result.code ShouldEqual 0
 
   - name: Cleanup test collection
+    tags: ["integration"]
     always: true
     steps:
       - type: exec

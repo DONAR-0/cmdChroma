@@ -1,0 +1,123 @@
+version: "2"
+name: Test Chroma CLI - Collections
+
+testcases:
+  - name: Create Collection Error if no collectionName not given
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info mkColl
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "collection name is required"
+  - name: Create Collection Successful
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info mkColl t4_coll1
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "'t4_coll1' created"
+          - result.systemout ShouldContainSubstring "t4_coll1"
+  - name: Create Another Collection
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info mkColl t4_coll2
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "'t4_coll2' created"
+          - result.systemout ShouldContainSubstring "t4_coll2"
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info delete t4_coll1 || true
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma --log-level info delete t4_coll2 || true
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Setup - create test collections
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info mkColl t5_collA
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma --log-level info mkColl t5_collB
+        assertions:
+          - result.code ShouldEqual 0
+  - name: List Collections using collections command
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info collections
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: List Collections using alias ls
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info ls
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: List Collections using alias ls-colls
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info ls-colls
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t5_collA"
+          - result.systemout ShouldContainSubstring "t5_collB"
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info delete t5_collA || true
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma --log-level info delete t5_collB || true
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Setup - create collection
+    steps:
+      - type: exec
+        script: cmdChroma mkColl t11_del_test
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: cmdChroma collections
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "t11_del_test"
+  - name: Delete collection
+    steps:
+      - type: exec
+        script: cmdChroma delete t11_del_test
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Collection 't11_del_test' deleted"
+      - type: exec
+        script: cmdChroma collections
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "t11_del_test"
+  - name: Delete non-existent collection
+    steps:
+      - type: exec
+        script: cmdChroma delete t11_nonexistent
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "collection 't11_nonexistent' not found"
+  - name: cleanup
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma delete t11_del_test || true
+        assertions:
+          - result.code ShouldEqual 0
+

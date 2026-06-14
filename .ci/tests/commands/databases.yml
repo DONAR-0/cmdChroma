@@ -3,6 +3,7 @@ name: Test Chroma CLI - List Databases
 
 testcases:
   - name: dbs should work
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info dbs
@@ -11,6 +12,7 @@ testcases:
           - result.systemout ShouldContainSubstring "Listing databases"
           - result.systemout ShouldContainSubstring "default_database"
   - name: ls-dbs should work
+    tags: ["integration"]
     steps:
       - type: exec
         script: cmdChroma --log-level info ls-dbs
