@@ -1,5 +1,9 @@
 package config
 
+// Package config provides configuration management for cmdChroma.
+// It handles loading configuration from multiple sources (CLI flags, environment
+// variables, YAML files) with well-defined precedence. The main entry point
+// is LoadConfig, which merges all sources into a RuntimeConfig.
 import (
 	"errors"
 	"fmt"

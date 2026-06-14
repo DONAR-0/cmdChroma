@@ -1,5 +1,9 @@
 package ingest
 
+// Package ingest provides streaming ingestion of documents from files (JSONL, Parquet)
+// into ChromaDB. It handles parsing, embedding generation, and batch uploads with
+// progress tracking. The package is designed for memory-efficient processing of
+// large datasets via Go channels.
 import (
 	"bufio"
 	"crypto/sha256"
@@ -18,21 +22,38 @@ import (
 
 // ============ Data Types ============
 
+// Record represents a document to be ingested, with id, content, and optional metadata.
 type Record struct {
-	ID       string
-	Content  string
+	// ID is the unique identifier for the document.
+	ID string
+	// Content is the text content to embed and store.
+	Content string
+	// Metadata holds arbitrary key-value pairs for filtering and annotations.
 	Metadata map[string]any
 }
 
+// Config controls the ingestion pipeline behavior.
 type Config struct {
-	BatchSize      int
-	ContentField   string
-	IDField        string
+	// BatchSize is the number of documents sent per HTTP request.
+	// Larger batches reduce overhead but increase memory usage.
+	BatchSize int
+	// ContentField specifies the JSON field containing document text.
+	// Defaults to "text" if empty.
+	ContentField string
+	// IDField specifies the JSON field to use as document ID.
+	// Defaults to "id" if empty.
+	IDField string
+	// MetadataFields lists specific fields to extract as metadata.
+	// If empty and AllMetadata is false, no metadata is extracted.
 	MetadataFields []string // specific fields to extract
-	AllMetadata    bool     // extract all fields except content/id
-	Limit          int      // max records to ingest, 0 = unlimited
+	// AllMetadata, when true, extracts all JSON fields except ContentField and IDField.
+	AllMetadata bool // extract all fields except content/id
+	// Limit restricts the maximum number of records to ingest.
+	// Zero means no limit.
+	Limit int // max records to ingest, 0 = unlimited
 }
 
+// Processor handles the ingestion workflow: reading, parsing, embedding, and uploading.
 type Processor struct {
 	cfg *Config
 }

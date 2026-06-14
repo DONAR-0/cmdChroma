@@ -1,4 +1,3 @@
-# Multi-stage build for cmdChroma
 # Stage 1: Build binary with dependencies
 FROM golang:1.25.7-bookworm AS builder
 
@@ -21,7 +20,7 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Download models (same as .ci/scripts/setup.sh)
+# Download models and structure paths clearly
 RUN mkdir -p models/all-MiniLM-L6-v2 && \
     mkdir -p models/onnx_runtime/lib && \
     curl -L "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx" \
@@ -30,22 +29,22 @@ RUN mkdir -p models/all-MiniLM-L6-v2 && \
       -o models/all-MiniLM-L6-v2/tokenizer.json && \
     curl -L "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-x64-1.24.2.tgz" \
       -o onnxruntime.tgz && \
-    tar -xzf onnxruntime.tgz -C models/onnx_runtime --strip-components=1 && \
-    rm onnxruntime.tgz
+    tar -xzf onnxruntime.tgz -C /tmp && \
+    cp /tmp/onnxruntime-linux-x64-*/lib/libonnxruntime.so.1.24.2 models/onnx_runtime/lib/libonnxruntime.so.1 && \
+    # FIX: Added '-sf' to force overwrite the symlink if it was copied from your host machine
+    ln -sf libonnxruntime.so.1 models/onnx_runtime/lib/libonnxruntime.so && \
+    rm -rf onnxruntime.tgz /tmp/onnxruntime-linux-x64-*
 
-# Build the binary with RPATH support and tokenizers linking
-# - RPATH: $ORIGIN/../models/onnx_runtime/lib:$ORIGIN/../models/tokenizerLib
-#   This expects the binary to be located in a subdirectory of the app root (e.g., /app/bin)
-#   so that ../models points to the models directory.
+# Build the binary using explicit host linker RPATH configs to prevent Go's $ORIGIN truncation bugs
 RUN CGO_ENABLED=1 \
     GOOS=linux \
     GOARCH=amd64 \
-    CGO_LDFLAGS="-L$(pwd)/tokenizerLib -ltokenizers -lstdc++" \
-    go build -ldflags="-r '$$ORIGIN/../models/onnx_runtime/lib:$$ORIGIN/../models/tokenizerLib'" \
-    -o cmdChroma ./cmd/chroma
+    CGO_LDFLAGS="-L/build/tokenizerLib -L/build/models/onnx_runtime/lib -ltokenizers -lstdc++ -Wl,-rpath='\$ORIGIN/../models/tokenizerLib:\$ORIGIN/../models/onnx_runtime/lib'" \
+    go build -o cmdChroma ./cmd/chroma
 
-# Stage 2: Runtime image
-FROM debian:bullseye-slim
+
+# Stage 2: Runtime image (Bookworm-slim matches builder GLIBC)
+FROM debian:bookworm-slim
 
 # Install runtime dependencies for ONNX and tokenizers
 RUN apt-get update && apt-get install -y \
@@ -55,28 +54,24 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Create bin directory and copy binary from builder
-RUN mkdir -p /app/bin
+# Rebuild expected layout
+RUN mkdir -p /app/bin /app/models
+
+# Copy assets cleanly from builder
 COPY --from=builder /build/cmdChroma /app/bin/cmdChroma
-
-# Copy models (ONNX model, tokenizer, ONNX runtime library)
 COPY --from=builder /build/models/ /app/models/
+COPY --from=builder /build/tokenizerLib/ /app/models/tokenizerLib/
 
-# Create symlink for ONNX runtime library compatibility (some distros have .so.1)
-RUN ln -s /app/models/onnx_runtime/lib/libonnxruntime.so.1 /app/models/onnx_runtime/lib/libonnxruntime.so || true
-
-# Create non-root user for security
+# Secure non-root context
 RUN useradd -m -u 1000 cmdchroma && \
     chown -R cmdchroma:cmdchroma /app
 USER cmdchroma
 
-# Expose port for Chroma server (when used as server)
 EXPOSE 8000
 
-# Health check (verify binary runs)
+# Health check validation
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD /app/bin/cmdChroma --version || exit 1
 
-# Default entrypoint
 ENTRYPOINT ["/app/bin/cmdChroma"]
 CMD ["--help"]

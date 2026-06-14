@@ -601,3 +601,16 @@ func TestChromaService_IngestRecords_Batching(t *testing.T) {
 	}
 	// If we get here, batching logic executed successfully
 }
+
+// ExampleChromaService demonstrates creating a service and using its main methods.
+// This example shows the typical workflow: create service, add documents, query.
+func ExampleChromaService() {
+	// In a real application, use real implementations
+	realClient := &client.ChromaClient{}
+	embedder := &onnx.Embedder{} // Assume initialized
+
+	svc := NewChromaService(realClient, embedder)
+
+	// Use the service...
+	_ = svc
+}

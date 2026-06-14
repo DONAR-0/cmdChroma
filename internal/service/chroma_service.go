@@ -1,5 +1,10 @@
 package service
 
+// Package service implements the business logic layer for cmdChroma.
+// It orchestrates client operations, manages embedding generation, and
+// provides high-level operations (add, query, ingest) that combine multiple
+// client calls. The service layer is where transaction boundaries, batching,
+// and error handling policies are defined.
 import (
 	"fmt"
 	"log/slog"
@@ -14,14 +19,22 @@ import (
 // ============ Service Definition ============
 
 // ChromaService handles business logic for ChromaDB operations.
+// It coordinates between the client (HTTP API) and embedder (vector generation)
+// to provide high-level operations like AddDocuments, QueryDocuments, and IngestRecords.
 type ChromaService struct {
-	client   client.ChromaClientInterface
+	// client is the underlying ChromaDB HTTP client. Must be non-nil.
+	client client.ChromaClientInterface
+	// embedder is used to generate embeddings for documents and queries.
+	// Must be non-nil for operations that require embeddings.
 	embedder onnx.EmbedderInterface
 }
 
-// ============ Constructor ============
-
 // NewChromaService creates a new service with the given client and embedder.
+// The embedder is automatically injected into the client via SetEmbedder,
+// enabling the client to perform embedding operations directly.
+//
+// Both c and e must be non-nil for full functionality. Passing a nil embedder
+// will cause methods that require embeddings to return errors.
 func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
 	slog.Info("Creating ChromaService",
 		"client_type", fmt.Sprintf("%T", c),

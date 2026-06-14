@@ -1,5 +1,8 @@
 package errors
 
+// Package errors defines canonical error variables for cmdChroma.
+// Using named errors allows callers to check for specific failure modes
+// via errors.Is. The package also provides convenience wrappers for errors.Is/As.
 import "errors"
 
 var (

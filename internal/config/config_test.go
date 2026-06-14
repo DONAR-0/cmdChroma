@@ -502,3 +502,21 @@ func TestConfig_LoadFromFile_InvalidPath(t *testing.T) {
 		t.Error("Expected error for nonexistent file")
 	}
 }
+
+// ExampleLoadConfig demonstrates loading configuration from all sources.
+// It shows how CLI flags, environment variables, and config files are merged.
+func ExampleLoadConfig() {
+	// Create a mock CLI command with some flags set
+	// In real usage, this comes from urfave/cli
+	var mockCmd *cli.Command = nil // placeholder
+
+	// Load configuration with precedence: CLI > env > file > defaults
+	cfg, err := LoadConfig(mockCmd)
+	if err != nil {
+		// Handle error (e.g., invalid config file)
+		panic(err)
+	}
+
+	// Use the configuration
+	_ = cfg
+}

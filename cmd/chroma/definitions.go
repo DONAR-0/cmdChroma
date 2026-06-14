@@ -97,6 +97,7 @@ func createApp() *cli.Command {
 			importCommand,
 			chatCommand,
 			configCommand,
+			doctorCommand,
 		},
 
 		// Default action when no command is provided: show help
@@ -640,6 +641,20 @@ var configCommand = &cli.Command{
 				},
 			},
 			Action: handleConfigInit,
+		},
+	},
+}
+
+// doctorCommand runs diagnostic checks on the environment.
+var doctorCommand = &cli.Command{
+	Name:        "doctor",
+	Usage:       "Diagnose installation and configuration issues",
+	Description: DoctorCmdDescription,
+	Action:      handleDoctor,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "output",
+			Usage: "Write diagnostic report to file (default: stdout)",
 		},
 	},
 }
