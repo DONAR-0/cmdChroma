@@ -140,3 +140,32 @@ func TestEmbedder_EmbedDocuments_Parallel(t *testing.T) {
 		}
 	}
 }
+
+// ExampleNewEmbedder demonstrates creating an embedder and generating a simple embedding.
+func ExampleNewEmbedder() {
+	// This example assumes model files are in the standard location.
+	// In practice, use paths from your environment or configuration.
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizersPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libpath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	emb, err := NewEmbedder(modelPath, tokenizersPath, libpath)
+	if err != nil {
+		// Handle error (in production code)
+		panic(err)
+	}
+	defer emb.Close()
+
+	// Generate an embedding for a single text
+	vec, err := emb.Embed("Hello, world!")
+	if err != nil {
+		panic(err)
+	}
+
+	_ = vec
+	// fmt.Printf("Embedding length: %d\n", len(vec))
+}

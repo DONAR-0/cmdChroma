@@ -1,5 +1,9 @@
 package client
 
+// Package client provides an HTTP client for interacting with ChromaDB's
+// REST API. It handles request construction, authentication, response
+// unmarshaling, and error handling. The client is designed to be safe
+// for concurrent use by multiple goroutines.
 import (
 	"bytes"
 	"context"
@@ -35,28 +39,84 @@ var (
 // ============ Core Types ============
 
 type (
+	// ChromaClient is the concrete implementation of ChromaClientInterface.
+	// It manages HTTP communication with a ChromaDB server and supports
+	// dependency injection of an embedder for document operations.
+	// Clients are safe for concurrent use by multiple goroutines.
 	ChromaClient struct {
-		URL, Tenant, Database string
-		client                *http.Client
-		Embedder              onnx.EmbedderInterface
+		// URL is the base API endpoint (e.g., "http://localhost:8000").
+		// Must include scheme (http:// or https://) and port if non-standard.
+		URL string
+
+		// Tenant is the tenant name for all requests. This is the logical
+		// isolation unit in ChromaDB. Defaults to "default_tenant".
+		Tenant string
+
+		// Database is the database name within the tenant. Defaults to
+		// "default_database".
+		Database string
+
+		// client is the underlying HTTP client with configured timeout.
+		client *http.Client
+
+		// Embedder is injected by the service layer via SetEmbedder.
+		// It must be non-nil before performing document add/query operations.
+		Embedder onnx.EmbedderInterface
 	}
 
+	// ChromaClientInterface defines the contract for ChromaDB clients.
+	// Implementations must be safe for concurrent use and respect context
+	// cancellation for all blocking operations.
 	ChromaClientInterface interface {
+		// TestConnection verifies connectivity to the ChromaDB server.
+		// Returns nil if the server responds successfully.
 		TestConnection() error
+
+		// GetTenant checks whether the configured tenant exists.
+		// Returns (true, nil) if tenant exists, (false, nil) if not found,
+		// or (false, error) on failure.
 		GetTenant() (bool, error)
+
+		// ListDatabases returns all databases accessible to the current tenant.
 		ListDatabases() ([]Database, error)
+
+		// CreateDatabase creates a new database in the current tenant.
 		CreateDatabase(name string) error
+
+		// ListCollections returns all collections in the current database.
 		ListCollections() ([]Collection, error)
+
+		// CreateCollection creates a new collection and returns its ID.
 		CreateCollection(name string) (string, error)
+
+		// AddBatch uploads documents with IDs (legacy, no metadata).
 		AddBatch(collectionID string, docs []string, ids []string) error
+
+		// AddBatchGeneric uploads documents with optional metadata.
 		AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+
+		// UpsertBatchGeneric adds or updates documents with metadata.
 		UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+
+		// QueryBatch performs similarity search and returns matching documents.
 		QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
+
+		// GetIDByName resolves a collection name to its ID.
 		GetIDByName(name string) (string, error)
+
+		// ListDocuments retrieves documents from a collection with optional filtering.
 		ListDocuments(collectionID string) (*GetRecordsResponse, error)
+
+		// ResolveCollectionID accepts either a collection name or ID and returns the ID.
 		ResolveCollectionID(input string) (string, error)
+
+		// DeleteCollection removes a collection and all its data.
 		DeleteCollection(name string) error
+
+		// DeleteRecords removes specific documents by ID from a collection.
 		DeleteRecords(collectionID string, ids []string) error
+
+		// SetEmbedder injects the embedding engine for document operations.
 		SetEmbedder(e onnx.EmbedderInterface)
 	}
 )

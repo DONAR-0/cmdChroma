@@ -1,5 +1,13 @@
 package onnx
 
+// Package onnx provides local embedding generation using ONNX Runtime.
+// It loads pre-trained transformer models and performs tokenization + inference
+// to transform text into vector embeddings. The package supports concurrent
+// use via configurable worker pools and is designed for high-throughput
+// batch processing.
+//
+// The standard model is all-MiniLM-L6-v2, which produces 384-dimensional
+// embeddings optimized for semantic similarity.
 import (
 	"context"
 	"fmt"
@@ -31,13 +39,38 @@ func WithNumWorkers(n int) EmbedderOption {
 	return func(e *Embedder) { e.numWorkers = n }
 }
 
+// Embedder generates vector embeddings for text using an ONNX model.
+// It is safe for concurrent use by multiple goroutines. The embedder
+// maintains an ONNX runtime session and a tokenizer instance.
 type Embedder struct {
-	session    *ort.DynamicAdvancedSession
-	tokenizer  *tokenizers.Tokenizer
+	// session is the ONNX runtime session for model inference.
+	// It is initialized once and reused for all embeddings.
+	session *ort.DynamicAdvancedSession
+
+	// tokenizer converts raw text into token IDs for the model.
+	// Loaded from a tokenizer.json file.
+	tokenizer *tokenizers.Tokenizer
+
+	// numWorkers controls parallelism in EmbedDocuments. When processing
+	// multiple texts, this many workers run concurrently. Defaults to
+	// runtime.NumCPU() if not set via WithNumWorkers.
 	numWorkers int
 }
 
-// Embedder initialize the dictionary and the brain
+// NewEmbedder creates an Embedder instance with the given model, tokenizer,
+// and ONNX runtime library. It initializes the ONNX environment and loads
+// the model into memory. This operation is expensive; create one embedder
+// and reuse it for multiple texts.
+//
+// Parameters:
+//   - modelPath: Path to the model.onnx file
+//   - tokenizersPath: Path to the tokenizer.json file
+//   - libpath: Path to libonnxruntime.so (ONNX Runtime shared library)
+//   - opts: Optional configuration (e.g., WithNumWorkers)
+//
+// Returns:
+//   - *Embedder: Ready to use embedder
+//   - error: If model loading, tokenizer loading, or ONNX initialization fails
 func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOption) (*Embedder, error) {
 	//1. Setup the ONNX Library
 	ort.SetSharedLibraryPath(libpath)
@@ -71,7 +104,15 @@ func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOpti
 	return e, nil
 }
 
-// Embed converts text into a 384-dimmension vector
+// Embed converts a single text into a 384-dimensional vector embedding.
+// The text is tokenized, run through the ONNX model, and pooled to produce
+// a single vector representing the semantic meaning of the text.
+//
+// This method is safe for concurrent use.
+//
+// Returns:
+//   - []float32: 384-dimensional embedding (first 384 values from model output)
+//   - error: If tokenization or inference fails
 func (e *Embedder) Embed(text string) ([]float32, error) {
 	// Step A: Tokenize (Text -> IDs)
 	ids, _ := e.tokenizer.Encode(text, true)
@@ -113,6 +154,19 @@ func (e *Embedder) Embed(text string) ([]float32, error) {
 	return outT.GetData()[:384], nil
 }
 
+// EmbedDocuments generates embeddings for multiple texts efficiently.
+// It automatically chooses between sequential and parallel processing:
+//   - If len(texts) < numWorkers: sequential (lower overhead)
+//   - Otherwise: parallel using a worker pool of size numWorkers
+//
+// The order of returned embeddings matches the input order.
+//
+// The context is used for cancellation; if cancelled, partial results may
+// be returned along with the context error.
+//
+// Returns:
+//   - [][]float32: Slice of embeddings, each with 384 dimensions
+//   - error: Nil if all texts embedded successfully; non-nil if any fails
 func (e *Embedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return [][]float32{}, nil
@@ -195,6 +249,9 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 	return results, nil
 }
 
+// Close releases all resources held by the embedder, including the tokenizer
+// and ONNX runtime session. It is safe to call Close multiple times.
+// After Close, the embedder should not be used for further embedding operations.
 func (e *Embedder) Close() {
 	MustClose(e.tokenizer.Close)
 	MustClose(e.session.Destroy)

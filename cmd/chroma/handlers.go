@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -983,4 +984,83 @@ func toStringRows(dbs []client.Database) [][]string {
 	}
 
 	return rows
+}
+
+// handleDoctor runs diagnostic checks and reports system status.
+func handleDoctor(_ context.Context, c *cli.Command) error {
+	// Header
+	printer.Print("🔍 Running diagnostics...")
+	printer.Print(strings.Repeat("=", 60))
+	printer.Print("")
+
+	// 1. Show configuration
+	printer.Info("Configuration:")
+	printer.Printf("  Host: %s\n", c.String("host"))
+	printer.Printf("  Port: %s\n", c.String("port"))
+	printer.Printf("  Tenant: %s\n", c.String("tenant"))
+	printer.Printf("  Database: %s\n", c.String("database"))
+	printer.Print("")
+
+	// 2. Check model files
+	printer.Info("Checking model files...")
+
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizerPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libPath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	checkFile := func(path, desc string) {
+		if _, err := os.Stat(path); err == nil {
+			printer.Success("  ✓ %s: present", desc)
+		} else {
+			printer.Error("  ✗ %s: NOT FOUND (%s)", desc, path)
+		}
+	}
+
+	checkFile(modelPath, "Model file (model.onnx)")
+	checkFile(tokenizerPath, "Tokenizer (tokenizer.json)")
+	checkFile(libPath, "ONNX Runtime library (libonnxruntime.so.1)")
+	printer.Print("")
+
+	// 3. Environment variables
+	printer.Info("Environment variables:")
+
+	if os.Getenv("NVIDIA_API_KEY") != "" {
+		printer.Success("  ✓ NVIDIA_API_KEY is set")
+	} else {
+		printer.Warn("  ⚠ NVIDIA_API_KEY not set (only needed for NVIDIA NIM)")
+	}
+
+	printer.Print("")
+
+	// 4. ChromaDB connectivity
+	printer.Info("Testing ChromaDB connectivity...")
+
+	f := factory.NewServiceFactory()
+
+	client, err := f.CreateChromaClient(c)
+	if err != nil {
+		printer.Error("  ✗ Failed to create client: %v", err)
+	} else {
+		if err := client.TestConnection(); err != nil {
+			printer.Error("  ✗ Connection failed: %v", err)
+		} else {
+			printer.Success("  ✓ Successfully connected to ChromaDB")
+		}
+	}
+
+	printer.Print("")
+
+	// Summary
+	printer.Print(strings.Repeat("=", 60))
+	printer.Success("Diagnostics complete!")
+
+	if outPath := c.String("output"); outPath != "" {
+		printer.Info("Note: --output flag not yet implemented; report shown above")
+	}
+
+	return nil
 }

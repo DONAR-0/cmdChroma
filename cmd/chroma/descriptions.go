@@ -255,4 +255,23 @@ EXAMPLES:
 
   # Retrieve more context for complex questions
   chroma chat my_collection "Explain in detail" --n-results 10`
+
+	// DoctorCmdDescription runs diagnostics to verify the installation and configuration.
+	DoctorCmdDescription = `Check your cmdChroma setup and configuration.
+
+This command performs a health check of your environment:
+  • Verifies ChromaDB server connectivity
+  • Checks for required model files and ONNX runtime library
+  • Validates configuration (host, port, tenant, database)
+  • Inspects relevant environment variables
+
+Use this to troubleshoot setup issues or verify everything is ready.
+
+EXAMPLES:
+  # Run diagnostics
+  chroma doctor
+
+  # Save full report to a file
+  chroma doctor --output doctor-report.txt
+`
 )
