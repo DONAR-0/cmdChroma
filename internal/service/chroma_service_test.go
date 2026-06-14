@@ -8,6 +8,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	internalErrors "github.com/DONAR-0/cmdChroma/internal/errors"
 	ingest "github.com/DONAR-0/cmdChroma/internal/ingest"
+	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"os"
 )
 
@@ -20,6 +21,8 @@ type mockChromaClient struct {
 	listDatabasesErr          error
 	listCollectionsResult     []client.Collection
 	listCollectionsErr        error
+	listDocumentsResult       *client.GetRecordsResponse
+	listDocumentsErr          error
 	addBatchErr               error
 	addBatchGenericErr        error
 	upsertBatchGenericErr     error
@@ -74,6 +77,10 @@ func (m *mockChromaClient) ResolveCollectionID(input string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
 
+func (m *mockChromaClient) ListDocuments(collectionID string) (*client.GetRecordsResponse, error) {
+	return m.listDocumentsResult, m.listDocumentsErr
+}
+
 func (m *mockChromaClient) DeleteCollection(name string) error {
 	return m.deleteCollectionErr
 }
@@ -85,6 +92,12 @@ func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) erro
 func (m *mockChromaClient) CreateDatabase(name string) error {
 	return m.createDatabaseErr
 }
+
+func (m *mockChromaClient) CreateCollection(name string) (string, error) {
+	return "test-collection-id", nil
+}
+
+func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {}
 
 type mockEmbedder struct{}
 

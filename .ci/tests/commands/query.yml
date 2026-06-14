@@ -1,0 +1,40 @@
+version: "2"
+name: Test Chroma CLI - Query Records
+testcases:
+  - name: Setup - create collection and add documents
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info mkColl t8_testcoll
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        timeout: 120
+        script: |
+          cmdChroma --log-level info a t8_testcoll \
+            -d "The quick brown fox jumps over the lazy dog" \
+            -d "Go is an open source programming language" \
+            -d "ChromaDB is a vector database for AI applications"
+        assertions:
+          - result.code ShouldEqual 0
+  - name: Query Collection
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 60
+        script: cmdChroma --log-level info q t8_testcoll --query "How do I add records?"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Loading AI embedding engine"
+          - result.systemout ShouldContainSubstring "Search results for collection"
+          - result.systemout ShouldContainSubstring "Query 1:"
+          - result.systemout ShouldContainSubstring "Distance:"
+          - result.systemout ShouldContainSubstring "Content:"
+  - name: cleanup
+    tags: ["integration"]
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info delete t8_testcoll || true
+        assertions:
+          - result.code ShouldEqual 0

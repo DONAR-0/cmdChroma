@@ -1,0 +1,5 @@
+# JSON validation patterns
+
+valid_json_structure: &valid_json_structure
+  result.systemout ShouldMatchRegex '^\s*\{\s*"'
+  result.systemout ShouldMatchRegex '\}\s*$'

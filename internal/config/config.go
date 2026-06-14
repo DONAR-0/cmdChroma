@@ -11,8 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds all configuration for cmdChroma.
-type Config struct {
+// RuntimeConfig holds all configuration for cmdChroma.
+type RuntimeConfig struct {
 	Chroma  ChromaConfig
 	Model   ModelConfig
 	Logging LoggingConfig
@@ -134,7 +134,7 @@ func findConfigFile() (string, error) {
 }
 
 // applyFileConfig copies values from config file, only if field is non-zero
-func (cfg *Config) applyFileConfig(f *ConfigFile) {
+func (cfg *RuntimeConfig) applyFileConfig(f *ConfigFile) {
 	if f.Chroma.Host != "" {
 		cfg.Chroma.Host = f.Chroma.Host
 	}
@@ -181,7 +181,7 @@ func (cfg *Config) applyFileConfig(f *ConfigFile) {
 }
 
 // applyEnvVars overlays environment variables onto the config
-func (cfg *Config) applyEnvVars() {
+func (cfg *RuntimeConfig) applyEnvVars() {
 	if v := os.Getenv("CHROMA_HOST"); v != "" {
 		cfg.Chroma.Host = v
 	}
@@ -220,7 +220,7 @@ func (cfg *Config) applyEnvVars() {
 }
 
 // loadFromFile reads and parses a single YAML config file
-func (cfg *Config) loadFromFile(path string) error {
+func (cfg *RuntimeConfig) loadFromFile(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func (cfg *Config) loadFromFile(path string) error {
 
 // applyCLIFlags applies CLI flag values to the config (highest priority)
 // This was formerly LoadFromCLI
-func applyCLIFlags(c *cli.Command, cfg *Config) {
+func applyCLIFlags(c *cli.Command, cfg *RuntimeConfig) {
 	// Host: if explicitly set via CLI, override; else, if still empty, use flag default
 	if c.IsSet("host") {
 		cfg.Chroma.Host = c.String("host")
@@ -302,8 +302,8 @@ func applyCLIFlags(c *cli.Command, cfg *Config) {
 
 // LoadConfig loads configuration from all sources with proper precedence:
 // CLI flags > Environment variables > Local config > Global config > Defaults
-func LoadConfig(c *cli.Command) (*Config, error) {
-	cfg := &Config{}
+func LoadConfig(c *cli.Command) (*RuntimeConfig, error) {
+	cfg := &RuntimeConfig{}
 
 	// 1. Load config file(s) – respects --config flag if set
 	if c.IsSet("config") {
@@ -343,7 +343,7 @@ func LoadConfig(c *cli.Command) (*Config, error) {
 }
 
 // resolvePaths computes defaults relative to the executable if needed.
-func (cfg *Config) resolvePaths() error {
+func (cfg *RuntimeConfig) resolvePaths() error {
 	// Build Chroma URL
 	if cfg.Chroma.Host != "" && cfg.Chroma.Port != "" {
 		cfg.Chroma.URL = fmt.Sprintf("http://%s:%s", cfg.Chroma.Host, cfg.Chroma.Port)
@@ -374,41 +374,41 @@ func (cfg *Config) resolvePaths() error {
 }
 
 // GetChromaURL returns the full ChromaDB URL.
-func (cfg *Config) GetChromaURL() string {
+func (cfg *RuntimeConfig) GetChromaURL() string {
 	return cfg.Chroma.URL
 }
 
 // GetTenant returns the tenant name.
-func (cfg *Config) GetTenant() string {
+func (cfg *RuntimeConfig) GetTenant() string {
 	return cfg.Chroma.Tenant
 }
 
 // GetDatabase returns the database name.
-func (cfg *Config) GetDatabase() string {
+func (cfg *RuntimeConfig) GetDatabase() string {
 	return cfg.Chroma.Database
 }
 
 // GetEmbedderModel returns the path to the ONNX model.
-func (cfg *Config) GetEmbedderModel() string {
+func (cfg *RuntimeConfig) GetEmbedderModel() string {
 	return cfg.Model.ONNXModel
 }
 
 // GetEmbedderTokenizer returns the path to the tokenizer JSON.
-func (cfg *Config) GetEmbedderTokenizer() string {
+func (cfg *RuntimeConfig) GetEmbedderTokenizer() string {
 	return cfg.Model.Tokenizer
 }
 
 // GetEmbedderLib returns the path to the ONNX runtime library.
-func (cfg *Config) GetEmbedderLib() string {
+func (cfg *RuntimeConfig) GetEmbedderLib() string {
 	return cfg.Model.ONNXLib
 }
 
 // IsVerbose returns whether verbose logging is enabled.
-func (cfg *Config) IsVerbose() bool {
+func (cfg *RuntimeConfig) IsVerbose() bool {
 	return cfg.Logging.Verbose
 }
 
 // ConfigForEmbedder returns paths needed by the embedder.
-func (cfg *Config) ConfigForEmbedder() (modelPath, tokenizerPath, libPath string) {
+func (cfg *RuntimeConfig) ConfigForEmbedder() (modelPath, tokenizerPath, libPath string) {
 	return cfg.Model.ONNXModel, cfg.Model.Tokenizer, cfg.Model.ONNXLib
 }

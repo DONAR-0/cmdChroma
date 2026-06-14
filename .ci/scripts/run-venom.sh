@@ -75,7 +75,13 @@ if [ -n "${TEST_FILES:-}" ]; then
   --output-dir "$LOG_DIR" \
   -vv
 else
-  "$VENOM_BIN" run .ci/tests/*.yml \
-  --output-dir "$LOG_DIR" \
-  -vv
+  # Discover all test YAML files, excluding _includes
+  VENOM_FILES=$(find .ci/tests -type f -name "*.yml" ! -path "*_includes/*")
+  if [ -z "$VENOM_FILES" ]; then
+    echo "No test files found! Check .ci/tests directory."
+    exit 1
+  fi
+  "$VENOM_BIN" run $VENOM_FILES \
+    --output-dir "$LOG_DIR" \
+    -vv
 fi

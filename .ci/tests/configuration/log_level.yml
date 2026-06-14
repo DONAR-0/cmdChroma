@@ -1,0 +1,127 @@
+version: "2"
+name: Test Log Level Filtering
+
+testcases:
+  - name: Info level shows INFO logs
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+
+  - name: Debug level shows INFO logs
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: Verbose flag enables debug logging level
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma ping --verbose
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: Warn level hides INFO logs
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level warn ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldNotContainSubstring "[INFO]"
+      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+
+  # New tests for --log-format flag
+
+  - name: JSON log format output
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-format json --log-level debug ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring '"level"'
+      - result.systemout ShouldContainSubstring '"msg"'
+      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+      - result.systemout ShouldNotContainSubstring "[INFO]"
+
+  - name: Log level flag with error level
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+      - result.systemout ShouldNotContainSubstring "[INFO]"
+      - result.systemout ShouldNotContainSubstring "[WARN]"
+
+  - name: Log format flag with text format
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-format text --log-level debug ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemout ShouldNotContainSubstring '"level"'
+
+  - name: Environment variables for new logging flags
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: CHROMA_LOG_LEVEL=warn CHROMA_LOG_FORMAT=json cmdChroma ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring '"level"'
+      - result.systemout ShouldNotContainSubstring "[WARN]"
+      - result.systemout ShouldNotContainSubstring "[INFO]"
+
+  - name: Log format json with info level
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-format json --log-level info tenant
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring '"level":"info"'
+      - result.systemout ShouldNotContainSubstring "[INFO]"
+
+  - name: Mixed log levels with text format
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug --log-format text databases
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+      - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: Short alias for log-level flag
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma -l debug ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+
+  - name: Default log level is info
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemout ShouldNotContainSubstring "[DEBUG]"

@@ -11,7 +11,7 @@ import (
 )
 
 func TestConfig_Getters(t *testing.T) {
-	cfg := &Config{
+	cfg := &RuntimeConfig{
 		Chroma: ChromaConfig{
 			Host:     "testhost",
 			Port:     "1234",
@@ -63,7 +63,7 @@ func TestConfig_Getters(t *testing.T) {
 }
 
 func TestConfig_GetChromaURL(t *testing.T) {
-	cfg := &Config{
+	cfg := &RuntimeConfig{
 		Chroma: ChromaConfig{
 			URL: "http://custom:8000",
 		},
@@ -76,7 +76,7 @@ func TestConfig_GetChromaURL(t *testing.T) {
 // --- Coverage for previously uncovered functions ---
 
 func TestConfig_ApplyFileConfig(t *testing.T) {
-	cfg := &Config{}
+	cfg := &RuntimeConfig{}
 	file := &ConfigFile{
 		Version: "1.0",
 		Chroma: ConfigFileChroma{
@@ -206,7 +206,7 @@ func TestConfig_ApplyEnvVars(t *testing.T) {
 		}
 	}()
 
-	cfg := &Config{}
+	cfg := &RuntimeConfig{}
 	cfg.applyEnvVars()
 
 	if cfg.Chroma.Host != "envhost" {
@@ -284,7 +284,7 @@ func TestConfig_ApplyCLIFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := &Config{}
+	cfg := &RuntimeConfig{}
 	applyCLIFlags(cmd, cfg)
 
 	if cfg.Chroma.Host != "clihost" {
@@ -424,7 +424,7 @@ func TestConfig_LoadConfig_FromFile(t *testing.T) {
 }
 
 func TestConfig_ResolvePaths(t *testing.T) {
-	cfg := &Config{
+	cfg := &RuntimeConfig{
 		Model: ModelConfig{
 			ONNXModel: "/custom/model.onnx",
 			Tokenizer: "/custom/tokenizer.json",
@@ -495,7 +495,7 @@ func TestConfigFindConfigFile_WithFile(t *testing.T) {
 }
 
 func TestConfig_LoadFromFile_InvalidPath(t *testing.T) {
-	cfg := &Config{}
+	cfg := &RuntimeConfig{}
 
 	err := cfg.loadFromFile("/nonexistent/path/config.yaml")
 	if err == nil {

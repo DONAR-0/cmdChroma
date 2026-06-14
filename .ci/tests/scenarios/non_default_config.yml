@@ -1,0 +1,129 @@
+version: "2"
+name: Test Chroma CLI - Non-Default Configuration
+
+testcases:
+  # ============ Custom Port Tests ============
+
+  - name: Ping with custom port 8099
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host localhost --port 8099
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
+
+  - name: Ping with custom port 8097
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --port 8097
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
+
+  - name: Ping with custom port 8098
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --port 8098
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
+
+  # ============ Custom Host Tests ============
+
+  - name: Ping with IP address 127.0.0.1
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host 127.0.0.1
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
+
+  - name: Ping with IP address 0.0.0.0
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host 0.0.0.0 --port 8099
+        assertions:
+          - result.code ShouldEqual 0
+
+  - name: Ping with localhost
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host localhost --port 8000
+        assertions:
+          - result.code ShouldEqual 0
+
+  # ============ Custom Host + Port Combinations ============
+
+  - name: Ping with custom host and port together
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host localhost --port 8099
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "localhost:8099"
+
+  - name: Ping with IP and non-default port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host 127.0.0.1 --port 8097
+        assertions:
+          - result.code ShouldEqual 0
+
+  # ============ Connection Error Tests ============
+
+  - name: Connection refused on invalid port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 15
+        script: cmdChroma --log-level error t --port 60999
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "Connection failed"
+
+  - name: Connection refused on closed port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 15
+        script: cmdChroma --log-level error t --port 19999
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "Connection failed"
+
+  - name: Connection refused on invalid host
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host doesnotexist.invalid --timeout 3
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+
+  # ============ Tenant/Database Display Tests ============
+
+  - name: Display shows correct host and port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host localhost --port 8099
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "localhost:8099"
+
+  - name: Display shows IP and port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error t --host 127.0.0.1 --port 8097
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "127.0.0.1:8097"

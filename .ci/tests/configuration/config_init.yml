@@ -1,0 +1,158 @@
+version: "2"
+name: Test Chroma CLI - Config Init Command
+
+testcases:
+  # ============ config init --local ============
+
+  - name: config init --local creates .cmdChroma.yaml
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          rm -f .cmdChroma.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --local
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "✅ Configuration file created at"
+      - type: exec
+        script: test -f .cmdChroma.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: |
+          # Verify it's valid YAML and contains expected defaults
+          grep -q "host: localhost" .cmdChroma.yaml
+          grep -q 'port: "8000"' .cmdChroma.yaml
+          grep -q "tenant: default_tenant" .cmdChroma.yaml
+          grep -q "database: default_database" .cmdChroma.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  # ============ config init --global ============
+  
+  - name: config init --global creates ~/.config/cmdChroma/config.yaml
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          mkdir -p ~/.config/cmdChroma
+          rm -f ~/.config/cmdChroma/config.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --global
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "✅ Configuration file created at"
+          - result.systemout ShouldContainSubstring ".config/cmdChroma/config.yaml"
+      - type: exec
+        script: test -f ~/.config/cmdChroma/config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: |
+          grep -q "host: localhost" ~/.config/cmdChroma/config.yaml
+          grep -q 'port: "8000"' ~/.config/cmdChroma/config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f ~/.config/cmdChroma/config.yaml
+
+  # ============ config init --output ============
+
+  - name: config init --output creates file at custom path
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          rm -f ./my-custom-config.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --output ./my-custom-config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "✅ Configuration file created at ./my-custom-config.yaml"
+      - type: exec
+        script: test -f ./my-custom-config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f ./my-custom-config.yaml
+
+  - name: config init --global --output combines paths
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          mkdir -p ~/.config/cmdChroma
+          rm -f ~/.config/cmdChroma/alt-config.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --global --output ~/.config/cmdChroma/alt-config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: test -f ~/.config/cmdChroma/alt-config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f ~/.config/cmdChroma/alt-config.yaml
+
+  # ============ Error Handling ============
+
+  - name: config init refuses to overwrite existing file
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          touch .cmdChroma.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --local
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "configuration file already exists"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  - name: config init creates parent directories
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          rm -rf ./testdir/subdir
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --output ./testdir/subdir/config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "✅ Configuration file created at"
+      - type: exec
+        script: test -f ./testdir/subdir/config.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -rf ./testdir
+
+  # ============ Generated Config Contents ============
+
+  - name: Generated config includes all sections with correct defaults
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config init --local > /dev/null
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: |
+          grep -q "^version:" .cmdChroma.yaml
+          grep -q "^chroma:" .cmdChroma.yaml
+          grep -q "^  host: localhost" .cmdChroma.yaml
+          grep -q "^  port: \"8000\"" .cmdChroma.yaml
+          grep -q "^  tenant: default_tenant" .cmdChroma.yaml
+          grep -q "^  database: default_database" .cmdChroma.yaml
+          grep -q "^model:" .cmdChroma.yaml
+          grep -q "^  onnx_model: models/all-MiniLM-L6-v2/model.onnx" .cmdChroma.yaml
+          grep -q "^  tokenizer: models/all-MiniLM-L6-v2/tokenizer.json" .cmdChroma.yaml
+          grep -q "^  onnx_lib: models/onnx_runtime/lib/libonnxruntime.so" .cmdChroma.yaml
+          grep -q "^logging:" .cmdChroma.yaml
+          grep -q "^  level: info" .cmdChroma.yaml
+          grep -q "^  format: text" .cmdChroma.yaml
+          grep -q "^  verbose: false" .cmdChroma.yaml
+          grep -q "^features:" .cmdChroma.yaml
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        script: rm -f .cmdChroma.yaml

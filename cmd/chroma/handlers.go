@@ -11,12 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/factory"
+	"github.com/DONAR-0/cmdChroma/cmd/chroma/output"
 	"github.com/DONAR-0/cmdChroma/internal"
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	config "github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
-	"github.com/DONAR-0/cmdChroma/internal/onnx"
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -73,7 +74,9 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "host", host, "port", port)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to create Chroma client: %w", err)
@@ -90,19 +93,26 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
-			return fmt.Errorf("connection timed out after %ds\n\nHints:\n  • Check if ChromaDB is running\n  • Verify host/port: --host %s --port %s", timeout, host, port)
+			printer.Error("Connection timed out after %d seconds", timeout)
+			printer.Info("Check if ChromaDB is running")
+			printer.Info("Verify host/port: --host %s --port %s", host, port)
+
+			return fmt.Errorf("connection timed out after %ds", timeout)
 		}
 
 		slog.Error("operation_failed", "op", opName, "error", err, "duration_ms", time.Since(start).Milliseconds())
+		printer.Error("Connection failed: %v", err)
+		printer.Info("Check if ChromaDB is running with: docker ps")
+		printer.Info("Verify host/port: --host %s --port %s", host, port)
 
-		return fmt.Errorf("connection failed: %w\n\nHints:\n  • Is ChromaDB running? Try: docker ps\n  • Check host/port: --host %s --port %s\n  • Verify network connectivity", err, host, port)
+		return err
 	}
 
 	slog.Info("operation_complete", "op", opName, "duration_ms", time.Since(start).Milliseconds())
-	fmt.Println("✅ Successfully connected to ChromaDB")
-	fmt.Printf("   Server: %s:%s\n", host, port)
-	fmt.Printf("   Tenant: %s\n", cmd.String("tenant"))
-	fmt.Printf("   Database: %s\n", cmd.String("database"))
+	printer.Success("Successfully connected to ChromaDB")
+	printer.Printf("   Server: %s:%s\n", host, port)
+	printer.Printf("   Tenant: %s\n", cmd.String("tenant"))
+	printer.Printf("   Database: %s\n", cmd.String("database"))
 
 	return nil
 }
@@ -111,7 +121,9 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 	slog.Info("Checking tenant", "tenant", cmd.String("tenant"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -119,15 +131,17 @@ func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 	tenantExists, err := chromaClient.GetTenant()
 	if err != nil {
 		slog.Error("Failed to check tenant", "error", err)
-		return fmt.Errorf("tenant check failed: %w", err)
+		printer.Error("Tenant check failed: %v", err)
+
+		return err
 	}
 
-	status := "✅ exists"
-	if !tenantExists {
-		status = "❌ not found"
+	if tenantExists {
+		printer.Success("Tenant: %s [exists]", cmd.String("tenant"))
+	} else {
+		printer.Warn("Tenant: %s [not found]", cmd.String("tenant"))
 	}
 
-	fmt.Printf("Tenant: %s [%s]\n", cmd.String("tenant"), status)
 	slog.Info("Tenant check complete", "exists", tenantExists)
 
 	return nil
@@ -137,7 +151,9 @@ func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 	slog.Info("Listing databases", "tenant", cmd.String("tenant"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -145,21 +161,21 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 	dbs, err := chromaClient.ListDatabases()
 	if err != nil {
 		slog.Error("Failed to list databases", "error", err)
-		return fmt.Errorf("failed to list databases: %w\n\nHint: Verify your tenant has databases: chroma databases --tenant default_tenant", err)
+		printer.Error("Failed to list databases: %v", err)
+		printer.Info("Verify your tenant has databases")
+
+		return err
 	}
 
 	if len(dbs) == 0 {
-		fmt.Println("No databases found in this tenant.")
-		fmt.Println("Hint: Create a database first or check your tenant configuration.")
+		printer.Info("No databases found in this tenant.")
+		printer.Info("Create a database first or check your tenant configuration.")
 
 		return nil
 	}
 
-	fmt.Printf("Databases in tenant '%s':\n", cmd.String("tenant"))
-
-	for _, db := range dbs {
-		fmt.Printf("  • %s (ID: %s)\n", db.Name, db.Id)
-	}
+	printer.Printf("Databases in tenant '%s':\n", cmd.String("tenant"))
+	printer.PrintTable([]string{"Name", "ID"}, toStringRows(dbs))
 
 	slog.Info("Database listing complete", "count", len(dbs))
 
@@ -172,7 +188,9 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 func handleListCollection(_ context.Context, cmd *cli.Command) error {
 	slog.Info("Listing collections", "tenant", cmd.String("tenant"), "database", cmd.String("database"))
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -184,16 +202,16 @@ func handleListCollection(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if len(collections) == 0 {
-		fmt.Println("No collections found in this database.")
-		fmt.Println("Hint: Create a collection first: chroma create <name>")
+		printer.Info("No collections found in this database.")
+		printer.Info("Hint: Create a collection first: chroma create <name>")
 
 		return nil
 	}
 
-	fmt.Printf("Collections in database '%s':\n", cmd.String("database"))
+	printer.Printf("Collections in database '%s':\n", cmd.String("database"))
 
 	for _, coll := range collections {
-		fmt.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
+		printer.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
 	}
 
 	slog.Info("Collection listing complete", "count", len(collections))
@@ -213,7 +231,9 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "name", collectionName)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -285,7 +305,9 @@ func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("Deleting collection", "name", collectionName)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -317,7 +339,9 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 
 	slog.Info("Listing documents", "collection", collectionName, "tenant", c.String("tenant"), "database", c.String("database"))
 
-	client, err := createChromaClient(c)
+	f := factory.NewServiceFactory()
+
+	client, err := f.CreateChromaClient(c)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -375,20 +399,14 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("no documents provided\n\nUsage: chroma add <collection> --doc \"text\"\n\nExample: chroma add my_collection --doc \"Your document\"")
 	}
 
-	// Setup client
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	// Load AI Engine
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	// Handle IDs: use provided ones or generate auto IDs
 	ids := c.StringSlice("id")
@@ -449,7 +467,9 @@ func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
 
 	slog.Info("Deleting records", "collection", collectionName, "ids", ids)
 
-	chromaClient, err := createChromaClient(cmd)
+	f := factory.NewServiceFactory()
+
+	chromaClient, err := f.CreateChromaClient(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
@@ -489,19 +509,20 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 
 	slog.Info("operation_start", "op", opName, "collection", collectionName, "query_count", len(queries), "n_results", nResults)
 
-	// Setup client
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w\n\nHint: Verify model files exist or use --model-path, --tokenizer-path, --onnx-lib flags", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
+	defer cleanup()
 
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	// Show loading indicator in interactive mode
+	ui := output.NewUI()
+	if ui.IsInteractive() && !c.Bool("no-tui") {
+		printer.Info("Searching...")
+	}
 
 	response, err := svc.QueryDocuments(collectionName, queries, nResults)
 	if err != nil {
@@ -509,16 +530,16 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
 	}
 
-	// Display results
-	fmt.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
+	// Display results using printer
+	printer.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
 
 	for i, originalQuery := range queries {
-		fmt.Printf("Query %d: %s\n", i+1, originalQuery)
-		fmt.Println(strings.Repeat("-", 60))
+		printer.Printf("Query %d: %s\n", i+1, originalQuery)
+		printer.Print(strings.Repeat("-", 60))
 
 		for j := 0; j < len(response.IDs[i]); j++ {
-			fmt.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
-			fmt.Printf("      ID: %s\n", response.IDs[i][j])
+			printer.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
+			printer.Printf("      ID: %s\n", response.IDs[i][j])
 
 			if len(response.Documents[i]) > j {
 				content := response.Documents[i][j]
@@ -526,12 +547,12 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 					content = content[:150] + "..."
 				}
 
-				fmt.Printf("      Content: %s\n\n", content)
+				printer.Printf("      Content: %s\n\n", content)
 			}
 		}
 
 		if i < len(queries)-1 {
-			fmt.Println(strings.Repeat("=", 60) + "\n")
+			printer.Print(strings.Repeat("=", 60) + "\n")
 		}
 	}
 
@@ -543,14 +564,15 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 // ===== Import =====
 
 // handleImportFileInChromaDb imports a file (JSONL or Parquet) with progress tracking.
+// All batching logic is handled by the service layer.
 func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
 		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>\n\nExample: chroma import my_collection data.jsonl")
 	}
 
-	fp := c.Args().Get(1)
-	if fp == "" {
+	filePathArg := c.Args().Get(1)
+	if filePathArg == "" {
 		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>")
 	}
 
@@ -560,7 +582,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	safePath, err := internal.SafeJoin(cwd, fp)
+	safePath, err := internal.SafeJoin(cwd, filePathArg)
 	if err != nil {
 		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
 	}
@@ -574,7 +596,6 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		AllMetadata:    c.Bool("all-metadata"),
 		Limit:          c.Int("n-ingest"),
 	}
-	// Apply defaults
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 100
 	}
@@ -587,117 +608,41 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		cfg.IDField = "id"
 	}
 
-	// Setup service
-	client, err := createChromaClient(c)
+	// Setup service using factory
+	f := factory.NewServiceFactory()
+
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
+	defer cleanup()
 
-	embedder, err := initEmbedder(c)
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w", err)
-	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
-
-	// Resolve collection ID
-	collectionID, err := client.ResolveCollectionID(collectionName)
-	if err != nil {
-		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
-	}
-
-	// Determine file type by extension
-	ext := strings.ToLower(filepath.Ext(safePath))
-
-	processor := ingest.NewProcessor(cfg)
-
-	var (
-		recordsChan <-chan *ingest.Record
-		errChan     <-chan error
-	)
-
-	switch ext {
-	case ".jsonl":
-		recordsChan, errChan = processor.ProcessJSONL(safePath)
-	case ".parquet":
-		recordsChan, errChan = processor.ProcessParquet(safePath)
-	default:
-		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet)", ext)
-	}
-
-	// Start import with progress
-	fmt.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
-	fmt.Printf("   Batch size: %d\n", cfg.BatchSize)
+	// Print import info using printer
+	printer.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
+	printer.Printf("   Batch size: %d\n", cfg.BatchSize)
 
 	if cfg.Limit > 0 {
-		fmt.Printf("   Limit: %d documents\n", cfg.Limit)
+		printer.Printf("   Limit: %d documents\n", cfg.Limit)
 	}
 
-	fmt.Println()
+	printer.Print("")
 
 	startTime := time.Now()
 
-	slog.Info("Starting import", "file", safePath, "collection", collectionName, "format", ext)
+	slog.Info("Starting import", "file", safePath, "collection", collectionName)
 
-	// Batch accumulation with progress tracking
-	var (
-		docs          []string
-		ids           []string
-		metas         []map[string]any
-		batchIdx      int
-		totalUploaded int
-		progressN     = 10 // log progress every N documents processed
-		nextProgress  = progressN
-	)
-
-	for record := range recordsChan {
-		docs = append(docs, record.Content)
-		ids = append(ids, record.ID)
-		metas = append(metas, record.Metadata)
-		batchIdx++
-
-		// Current total processed (including current batch)
-		currentTotal := totalUploaded + batchIdx
-
-		// Progress update every N documents
-		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
-			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
-
-			nextProgress += progressN
-		}
-
-		if batchIdx >= cfg.BatchSize {
-			if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
-			}
-
-			totalUploaded += len(docs)
-			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
-			docs, ids, metas = nil, nil, nil
-			batchIdx = 0
-			nextProgress = totalUploaded + progressN // set next milestone
-		}
+	// Show working indicator in interactive mode
+	ui := output.NewUI()
+	if ui.IsInteractive() && !c.Bool("no-tui") {
+		printer.Info("Processing...")
 	}
 
-	// Final batch
-	if len(docs) > 0 {
-		if err := client.AddBatchGeneric(collectionID, docs, ids, metas); err != nil {
-			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
-		}
-
-		totalUploaded += len(docs)
-		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
-	}
-
-	// Check for errors from processor
-	if err, ok := <-errChan; ok && err != nil {
-		return fmt.Errorf("ingestion error: %w", err)
+	if err := svc.IngestRecords(collectionName, safePath, cfg); err != nil {
+		return fmt.Errorf("import failed: %w", err)
 	}
 
 	elapsed := time.Since(startTime)
-	fmt.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
-	slog.Info("Import successful", "elapsed", elapsed, "total_documents", totalUploaded)
+	printer.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
 
 	return nil
 }
@@ -748,19 +693,14 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 		"n_results", nResults,
 		"distance_threshold", distanceThreshold)
 
-	// Setup client and embedder
-	client, err := createChromaClient(c)
-	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
-	}
+	// Setup service using factory
+	f := factory.NewServiceFactory()
 
-	embedder, err := initEmbedder(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to initialize embedding engine: %w", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
-
-	svc := service.NewChromaService(client, embedder)
-	defer svc.Close()
+	defer cleanup()
 
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
 
@@ -902,60 +842,6 @@ Provide a clear, concise answer:`,
 		context, question)
 }
 
-// ============ Private Helpers ============
-
-// initEmbedder initializes the ONNX embedder with path resolution.
-func initEmbedder(c *cli.Command) (*onnx.Embedder, error) {
-	modelPath, tokenizerPath, onnxLibPath, err := resolveAIPaths(c)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Info("Loading AI embedding engine", "model", modelPath)
-
-	embedder, err := onnx.NewEmbedder(modelPath, tokenizerPath, onnxLibPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
-	return embedder, nil
-}
-
-// resolveAIPaths determines the paths for model files with fallbacks.
-func resolveAIPaths(c *cli.Command) (string, string, string, error) {
-	ex, err := os.Executable()
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to resolve executable path: %w", err)
-	}
-
-	binDir := filepath.Dir(ex)
-	projectRoot := filepath.Join(binDir, "..")
-
-	modelPath := c.String("model-path")
-	if modelPath == "" {
-		modelPath = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/model.onnx")
-	}
-
-	tokenizerPath := c.String("tokenizer-path")
-	if tokenizerPath == "" {
-		tokenizerPath = filepath.Join(projectRoot, "models/all-MiniLM-L6-v2/tokenizer.json")
-	}
-
-	onnxLibPath := c.String("onnx-lib")
-	if onnxLibPath == "" {
-		onnxLibPath = filepath.Join(projectRoot, "models/onnx_runtime/lib/libonnxruntime.so")
-	}
-
-	// Validate files exist if using default paths
-	if modelPath != "" {
-		if _, err := os.Stat(modelPath); err != nil {
-			return "", "", "", fmt.Errorf("model file not found: %s\n\nHint: Use --model-path to specify the correct location or run the setup script", modelPath)
-		}
-	}
-
-	return modelPath, tokenizerPath, onnxLibPath, nil
-}
-
 // ============ Config Command Handlers ============
 
 // handleConfigShow displays the effective configuration after merging all sources.
@@ -1080,9 +966,21 @@ func handleConfigInit(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to write configuration file %s: %w", outputPath, err)
 	}
 
-	fmt.Printf("✅ Configuration file created at %s\n", outputPath)
-	fmt.Printf("   Edit this file to customize your settings\n")
-	fmt.Printf("   Use 'cmdChroma config show' to view effective configuration\n")
+	printer.Success("Configuration file created at %s", outputPath)
+	printer.Info("Edit this file to customize your settings")
+	printer.Info("Use 'chroma config show' to view effective configuration")
 
 	return nil
+}
+
+// ============ Helper Functions ============
+
+// toStringRows converts a list of Database to table rows.
+func toStringRows(dbs []client.Database) [][]string {
+	rows := make([][]string, len(dbs))
+	for i, db := range dbs {
+		rows[i] = []string{db.Name, db.Id}
+	}
+
+	return rows
 }

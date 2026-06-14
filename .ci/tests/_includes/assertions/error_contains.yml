@@ -1,0 +1,8 @@
+# Common error assertion patterns
+
+error_nonzero: &error_nonzero
+  result.code ShouldNotEqual 0
+
+connection_error: &connection_error
+  result.code ShouldNotEqual 0
+  result.systemout ShouldContainSubstring "Connection failed"

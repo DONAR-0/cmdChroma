@@ -1,0 +1,64 @@
+version: "2"
+name: Test Chroma CLI - Delete Records
+testcases:
+  - name: Setup - create collection and add documents
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma mkColl t13_del_coll
+        assertions:
+          - result.code ShouldEqual 0
+      - type: exec
+        timeout: 120
+        script: |
+          cmdChroma a t13_del_coll \
+            -d "Doc A content" -i "doc-a" \
+            -d "Doc B content" -i "doc-b" \
+            -d "Doc C content" -i "doc-c"
+        assertions:
+          - result.code ShouldEqual 0
+  - name: Delete single document
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma delete-records t13_del_coll --id doc-a
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Deleted 1 document"
+      - type: exec
+        script: cmdChroma rs t13_del_coll
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "doc-a"
+          - result.systemout ShouldContainSubstring "doc-b"
+          - result.systemout ShouldContainSubstring "doc-c"
+  - name: Delete multiple documents
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma delete-records t13_del_coll --id doc-b --id doc-c
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Deleted 2 document"
+      - type: exec
+        script: cmdChroma rs t13_del_coll
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "doc-b"
+          - result.systemout ShouldNotContainSubstring "doc-c"
+  - name: Error - no document IDs provided
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma delete-records t13_del_coll
+        assertions:
+          - result.code ShouldEqual 1
+          - result.systemout ShouldContainSubstring "at least one document ID is required"
+  - name: cleanup
+    tags: ["integration"]
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma delete t13_del_coll || true
+        assertions:
+          - result.code ShouldEqual 0

@@ -1,0 +1,198 @@
+version: "2"
+name: Test Global Flags Availability
+
+testcases:
+  # Test that new logging flags are visible in root help
+  - name: Log level flag visible in root help
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "--log-level"
+      - result.systemout ShouldContainSubstring "Set log level"
+      - result.systemout ShouldContainSubstring "debug, info, warn, error"
+
+  - name: Log format flag visible in root help
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "--log-format"
+      - result.systemout ShouldContainSubstring "Log output format"
+      - result.systemout ShouldContainSubstring "text, json"
+
+  - name: Short alias -l for log-level visible in root help
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "-l"
+
+  # Test that new flags work with various commands
+
+  - name: New flags work with ping command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug --log-format text ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+      - result.systemout ShouldContainSubstring "Testing connection"
+
+  - name: New flags work with tenant command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info --log-format text tenant
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemout ShouldContainSubstring "Checking tenant"
+
+  - name: New flags work with databases command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level warn --log-format text databases
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: New flags work with collections command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug --log-format text collections
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: New flags work with create command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info --log-format text create test_global_flags_coll_16
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[INFO]"
+
+  - name: New flags work with delete command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level info --log-format text delete test_global_flags_coll_16 || true
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: New flags work with records command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --log-level debug --log-format text records test_global_flags_coll_16 || true
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: New flags work with add command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 60
+        script: cmdChroma --log-level info --log-format text add test_global_flags_coll_16 --doc "Test document" || true
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: New flags work with query command
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 60
+        script: cmdChroma --log-level debug --log-format text query test_global_flags_coll_16 --query "test" || true
+    assertions:
+      - result.code ShouldEqual 0
+
+  # Test environment variables for new flags
+
+  - name: Environment variable CHROMA_LOG_LEVEL works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: CHROMA_LOG_LEVEL=debug cmdChroma ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+
+  - name: Environment variable CHROMA_LOG_FORMAT works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: CHROMA_LOG_FORMAT=json cmdChroma ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring '"level"'
+
+  - name: Both environment variables work together
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: CHROMA_LOG_LEVEL=info CHROMA_LOG_FORMAT=json cmdChroma ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring '"level":"info"'
+
+  # Test that existing global flags still work
+
+  - name: Host flag still works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --host localhost ping
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Port flag still works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --port 8000 ping
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Tenant flag still works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --tenant default_tenant ping
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Database flag still works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --database default_database ping
+    assertions:
+      - result.code ShouldEqual 0
+
+  - name: Verbose flag still works
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --verbose ping
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "[DEBUG]"
+
+  # Cleanup
+  - name: Cleanup - delete test collection
+    tags: ["integration"]
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma --log-level error delete test_global_flags_coll_16 || true
+    assertions:
+      - result.code ShouldEqual 0

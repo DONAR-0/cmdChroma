@@ -1,0 +1,124 @@
+version: "2"
+name: Test Chroma CLI - Connection Timeout
+
+testcases:
+  # ============ Valid Connection Tests ============
+
+  - name: Default timeout works on reachable host
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 45
+        script: cmdChroma --log-level error t --host localhost
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully connected"
+
+  - name: Valid connection with default timeout succeeds
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 45
+        script: cmdChroma --log-level error t --host localhost --port 8000
+        assertions:
+          - result.code ShouldEqual 0
+          - result.timeseconds ShouldBeLessThan 5
+
+  - name: Valid connection with custom timeout succeeds quickly
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 30
+        script: cmdChroma --log-level error t --host localhost --timeout 60 --port 8099
+        assertions:
+          - result.code ShouldEqual 0
+          - result.timeseconds ShouldBeLessThan 5
+
+  # ============ Connection Refused Tests (Closed Ports) ============
+
+  - name: Connection refused on closed port
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --port 59999 --timeout 5
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+
+  - name: Connection refused on localhost port with nothing listening
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --port 60998 --timeout 5
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.timeseconds ShouldBeLessThan 10
+
+  - name: Connection refused with custom timeout flag
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --port 19999 --timeout 3
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+
+  # ============ Invalid Hostname Tests ============
+
+  - name: Connection refused on invalid hostname
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --host nonexistent.invalid.domain --timeout 5
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+
+  - name: Connection refused with very short timeout
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 15
+        script: cmdChroma --log-level error t --port 59999 --timeout 1
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.timeseconds ShouldBeLessThan 5
+
+  # ============ Error Message Verification ============
+
+  - name: Error message on connection refused
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --port 59999 --timeout 5
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+          - result.systemout ShouldContainSubstring "refused"
+
+  - name: Error message contains connection information
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 20
+        script: cmdChroma --log-level error t --port 59999 --timeout 3
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "connection"
+
+  # ============ Timeout Edge Cases ============
+
+  - name: Zero timeout uses minimum timeout
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 15
+        script: cmdChroma --log-level error t --port 59999 --timeout 0
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.timeseconds ShouldBeLessThan 5

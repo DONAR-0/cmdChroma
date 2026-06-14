@@ -1,0 +1,195 @@
+version: "2"
+name: Test Chroma CLI - Config File Support
+
+testcases:
+  # ============ Config File Loading ============
+
+  - name: Config file loaded from local .cmdChroma.yaml
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: confhost
+            port: "9999"
+            tenant: conf_tenant
+            database: conf_db
+          EOF
+          unset CHROMA_HOST CHROMA_PORT
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "confhost"
+          - result.systemout ShouldContainSubstring "9999"
+          - result.systemout ShouldContainSubstring "conf_tenant"
+          - result.systemout ShouldContainSubstring "conf_db"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  - name: --config flag specifies custom config file
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > custom-config.yaml << 'EOF'
+          chroma:
+            host: customhost
+            port: "8888"
+            tenant: custom_tenant
+            database: custom_db
+          EOF
+          unset CHROMA_HOST CHROMA_PORT
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error --config custom-config.yaml config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "customhost"
+          - result.systemout ShouldContainSubstring "8888"
+          - result.systemout ShouldContainSubstring "custom_tenant"
+          - result.systemout ShouldContainSubstring "custom_db"
+      - type: exec
+        script: rm -f custom-config.yaml
+
+  - name: Config file with partial values uses defaults for missing
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: partialhost
+          EOF
+          unset CHROMA_HOST CHROMA_PORT
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "partialhost"
+          - result.systemout ShouldContainSubstring "default_tenant"
+          - result.systemout ShouldContainSubstring "default_database"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  # ============ Precedence: CLI > Env > Config > Default ============
+
+  - name: CLI flag overrides config file
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: confighost
+            port: "1111"
+            tenant: config_tenant
+            database: config_db
+          EOF
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error --host overridehost config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "overridehost"
+          - result.systemout ShouldNotContainSubstring "confighost"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  - name: Environment variable overrides config file
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: confighost
+            port: "1111"
+            tenant: config_tenant
+            database: config_db
+          EOF
+          CHROMA_HOST=envhost ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "envhost"
+          - result.systemout ShouldNotContainSubstring "confighost"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  - name: "Full precedence chain: default < config < env < flag"
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: confighost
+            port: "1111"
+            tenant: config_tenant
+            database: config_db
+          EOF
+          CHROMA_HOST=envhost ${CMDCHROMA_BIN:-cmdChroma} --log-level error --port 2222 config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "envhost"  # from env
+          - result.systemout ShouldContainSubstring "2222"     # from flag
+          - result.systemout ShouldContainSubstring "config_tenant"  # from config
+          - result.systemout ShouldContainSubstring "config_db"      # from config
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  # ============ Config File Search Locations ============
+
+  - name: .cmdChroma.yaml preferred over cmdChroma.yaml
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          cat > .cmdChroma.yaml << 'EOF'
+          chroma:
+            host: dotfile
+          EOF
+          cat > cmdChroma.yaml << 'EOF'
+          chroma:
+            host: altfile
+          EOF
+          unset CHROMA_HOST CHROMA_PORT
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "dotfile"
+          - result.systemout ShouldNotContainSubstring "altfile"
+      - type: exec
+        script: rm -f .cmdChroma.yaml cmdChroma.yaml
+
+  - name: --config "" disables config files
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          echo 'chroma:\n  host: shouldnotappear' > .cmdChroma.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error --config "" config show
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldNotContainSubstring "shouldnotappear"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  # ============ Error Handling ============
+
+  - name: Invalid YAML produces error
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: |
+          echo 'invalid: yaml: [' > .cmdChroma.yaml
+          ${CMDCHROMA_BIN:-cmdChroma} --log-level error config show
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "invalid YAML"
+      - type: exec
+        script: rm -f .cmdChroma.yaml
+
+  - name: Non-existent --config file produces error
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: ${CMDCHROMA_BIN:-cmdChroma} --log-level error --config /nonexistent/config.yaml config show
+        assertions:
+          - result.code ShouldNotEqual 0
+          - result.systemout ShouldContainSubstring "no such file or directory"

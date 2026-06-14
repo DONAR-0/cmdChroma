@@ -1,0 +1,57 @@
+version: "2"
+name: Test Chroma CLI - Update Records (Add with same ID)
+testcases:
+  - name: Setup - create collection
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma mkColl t12_update_coll
+        assertions:
+          - result.code ShouldEqual 0
+  - name: Add initial document
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 120
+        script: |
+          cmdChroma a t12_update_coll \
+            -d "Original content" \
+            -d "Second doc" \
+            -i "doc-1" \
+            -i "doc-2"
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully added 2 documents"
+  - name: Update document by same ID
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 120
+        script: |
+          cmdChroma a t12_update_coll \
+            -d "Updated content for doc1" \
+            -i "doc-1" \
+            --upsert
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Successfully upserted 1 document"
+  - name: Verify update by listing
+    tags: ["integration"]
+    steps:
+      - type: exec
+        timeout: 60
+        script: cmdChroma rs t12_update_coll
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "Updated content for doc1"
+          - result.systemout ShouldContainSubstring "doc-1"
+          - result.systemout ShouldContainSubstring "Second doc"
+          - result.systemout ShouldContainSubstring "doc-2"
+  - name: cleanup
+    tags: ["integration"]
+    always: true
+    steps:
+      - type: exec
+        script: cmdChroma delete t12_update_coll || true
+        assertions:
+          - result.code ShouldEqual 0

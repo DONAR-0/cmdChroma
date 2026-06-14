@@ -1,0 +1,228 @@
+version: "2"
+name: Test Help Text and Descriptions
+
+testcases:
+  # Test root command help displays the new AppDescription
+  - name: Root help displays AppDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "cmdChroma is a command-line tool"
+      - result.systemout ShouldContainSubstring "managing ChromaDB collections"
+      - result.systemout ShouldContainSubstring "local vector embeddings"
+      - result.systemout ShouldContainSubstring "ONNX Runtime"
+      - result.systemout ShouldContainSubstring "keeps your data and AI"
+      - result.systemout ShouldContainSubstring "Test connectivity"
+      - result.systemout ShouldContainSubstring "Create and manage collections"
+      - result.systemout ShouldContainSubstring "Ingest documents"
+      - result.systemout ShouldContainSubstring "Add documents"
+      - result.systemout ShouldContainSubstring "Perform semantic search"
+      - result.systemout ShouldContainSubstring "Chat with your data"
+      - result.systemout ShouldContainSubstring "Get started quickly"
+
+  # Test ping command help displays PingCmdDescription
+  - name: Ping command help displays PingCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma ping --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Verify that cmdChroma can connect"
+      - result.systemout ShouldContainSubstring "to your ChromaDB instance"
+      - result.systemout ShouldContainSubstring "This command sends a simple request"
+      - result.systemout ShouldContainSubstring "server is running and reachable"
+      - result.systemout ShouldContainSubstring "Network connectivity is working"
+      - result.systemout ShouldContainSubstring "EXAMPLES"
+      - result.systemout ShouldContainSubstring "chroma ping"
+
+  # Test tenant command help displays TenantCmdDescription
+  - name: Tenant command help displays TenantCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma tenant --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Display information about the configured tenant"
+      - result.systemout ShouldContainSubstring "This command shows whether"
+      - result.systemout ShouldContainSubstring "tenant exists"
+      - result.systemout ShouldContainSubstring "verifying your tenant configuration"
+      - result.systemout ShouldContainSubstring "EXAMPLES"
+      - result.systemout ShouldContainSubstring "chroma tenant"
+
+  # Test databases command help displays DatabasesCmdDescription
+  - name: Databases command help displays DatabasesCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma databases --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "List all databases"
+      - result.systemout ShouldContainSubstring "accessible to the current tenant"
+      - result.systemout ShouldContainSubstring "This command retrieves and displays"
+      - result.systemout ShouldContainSubstring "databases you can access"
+      - result.systemout ShouldContainSubstring "within the tenant context"
+
+  # Test collections command help displays CollectionsCmdDescription
+  - name: Collections command help displays CollectionsCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma collections --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "List all collections"
+      - result.systemout ShouldContainSubstring "in the specified database"
+      - result.systemout ShouldContainSubstring "Shows collection names and IDs"
+      - result.systemout ShouldContainSubstring "current database context"
+      - result.systemout ShouldContainSubstring "exploring available data"
+
+  # Test create command help displays CreateCollectionCmdDescription
+  - name: Create command help displays CreateCollectionCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma create --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Create a new collection"
+      - result.systemout ShouldContainSubstring "in the current database"
+      - result.systemout ShouldContainSubstring "Collections are where your embedded documents"
+      - result.systemout ShouldContainSubstring "You need to"
+      - result.systemout ShouldContainSubstring "create a collection before adding documents"
+
+  # Test delete command help displays DeleteCollectionCmdDescription
+  - name: Delete command help displays DeleteCollectionCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma delete --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Permanently delete a collection"
+      - result.systemout ShouldContainSubstring "and all its documents"
+      - result.systemout ShouldContainSubstring "This operation cannot be undone"
+      - result.systemout ShouldContainSubstring "The collection and all its data will be removed"
+
+  # Test records command help displays RecordsCmdDescription
+  - name: Records command help displays RecordsCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma records --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "List all documents"
+      - result.systemout ShouldContainSubstring "stored in a collection"
+      - result.systemout ShouldContainSubstring "Displays document IDs"
+      - result.systemout ShouldContainSubstring "content previews"
+      - result.systemout ShouldContainSubstring "and metadata"
+      - result.systemout ShouldContainSubstring "inspecting collection contents"
+
+  # Test add command help displays AddCmdDescription
+  - name: Add command help displays AddCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma add --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Add text documents"
+      - result.systemout ShouldContainSubstring "to a collection with automatic embedding"
+      - result.systemout ShouldContainSubstring "The CLI will"
+      - result.systemout ShouldContainSubstring "Tokenize your text"
+      - result.systemout ShouldContainSubstring "Generate embeddings locally using ONNX"
+      - result.systemout ShouldContainSubstring "Upload documents + embeddings to ChromaDB"
+      - result.systemout ShouldContainSubstring "batch operation"
+
+  # Test query command help displays QueryCmdDescription
+  - name: Query command help displays QueryCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma query --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Perform semantic search"
+      - result.systemout ShouldContainSubstring "against a collection"
+      - result.systemout ShouldContainSubstring "The CLI will"
+      - result.systemout ShouldContainSubstring "Convert your query to an embedding locally"
+      - result.systemout ShouldContainSubstring "Find the most similar documents"
+      - result.systemout ShouldContainSubstring "Return results with similarity scores"
+      - result.systemout ShouldContainSubstring "batch search"
+
+  # Test import command help displays ImportCmdDescription (supports JSONL and Parquet)
+  - name: Import command help displays ImportCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma import --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Bulk import documents"
+      - result.systemout ShouldContainSubstring "JSONL"
+      - result.systemout ShouldContainSubstring "Parquet"
+      - result.systemout ShouldContainSubstring "This command is optimized for large datasets"
+      - result.systemout ShouldContainSubstring "Stream the file line by line"
+      - result.systemout ShouldContainSubstring "row by row"
+      - result.systemout ShouldContainSubstring "Generate embeddings locally"
+      - result.systemout ShouldContainSubstring "Upload in configurable batches"
+      - result.systemout ShouldContainSubstring "Show progress during import"
+
+
+  # Test chat command help displays ChatCmdDescription
+  - name: Chat command help displays ChatCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma chat --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Ask questions about your data"
+      - result.systemout ShouldContainSubstring "using AI-powered retrieval"
+      - result.systemout ShouldContainSubstring "This command"
+      - result.systemout ShouldContainSubstring "Finds relevant documents from the collection"
+      - result.systemout ShouldContainSubstring "Builds context from search results"
+      - result.systemout ShouldContainSubstring "Generates an answer using a local LLM"
+      - result.systemout ShouldContainSubstring "via Ollama"
+      - result.systemout ShouldContainSubstring "Requires Ollama running locally"
+
+  # Test delete-records command help displays DeleteRecordsCmdDescription
+  - name: Delete-records command help displays DeleteRecordsCmdDescription
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma delete-records --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "Delete documents from a collection"
+      - result.systemout ShouldContainSubstring "by their IDs"
+      - result.systemout ShouldContainSubstring "This operation removes"
+      - result.systemout ShouldContainSubstring "one or more documents"
+      - result.systemout ShouldContainSubstring "identified by their IDs"
+      - result.systemout ShouldContainSubstring "IDs must match those assigned"
+
+  # Verify all main commands are listed in root help
+  - name: All commands have descriptions in root help
+    tags: ["integration"]
+    steps:
+      - type: exec
+        script: cmdChroma --help
+    assertions:
+      - result.code ShouldEqual 0
+      - result.systemout ShouldContainSubstring "ping"
+      - result.systemout ShouldContainSubstring "tenant"
+      - result.systemout ShouldContainSubstring "databases"
+      - result.systemout ShouldContainSubstring "collections"
+      - result.systemout ShouldContainSubstring "create"
+      - result.systemout ShouldContainSubstring "delete"
+      - result.systemout ShouldContainSubstring "records"
+      - result.systemout ShouldContainSubstring "add"
+      - result.systemout ShouldContainSubstring "query"
+      - result.systemout ShouldContainSubstring "import"
+      - result.systemout ShouldContainSubstring "chat"
