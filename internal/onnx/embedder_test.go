@@ -80,3 +80,63 @@ func TestEmbedder_Close(t *testing.T) {
 	// We can test that calling Close twice doesn't panic
 	testEmbedder.Close()
 }
+
+func TestWithNumWorkers(t *testing.T) {
+	// Create a new embedder with 2 workers
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizersPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libpath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	emb, err := NewEmbedder(modelPath, tokenizersPath, libpath, WithNumWorkers(2))
+	if err != nil {
+		t.Fatalf("Failed to create embedder: %v", err)
+	}
+	defer emb.Close()
+
+	if emb.numWorkers != 2 {
+		t.Errorf("Expected numWorkers to be 2, got %d", emb.numWorkers)
+	}
+}
+
+func TestEmbedder_EmbedDocuments_Parallel(t *testing.T) {
+	// Use a larger batch to trigger parallel path
+	// Set numWorkers to 1 and send 5 texts to ensure parallel is used (since len(texts) >= numWorkers)
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizersPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libpath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	emb, err := NewEmbedder(modelPath, tokenizersPath, libpath, WithNumWorkers(1))
+	if err != nil {
+		t.Fatalf("Failed to create embedder: %v", err)
+	}
+	defer emb.Close()
+
+	texts := []string{"Hello", "World", "Go", "is", "great"} // 5 texts, > numWorkers=1
+
+	embeddings, err := emb.EmbedDocuments(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("EmbedDocuments failed: %v", err)
+	}
+
+	if len(embeddings) != len(texts) {
+		t.Errorf("Expected %d embeddings, got %d", len(texts), len(embeddings))
+	}
+
+	for i, embd := range embeddings {
+		if embd == nil {
+			t.Errorf("Embedding %d is nil", i)
+		}
+
+		if len(embd) != 384 {
+			t.Errorf("Embedding %d has wrong dimension: %d", i, len(embd))
+		}
+	}
+}
