@@ -21,16 +21,20 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set lowercase owner environment variable
+    - name: Set build environment variables
       run: |
-        echo "LOWER_OWNER=\$(echo '\${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> \$GITHUB_ENV
+        # Extract repository name from full "owner/repo" format
+        REPO_NAME="${GITHUB_REPOSITORY#*/}"
+        echo "LOWER_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "REPO_NAME=$(echo $REPO_NAME | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> $GITHUB_ENV
 
     - name: Log in GHCR
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: \${{ github.actor }}
-        password: \${{ secrets.GH_TOKEN }}
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GH_TOKEN }}
 
     - name: Set up Buildx
       uses: docker/setup-buildx-action@v3
@@ -42,5 +46,5 @@ jobs:
         file: ./Dockerfile
         push: true
         tags: |
-          ghcr.io/\${{ env.LOWER_OWNER }}/\${{ github.repository }}:\${{ env.inputs.image_tag }}
-          ghcr.io/\${{ env.LOWER_OWNER }}/\${{ github.repository }}:latest
+          ghcr.io/${{ env.LOWER_OWNER }}/${{ env.REPO_NAME }}:${{ env.IMAGE_TAG }}
+          ghcr.io/${{ env.LOWER_OWNER }}/${{ env.REPO_NAME }}:latest
