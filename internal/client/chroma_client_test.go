@@ -799,3 +799,30 @@ func TestChromaClient_CreateDatabase_Error(t *testing.T) {
 		t.Error("Expected error for CreateDatabase when server returns 500")
 	}
 }
+
+func TestChromaClient_SetEmbedder(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	// Initially embedder should be nil
+	if client.Embedder != nil {
+		t.Error("Expected Embedder to be nil initially")
+	}
+
+	// Set embedder
+	mockEmb := &mockEmbedder{}
+	client.SetEmbedder(mockEmb)
+
+	// Verify it's set
+	if client.Embedder == nil {
+		t.Error("Expected Embedder to be set after SetEmbedder")
+	}
+
+	if client.Embedder != mockEmb {
+		t.Error("Embedder not the expected instance")
+	}
+}

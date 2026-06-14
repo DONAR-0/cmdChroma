@@ -3,13 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	internalErrors "github.com/DONAR-0/cmdChroma/internal/errors"
 	ingest "github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
-	"os"
 )
 
 // Mock implementations
@@ -496,4 +497,107 @@ func TestChromaService_IngestRecords_BatchError(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error for IngestRecords when batch upload fails")
 	}
+}
+
+func TestGetFileExt(t *testing.T) {
+	tests := []struct {
+		path   string
+		expect string
+	}{
+		{"file.jsonl", ".jsonl"},
+		{"file.parquet", ".parquet"},
+		{"dir/file.jsonl", ".jsonl"},
+		{"/abs/path/file.jsonl", ".jsonl"},
+		{"file.tar.gz", ".gz"},
+		{"noextension", ""},
+		{".hidden", ".hidden"},
+		{"file.", "."},
+		{"", ""},
+		{"file.JSONL", ".jsonl"},  // case insensitivity
+		{"dir\\file", ""},         // backslash before dot, no extension
+		{"dir\\file.txt", ".txt"}, // backslash with extension
+		{"dir/file", ""},          // slash before dot, no extension
+	}
+
+	for _, tt := range tests {
+		result := getFileExt(tt.path)
+		if result != tt.expect {
+			t.Errorf("getFileExt(%q) = %q, want %q", tt.path, result, tt.expect)
+		}
+	}
+}
+
+func TestChromaService_IngestRecords_UnsupportedFormat(t *testing.T) {
+	// Create a temporary file with unsupported extension
+	tmpFile, err := os.CreateTemp("", "test_*.txt")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	defer func() {
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	if _, err := tmpFile.WriteString("some content"); err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	client := &mockChromaClient{}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	err = svc.IngestRecords("test_collection", tmpFile.Name(), nil)
+	if err == nil {
+		t.Error("Expected error for unsupported file format")
+	}
+
+	if !strings.Contains(err.Error(), "unsupported file format") {
+		t.Errorf("Expected unsupported format error, got: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_Batching(t *testing.T) {
+	// Create a temporary JSONL file with 5 records
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	defer func() {
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	records := []string{
+		`{"id":"1","content":"doc1","metadata":{}}`,
+		`{"id":"2","content":"doc2","metadata":{}}`,
+		`{"id":"3","content":"doc3","metadata":{}}`,
+		`{"id":"4","content":"doc4","metadata":{}}`,
+		`{"id":"5","content":"doc5","metadata":{}}`,
+	}
+	for _, line := range records {
+		if _, err := tmpFile.WriteString(line + "\n"); err != nil {
+			t.Fatalf("Failed to write to temp file: %v", err)
+		}
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	client := &mockChromaClient{}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	// Use a small batch size to trigger batch uploads
+	cfg := &ingest.Config{BatchSize: 2}
+
+	err = svc.IngestRecords("test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+	// If we get here, batching logic executed successfully
 }
