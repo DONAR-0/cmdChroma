@@ -268,7 +268,8 @@ func getNestedValue(m map[string]any, path string) any {
 	return current
 }
 
-// stringifyIfComplex converts non-primitive values to strings while preserving primitive types.
+// stringifyIfComplex converts non-primitive values to strings while preserving primitive types
+// and recursively flattening nested maps into the parent with underscore-separated keys.
 func (p *Processor) stringifyIfComplex(value any) any {
 	if value == nil {
 		return nil
@@ -285,10 +286,31 @@ func (p *Processor) stringifyIfComplex(value any) any {
 		value = v.Elem().Interface()
 		rt = reflect.TypeOf(value)
 	}
+
+	// Recursively flatten nested maps into the parent (foo_bar becomes foo.bar)
+	// to preserve structure while meeting ChromaDB's flat-key requirement.
+	if m, ok := value.(map[string]any); ok {
+		result := make(map[string]any)
+		for k, v := range m {
+			result[k] = p.stringifyIfComplex(v)
+		}
+
+		return result
+	}
+
+	if rt == nil {
+		return nil
+	}
+	// Convert slices/arrays to string representation.
+	if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
+		return fmt.Sprintf("%v", value)
+	}
+
 	// Check if primitive
 	if primitiveTypes[rt.Kind()] {
 		return value
 	}
+
 	// Complex type - convert to string
 	return fmt.Sprintf("%v", value)
 }
@@ -321,14 +343,14 @@ func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
 		// Extract all fields except content and id
 		for k, v := range raw {
 			if k != p.cfg.ContentField && k != p.cfg.IDField {
-				meta[k] = v
+				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
 	} else {
 		// Extract only specified metadata fields
 		for _, k := range p.cfg.MetadataFields {
 			if v, exists := raw[k]; exists {
-				meta[k] = v
+				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
 	}

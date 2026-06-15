@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 // Mock embedder for testing
@@ -576,7 +578,7 @@ func TestChromaClient_QueryBatch(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	result, err := client.QueryBatch("test", []string{"test query"}, 2)
+	result, err := client.QueryBatch(context.Background(), "test", []string{"test query"}, 2)
 	if err != nil {
 		t.Errorf("QueryBatch failed: %v", err)
 	}
@@ -603,7 +605,7 @@ func TestChromaClient_QueryBatch_Error(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	_, err := client.QueryBatch("test", []string{"test query"}, 2)
+	_, err := client.QueryBatch(context.Background(), "test", []string{"test query"}, 2)
 	if err == nil {
 		t.Errorf("Expected error for QueryBatch when server returns 500")
 	}
@@ -623,7 +625,7 @@ func TestChromaClient_QueryBatch_EmptyQueries(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	result, err := client.QueryBatch("test", []string{}, 2)
+	result, err := client.QueryBatch(context.Background(), "test", []string{}, 2)
 	if err != nil {
 		t.Errorf("QueryBatch with empty queries failed: %v", err)
 	}
@@ -650,7 +652,7 @@ func TestChromaClient_AddBatchGeneric(t *testing.T) {
 	ids := []string{"id1", "id2"}
 	metas := []map[string]any{{"key": "value"}, nil}
 
-	err := client.AddBatchGeneric("test", docs, ids, metas)
+	err := client.AddBatchGeneric(context.Background(), "test", docs, ids, metas)
 	if err != nil {
 		t.Errorf("AddBatchGeneric failed: %v", err)
 	}
@@ -673,7 +675,7 @@ func TestChromaClient_AddBatchGeneric_Error(t *testing.T) {
 	ids := []string{"id1", "id2"}
 	metas := []map[string]any{{"key": "value"}, nil}
 
-	err := client.AddBatchGeneric("test", docs, ids, metas)
+	err := client.AddBatchGeneric(context.Background(), "test", docs, ids, metas)
 	if err == nil {
 		t.Errorf("Expected error for AddBatchGeneric when server returns 500")
 	}
@@ -696,7 +698,7 @@ func TestChromaClient_UpsertBatchGeneric(t *testing.T) {
 	ids := []string{"id1", "id2"}
 	metas := []map[string]any{{"key": "value"}, nil}
 
-	err := client.UpsertBatchGeneric("test", docs, ids, metas)
+	err := client.UpsertBatchGeneric(context.Background(), "test", docs, ids, metas)
 	if err != nil {
 		t.Errorf("UpsertBatchGeneric failed: %v", err)
 	}
@@ -719,7 +721,7 @@ func TestChromaClient_UpsertBatchGeneric_Error(t *testing.T) {
 	docs := []string{"doc1"}
 	ids := []string{"id1"}
 
-	err := client.UpsertBatchGeneric("test", docs, ids, nil)
+	err := client.UpsertBatchGeneric(context.Background(), "test", docs, ids, nil)
 	if err == nil {
 		t.Errorf("Expected error for UpsertBatchGeneric when server returns 500")
 	}
@@ -738,7 +740,7 @@ func TestChromaClient_AddBatch_EmptySlice(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	err := client.AddBatch("test", []string{}, []string{})
+	err := client.AddBatch(context.Background(), "test", []string{}, []string{})
 	if err != nil {
 		t.Errorf("AddBatch with empty slices failed: %v", err)
 	}
@@ -758,7 +760,7 @@ func TestChromaClient_AddBatch_MismatchedLengths(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	_ = client.AddBatch("test", []string{"doc1", "doc2"}, []string{"id1"})
+	_ = client.AddBatch(context.Background(), "test", []string{"doc1", "doc2"}, []string{"id1"})
 	// No assertion on error; just ensure no panic
 }
 
@@ -824,5 +826,56 @@ func TestChromaClient_SetEmbedder(t *testing.T) {
 
 	if client.Embedder != mockEmb {
 		t.Error("Embedder not the expected instance")
+	}
+}
+
+// slowEmbedder simulates an embedder that takes time, supporting context cancellation.
+type slowEmbedder struct {
+	delay time.Duration
+}
+
+func (e *slowEmbedder) Embed(text string) ([]float32, error) {
+	return []float32{0.1}, nil
+}
+
+func (e *slowEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
+	select {
+	case <-time.After(e.delay):
+		result := make([][]float32, len(texts))
+		for i := range result {
+			result[i] = []float32{0.1}
+		}
+
+		return result, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (e *slowEmbedder) Close() {}
+
+func TestChromaClient_QueryBatch_ContextCancellation(t *testing.T) {
+	resp := QueryResponse{IDs: [][]string{{"doc1"}}}
+	data, _ := json.Marshal(resp)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+	client.Embedder = &slowEmbedder{delay: 500 * time.Millisecond}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	_, err := client.QueryBatch(ctx, "coll", []string{"query"}, 1)
+	if err == nil {
+		t.Error("Expected error for cancelled context, got nil")
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "context deadline exceeded") && err != context.DeadlineExceeded {
+		t.Errorf("Expected context.DeadlineExceeded, got: %v", err)
 	}
 }

@@ -93,12 +93,16 @@ func NewNIMProvider(baseURL, apiKey string) (*NIMProvider, error) {
 }
 
 // Generate streams response from the NIM API.
-func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error {
+func (p *NIMProvider) Generate(ctx context.Context, prompt, model string, w io.Writer) error {
 	start := time.Now()
 
 	modelID, err := p.validateModel(model)
 	if err != nil {
 		return err
+	}
+
+	if w == nil {
+		w = os.Stdout
 	}
 
 	slog.Info("nim_generate_start", "model", modelID, "prompt_len", len(prompt))
@@ -153,8 +157,8 @@ func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error 
 	// Stream output
 	scanner := bufio.NewScanner(resp.Body)
 
-	fmt.Println("\n🤖 AI Response (NVIDIA NIM):")
-	fmt.Println(strings.Repeat("-", 20))
+	_, _ = fmt.Fprintln(w, "\n🤖 AI Response (NVIDIA NIM):")
+	_, _ = fmt.Fprintln(w, strings.Repeat("-", 20))
 
 	for scanner.Scan() {
 		// Check context cancellation during streaming
@@ -180,11 +184,11 @@ func (p *NIMProvider) Generate(ctx context.Context, prompt, model string) error 
 		}
 
 		if len(chunk.Choices) > 0 {
-			fmt.Print(chunk.Choices[0].Delta.Content)
+			_, _ = fmt.Fprint(w, chunk.Choices[0].Delta.Content)
 		}
 	}
 
-	fmt.Println("\n" + strings.Repeat("-", 20))
+	_, _ = fmt.Fprintln(w, "\n"+strings.Repeat("-", 20))
 
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("stream reading error: %w", err)

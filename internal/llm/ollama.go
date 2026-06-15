@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -47,11 +48,15 @@ func NewProvider(baseURL string) *Provider {
 }
 
 // Generate streams response from the LLM.
-func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
+func (p *Provider) Generate(ctx context.Context, prompt, model string, w io.Writer) error {
 	start := time.Now()
 
 	if model == "" {
 		model = "qwen:0.5b"
+	}
+
+	if w == nil {
+		w = os.Stdout
 	}
 
 	slog.Info("ollama_generate_start", "model", model, "prompt_len", len(prompt))
@@ -89,8 +94,8 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 	// Stream output
 	scanner := bufio.NewScanner(resp.Body)
 
-	fmt.Println("\n🤖 AI Response:")
-	fmt.Println(strings.Repeat("-", 20))
+	_, _ = fmt.Fprintln(w, "\n🤖 AI Response:")
+	_, _ = fmt.Fprintln(w, strings.Repeat("-", 20))
 
 	for scanner.Scan() {
 		var r ChatResponse
@@ -98,14 +103,14 @@ func (p *Provider) Generate(ctx context.Context, prompt, model string) error {
 			continue
 		}
 
-		fmt.Print(r.Response)
+		_, _ = fmt.Fprint(w, r.Response)
 
 		if r.Done {
 			break
 		}
 	}
 
-	fmt.Println("\n" + strings.Repeat("-", 20))
+	_, _ = fmt.Fprintln(w, "\n"+strings.Repeat("-", 20))
 
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("stream reading error: %w", err)

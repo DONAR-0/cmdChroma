@@ -54,19 +54,19 @@ func (m *mockChromaClient) ListCollections() ([]client.Collection, error) {
 	return m.listCollectionsResult, m.listCollectionsErr
 }
 
-func (m *mockChromaClient) AddBatch(collectionID string, docs []string, ids []string) error {
+func (m *mockChromaClient) AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error {
 	return m.addBatchErr
 }
 
-func (m *mockChromaClient) AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+func (m *mockChromaClient) AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	return m.addBatchGenericErr
 }
 
-func (m *mockChromaClient) UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+func (m *mockChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	return m.upsertBatchGenericErr
 }
 
-func (m *mockChromaClient) QueryBatch(collectionId string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
+func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return m.queryBatchResult, m.queryBatchErr
 }
 
@@ -439,7 +439,7 @@ func TestChromaService_uploadBatch(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := &ChromaService{client: mockClient, embedder: embedder}
 
-	err := svc.uploadBatch("coll", []string{"doc1"}, []string{"id1"}, nil)
+	err := svc.uploadBatch(context.Background(), "coll", []string{"doc1"}, []string{"id1"}, nil)
 	if err != nil {
 		t.Errorf("uploadBatch failed: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestChromaService_uploadBatch_Empty(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := &ChromaService{client: mockClient, embedder: embedder}
 
-	err := svc.uploadBatch("coll", []string{}, []string{}, nil)
+	err := svc.uploadBatch(context.Background(), "coll", []string{}, []string{}, nil)
 	if err != nil {
 		t.Errorf("uploadBatch with empty docs should not return error, got: %v", err)
 	}
@@ -600,6 +600,93 @@ func TestChromaService_IngestRecords_Batching(t *testing.T) {
 		t.Fatalf("IngestRecords failed: %v", err)
 	}
 	// If we get here, batching logic executed successfully
+}
+
+func TestChromaService_GetDocuments(t *testing.T) {
+	client := &mockChromaClient{
+		resolveCollectionIDResult: "resolved-id",
+		listDocumentsResult: &client.GetRecordsResponse{
+			IDs:       []string{"doc1", "doc2"},
+			Documents: []string{"content1", "content2"},
+		},
+	}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	result, err := svc.GetDocuments("my_collection")
+	if err != nil {
+		t.Errorf("GetDocuments failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatalf("Expected result, got nil")
+	}
+
+	if len(result.IDs) != 2 {
+		t.Errorf("Expected 2 IDs, got %d", len(result.IDs))
+	}
+
+	if client.resolveCollectionIDResult != "resolved-id" {
+		t.Errorf("Expected resolveCollectionIDResult='resolved-id', got '%s'", client.resolveCollectionIDResult)
+	}
+}
+
+func TestChromaService_GetDocuments_ListError(t *testing.T) {
+	client := &mockChromaClient{
+		listDocumentsErr: errors.New("list failed"),
+	}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	_, err := svc.GetDocuments("my_collection")
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
+
+	if err != nil && !strings.Contains(err.Error(), "failed to list documents") {
+		t.Errorf("Expected 'failed to list documents' in error, got: %v", err)
+	}
+}
+
+func TestChromaService_Query(t *testing.T) {
+	client := &mockChromaClient{
+		resolveCollectionIDResult: "coll-id",
+		queryBatchResult: &client.QueryResponse{
+			IDs:       [][]string{{"id1"}},
+			Documents: [][]string{{"doc1"}},
+			Distances: [][]float32{{0.1}},
+		},
+	}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	ctx := context.Background()
+
+	result, err := svc.Query(ctx, "my_collection", []string{"query"}, 5)
+	if err != nil {
+		t.Errorf("Query failed: %v", err)
+	}
+
+	if result == nil {
+		t.Fatalf("Expected result, got nil")
+	}
+
+	if len(result.IDs) != 1 {
+		t.Errorf("Expected 1 result set, got %d", len(result.IDs))
+	}
+}
+
+func TestChromaService_Query_NoEmbedder(t *testing.T) {
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, nil) // no embedder
+
+	_, err := svc.Query(context.Background(), "coll", []string{"q"}, 1)
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
+
+	if err != nil && !errors.Is(err, internalErrors.ErrEmbedderNotInitialized) {
+		t.Errorf("Expected ErrEmbedderNotInitialized, got: %v", err)
+	}
 }
 
 // ExampleChromaService demonstrates creating a service and using its main methods.
