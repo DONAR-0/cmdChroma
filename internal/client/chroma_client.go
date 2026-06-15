@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
@@ -90,16 +91,16 @@ type (
 		CreateCollection(name string) (string, error)
 
 		// AddBatch uploads documents with IDs (legacy, no metadata).
-		AddBatch(collectionID string, docs []string, ids []string) error
+		AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error
 
 		// AddBatchGeneric uploads documents with optional metadata.
-		AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+		AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 
 		// UpsertBatchGeneric adds or updates documents with metadata.
-		UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+		UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 
 		// QueryBatch performs similarity search and returns matching documents.
-		QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
+		QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
 
 		// GetIDByName resolves a collection name to its ID.
 		GetIDByName(name string) (string, error)
@@ -570,10 +571,10 @@ func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
 
 // ============ Querying ============
 
-func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nResults int) (*QueryResponse, error) {
+func (c *ChromaClient) QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*QueryResponse, error) {
 	//1. Generate embeddings for all queries at once
 	// Assuming your local embedder can handle a slice of string
-	vectors, err := c.Embedder.EmbedDocuments(context.Background(), queryTexts)
+	vectors, err := c.Embedder.EmbedDocuments(ctx, queryTexts)
 	if err != nil {
 		return nil, err
 	}
@@ -617,14 +618,14 @@ func (c *ChromaClient) QueryBatch(collectionId string, queryTexts []string, nRes
 
 // ============ Batch Operations ============
 
-func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string) error {
+func (c *ChromaClient) AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error {
 	if c.Embedder == nil {
 		return fmt.Errorf("embedder is not initialized; check if the AI model loaded correctly")
 	}
 
 	// 1. Generate embeddings for the entire batch
 	// Using the EmbedDocuments function we discussed earlier
-	vectors, err := c.Embedder.EmbedDocuments(context.Background(), docs)
+	vectors, err := c.Embedder.EmbedDocuments(ctx, docs)
 	if err != nil {
 		return fmt.Errorf("failed to embed batch: %w", err)
 	}
@@ -660,24 +661,27 @@ func (c *ChromaClient) AddBatch(collectionID string, docs []string, ids []string
 }
 
 // AddBatchGeneric handles documents, IDs, and dynamic metadata maps.
-func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+func (c *ChromaClient) AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	if len(documents) == 0 {
 		return nil
 	}
 
 	// 1. Generate Embeddings for the batch
 	// Ensure your embedder is initialized before calling this
-	embeddings, err := c.Embedder.EmbedDocuments(context.Background(), documents)
+	embeddings, err := c.Embedder.EmbedDocuments(ctx, documents)
 	if err != nil {
 		return fmt.Errorf("embedding failed: %w", err)
 	}
 
 	// 2. Prepare the Request Body
 	// Chroma API expects: { "ids": [], "embeddings": [], "metadatas": [], "documents": [] }
+	// Sanitize metadata to ensure ChromaDB compatibility (no nested maps/arrays)
+	sanitizedMetadatas := sanitizeMetadataForChroma(metadatas)
+
 	payload := map[string]any{
 		"ids":        ids,
 		"embeddings": embeddings,
-		"metadatas":  metadatas,
+		"metadatas":  sanitizedMetadatas,
 		"documents":  documents,
 	}
 
@@ -712,24 +716,27 @@ func (c *ChromaClient) AddBatchGeneric(collectionID string, documents []string, 
 }
 
 // UpsertBatchGeneric handles documents, IDs, and dynamic metadata maps for upserting (insert or update).
-func (c *ChromaClient) UpsertBatchGeneric(collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
+func (c *ChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	if len(documents) == 0 {
 		return nil
 	}
 
 	// 1. Generate Embeddings for the batch
 	// Ensure your embedder is initialized before calling this
-	embeddings, err := c.Embedder.EmbedDocuments(context.Background(), documents)
+	embeddings, err := c.Embedder.EmbedDocuments(ctx, documents)
 	if err != nil {
 		return fmt.Errorf("embedding failed: %w", err)
 	}
 
 	// 2. Prepare the Request Body
 	// Chroma API expects: { "ids": [], "embeddings": [], "metadatas": [], "documents": [] }
+	// Sanitize metadata to ensure ChromaDB compatibility (no nested maps/arrays)
+	sanitizedMetadatas := sanitizeMetadataForChroma(metadatas)
+
 	payload := map[string]any{
 		"ids":        ids,
 		"embeddings": embeddings,
-		"metadatas":  metadatas,
+		"metadatas":  sanitizedMetadatas,
 		"documents":  documents,
 	}
 
@@ -761,4 +768,39 @@ func (c *ChromaClient) UpsertBatchGeneric(collectionID string, documents []strin
 	}
 
 	return nil
+}
+
+// sanitizeMetadataForChroma converts complex metadata values (nested maps, slices)
+// to string representations so they are compatible with ChromaDB's metadata constraints.
+func sanitizeMetadataForChroma(metadatas []map[string]any) []map[string]any {
+	if len(metadatas) == 0 {
+		return metadatas
+	}
+
+	result := make([]map[string]any, len(metadatas))
+	for i, m := range metadatas {
+		sanitized := make(map[string]any, len(m))
+		for k, v := range m {
+			sanitized[k] = sanitizeValue(v)
+		}
+
+		result[i] = sanitized
+	}
+
+	return result
+}
+
+// sanitizeValue recursively converts complex types to strings.
+func sanitizeValue(v any) any {
+	if v == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array, reflect.Struct:
+		return fmt.Sprintf("%v", v)
+	default:
+		return v
+	}
 }

@@ -18,7 +18,6 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	config "github.com/DONAR-0/cmdChroma/internal/config"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
-	"github.com/DONAR-0/cmdChroma/internal/llm"
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -342,19 +341,13 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 
 	f := factory.NewServiceFactory()
 
-	client, err := f.CreateChromaClient(c)
+	svc, _, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
-		return fmt.Errorf("failed to create Chroma client: %w", err)
+		return fmt.Errorf("failed to create service: %w", err)
 	}
+	defer cleanup()
 
-	// Resolve collection name to ID
-	targetID, err := client.GetIDByName(collectionName)
-	if err != nil {
-		targetID = collectionName
-		slog.Info("Collection name not found, using as-is", "name", collectionName)
-	}
-
-	docs, err := client.ListDocuments(targetID)
+	docs, err := svc.GetDocuments(collectionName)
 	if err != nil {
 		slog.Error("Failed to list documents", "error", err)
 		return fmt.Errorf("failed to list documents: %w\n\nHint: Verify collection exists and you have read permissions", err)
@@ -531,31 +524,9 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
 	}
 
-	// Display results using printer
-	printer.Printf("\n🔍 Search results for collection '%s':\n\n", collectionName)
-
-	for i, originalQuery := range queries {
-		printer.Printf("Query %d: %s\n", i+1, originalQuery)
-		printer.Print(strings.Repeat("-", 60))
-
-		for j := 0; j < len(response.IDs[i]); j++ {
-			printer.Printf("  [%d] Distance: %.4f\n", j+1, response.Distances[i][j])
-			printer.Printf("      ID: %s\n", response.IDs[i][j])
-
-			if len(response.Documents[i]) > j {
-				content := response.Documents[i][j]
-				if len(content) > 150 {
-					content = content[:150] + "..."
-				}
-
-				printer.Printf("      Content: %s\n\n", content)
-			}
-		}
-
-		if i < len(queries)-1 {
-			printer.Print(strings.Repeat("=", 60) + "\n")
-		}
-	}
+	// Display results using formatter
+	formatter := output.NewFormatter(os.Stdout, output.ModeFromCLI(c))
+	formatter.FormatQueryResponse(collectionName, queries, response)
 
 	slog.Info("operation_complete", "op", opName, "collection", collectionName, "result_count", len(response.IDs[0]), "duration_ms", time.Since(start).Milliseconds())
 
@@ -724,15 +695,33 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	// Build prompt based on whether we have context
 	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
 
-	// Get LLM provider
-	provider, err := getLLMProvider(c, model)
-	if err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "provider_init", "error", err, "duration_ms", time.Since(start).Milliseconds())
+	// Get LLM provider using factory
+	llmFactory := factory.NewLLMProviderFactory()
+	if err := llmFactory.ValidateModel(model); err != nil {
 		return err
 	}
 
+	nimURL := c.String("nim-url")
+
+	provider, err := llmFactory.CreateProvider(model, nimURL)
+	if err != nil {
+		slog.Error("operation_failed", "op", opName, "stage", "provider_init", "error", err, "duration_ms", time.Since(start).Milliseconds())
+
+		if strings.Contains(err.Error(), "API key is required") {
+			return fmt.Errorf("%s: %w", errNIMAPIKeyMissing, err)
+		}
+
+		return err
+	}
+
+	if strings.HasPrefix(model, "nim://") {
+		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
+	} else {
+		fmt.Println("\n🤖 Using Ollama for generation")
+	}
+
 	// Generate response
-	if err := provider.Generate(ctx, finalPrompt, model); err != nil {
+	if err := provider.Generate(ctx, finalPrompt, model, printer.Stdout()); err != nil {
 		slog.Error("operation_failed", "op", opName, "stage", "generate", "error", err, "duration_ms", time.Since(start).Milliseconds())
 
 		if strings.HasPrefix(model, "nim://") {
@@ -749,36 +738,6 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 		"duration_ms", time.Since(start).Milliseconds())
 
 	return nil
-}
-
-// ============ RAG Helpers ============
-
-// getLLMProvider creates the appropriate LLM provider based on model prefix.
-func getLLMProvider(c *cli.Command, model string) (llm.ProviderInterface, error) {
-	if strings.HasPrefix(model, "nim://") {
-		nimURL := c.String("nim-url")
-
-		provider, err := llm.NewNIMProvider(nimURL, "")
-		if err != nil {
-			// Provide helpful error message for missing API key
-			if strings.Contains(err.Error(), "API key is required") {
-				return nil, errors.New(errNIMAPIKeyMissing)
-			}
-
-			return nil, err
-		}
-
-		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
-
-		return provider, nil
-	}
-
-	// Default: Ollama provider
-	provider := llm.NewProvider("")
-
-	fmt.Println("\n🤖 Using Ollama for generation")
-
-	return provider, nil
 }
 
 // buildContextFromResponse extracts relevant context from query response.
@@ -811,7 +770,7 @@ func buildContextFromResponse(resp *client.QueryResponse, distanceThreshold floa
 	for i, doc := range resp.Documents[0] {
 		fmt.Printf("  [%d] Distance: %.4f\n", i+1, resp.Distances[0][i])
 		fmt.Printf("      Content: %s\n\n", doc)
-		sb.WriteString(fmt.Sprintf("[Context %d]: %s\n", i+1, doc))
+		fmt.Fprintf(&sb, "[Context %d]: %s\n", i+1, doc)
 	}
 
 	fmt.Println(strings.Repeat("-", 60))

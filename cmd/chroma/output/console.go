@@ -62,6 +62,22 @@ func (p *ConsolePrinter) Printf(format string, args ...any) {
 	_, _ = fmt.Fprintf(p.config.Stdout, format, args...)
 }
 
+// Stream prints content in streaming mode (no line breaks, direct write).
+// In JSON mode, this formats as a streaming JSON event.
+func (p *ConsolePrinter) Stream(content string) {
+	if p.config.Mode == ModeJSON {
+		p.printJSON(map[string]string{"stream": content})
+		return
+	}
+
+	_, _ = fmt.Fprint(p.config.Stdout, content)
+}
+
+// Stdout returns the underlying stdout writer.
+func (p *ConsolePrinter) Stdout() io.Writer {
+	return p.config.Stdout
+}
+
 // PrintTable prints a formatted table.
 // headers: column headers
 // rows: table data rows

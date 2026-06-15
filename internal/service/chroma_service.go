@@ -6,6 +6,7 @@ package service
 // client calls. The service layer is where transaction boundaries, batching,
 // and error handling policies are defined.
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -130,7 +131,7 @@ func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids [
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
-	err = s.client.AddBatchGeneric(collectionID, docs, ids, nil)
+	err = s.client.AddBatchGeneric(context.Background(), collectionID, docs, ids, nil)
 	if err != nil {
 		slog.Error("Failed to add batch", "collection", collectionName, "batch_size", len(docs), "error", err)
 	} else {
@@ -159,7 +160,7 @@ func (s *ChromaService) UpsertDocuments(collectionName string, docs []string, id
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
-	err = s.client.UpsertBatchGeneric(collectionID, docs, ids, nil)
+	err = s.client.UpsertBatchGeneric(context.Background(), collectionID, docs, ids, nil)
 	if err != nil {
 		slog.Error("Failed to upsert batch", "collection", collectionName, "batch_size", len(docs), "error", err)
 	} else {
@@ -189,7 +190,61 @@ func (s *ChromaService) QueryDocuments(collectionName string, queries []string, 
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
-	result, err := s.client.QueryBatch(collectionID, queries, nResults)
+	result, err := s.client.QueryBatch(context.Background(), collectionID, queries, nResults)
+	if err != nil {
+		slog.Error("Query failed", "collection", collectionName, "error", err)
+		return nil, err
+	}
+
+	slog.Info("Query completed", "collection", collectionName, "results_count", len(result.IDs))
+
+	return result, nil
+}
+
+// GetDocuments returns documents from a collection by name or ID.
+// It handles collection name→ID resolution internally.
+func (s *ChromaService) GetDocuments(collectionName string) (*client.GetRecordsResponse, error) {
+	slog.Info("Getting documents", "collection", collectionName)
+
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
+		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	result, err := s.client.ListDocuments(collectionID)
+	if err != nil {
+		slog.Error("Failed to list documents", "collection", collectionName, "error", err)
+		return nil, fmt.Errorf("failed to list documents from '%s': %w", collectionName, err)
+	}
+
+	slog.Info("Documents retrieved", "collection", collectionName, "count", len(result.IDs))
+
+	return result, nil
+}
+
+// Query performs semantic search. It handles collection name→ID resolution
+// and embedder invocation internally.
+func (s *ChromaService) Query(ctx context.Context, collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
+	if s.embedder == nil {
+		err := errors.ErrEmbedderNotInitialized
+		slog.Error("Cannot query: embedder not initialized", "error", err)
+
+		return nil, err
+	}
+
+	slog.Info("Querying documents",
+		"collection", collectionName,
+		"query_count", len(queries),
+		"n_results", nResults)
+
+	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	if err != nil {
+		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
+		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	result, err := s.client.QueryBatch(ctx, collectionID, queries, nResults)
 	if err != nil {
 		slog.Error("Query failed", "collection", collectionName, "error", err)
 		return nil, err
@@ -278,7 +333,7 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 		}
 
 		if batchIdx >= cfg.BatchSize {
-			if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+			if err := s.uploadBatch(context.Background(), collectionID, docs, ids, metas); err != nil {
 				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
 			}
 
@@ -292,7 +347,7 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 
 	// Final batch
 	if len(docs) > 0 {
-		if err := s.uploadBatch(collectionID, docs, ids, metas); err != nil {
+		if err := s.uploadBatch(context.Background(), collectionID, docs, ids, metas); err != nil {
 			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
 		}
 
@@ -330,10 +385,10 @@ func getFileExt(filePath string) string {
 
 // uploadBatch uploads a batch of documents to Chroma.
 // The client's AddBatchGeneric generates embeddings internally.
-func (s *ChromaService) uploadBatch(collectionID string, docs, ids []string, metas []map[string]any) error {
+func (s *ChromaService) uploadBatch(ctx context.Context, collectionID string, docs, ids []string, metas []map[string]any) error {
 	if len(docs) == 0 {
 		return nil
 	}
 
-	return s.client.AddBatchGeneric(collectionID, docs, ids, metas)
+	return s.client.AddBatchGeneric(ctx, collectionID, docs, ids, metas)
 }

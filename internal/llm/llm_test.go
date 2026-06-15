@@ -137,7 +137,7 @@ func TestProvider_Generate_Success(t *testing.T) {
 	prov := NewProvider(server.URL)
 	ctx := context.Background()
 
-	err := prov.Generate(ctx, "prompt", "llama2")
+	err := prov.Generate(ctx, "prompt", "llama2", nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestProvider_Generate_HttpError(t *testing.T) {
 	prov := NewProvider(server.URL)
 	ctx := context.Background()
 
-	err := prov.Generate(ctx, "test", "llama2")
+	err := prov.Generate(ctx, "test", "llama2", nil)
 	if err == nil {
 		t.Errorf("expected error for Generate with BadRequest")
 	}
@@ -182,7 +182,7 @@ func TestProvider_Generate_DefaultModel(t *testing.T) {
 	prov := NewProvider(server.URL)
 	ctx := context.Background()
 
-	err := prov.Generate(ctx, "test", "")
+	err := prov.Generate(ctx, "test", "", nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestNIMProvider_Generate_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
+	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo", nil)
 	if err != nil {
 		t.Fatalf("Generate failed: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestNIMProvider_Generate_Error(t *testing.T) {
 
 	ctx := context.Background()
 
-	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo")
+	err = prov.Generate(ctx, "prompt", "gpt-3.5-turbo", nil)
 	if err == nil {
 		t.Errorf("expected error for Generate")
 	}
