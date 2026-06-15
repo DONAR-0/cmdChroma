@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"os"
 	"testing"
 )
 
@@ -18,6 +19,10 @@ func TestLLMProviderFactory_CreateProvider_Ollama(t *testing.T) {
 }
 
 func TestLLMProviderFactory_CreateProvider_NIM(t *testing.T) {
+	if os.Getenv("NVIDIA_API_KEY") == "" {
+		t.Skip("NVIDIA_API_KEY not set — skipping NIM integration test")
+	}
+
 	f := NewLLMProviderFactory()
 
 	prov, err := f.CreateProvider("nim://mistralai/mistral-7b", "http://localhost:8080")
