@@ -109,7 +109,8 @@ type (
 		ListDocuments(collectionID string) (*GetRecordsResponse, error)
 
 		// ResolveCollectionID accepts either a collection name or ID and returns the ID.
-		ResolveCollectionID(input string) (string, error)
+		// ctx controls cancellation; passed to the underlying HTTP request.
+		ResolveCollectionID(ctx context.Context, input string) (string, error)
 
 		// DeleteCollection removes a collection and all its data.
 		DeleteCollection(name string) error
@@ -428,17 +429,36 @@ func (c *ChromaClient) GetIDByName(name string) (string, error) {
 	// If not found as a name, return the input as ID (assuming it's already an ID)
 	return name, nil
 }
-func (c *ChromaClient) ResolveCollectionID(input string) (string, error) {
-	// If it's already a UUID, return it
+
+// ResolveCollectionID accepts a collection name OR a UUID and returns the UUID.
+// ctx propagates to the underlying HTTP request via http.NewRequestWithContext,
+// so a cancelled context aborts the in-flight call. We deliberately do not
+// chain to c.ListCollections() because that method's existing signature is
+// still pre-ctx — inlining the fetch here keeps the focused scope of this patch.
+func (c *ChromaClient) ResolveCollectionID(ctx context.Context, input string) (string, error) {
 	if _, err := uuid.Parse(input); err == nil {
 		return input, nil
 	}
 
-	// Otherwise, find the ID by Name
-	collections, err := c.ListCollections()
+	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		// If we can't list collections, we still return the input as ID
-		// This matches the test expectation for error cases too
+		return input, nil
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return input, nil
+	}
+	defer MustClose(resp.Body.Close)
+
+	if resp.StatusCode != http.StatusOK {
+		return input, nil
+	}
+
+	var collections []Collection
+	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
 		return input, nil
 	}
 
@@ -448,7 +468,6 @@ func (c *ChromaClient) ResolveCollectionID(input string) (string, error) {
 		}
 	}
 
-	// If not found as a name, return the input as ID (assuming it's already an ID)
 	return input, nil
 }
 
@@ -491,8 +510,9 @@ func (c *ChromaClient) DeleteCollection(name string) error {
 func (c *ChromaClient) DeleteRecords(collectionID string, ids []string) error {
 	slog.Info("Deleting records", "collection", collectionID, "ids", ids)
 
-	// Resolve collection name to ID (handles both names and UUIDs)
-	resolvedID, err := c.ResolveCollectionID(collectionID)
+	// Resolve collection name to ID (handles both names and UUIDs).
+	// TODO(ctx-sweep): DeleteRecords should accept ctx.
+	resolvedID, err := c.ResolveCollectionID(context.Background(), collectionID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve collection: %w", err)
 	}

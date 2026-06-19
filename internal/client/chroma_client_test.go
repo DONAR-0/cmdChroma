@@ -323,7 +323,7 @@ func TestChromaClient_ResolveCollectionID(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
 	// Test existing collection
-	id, err := client.ResolveCollectionID("my_collection")
+	id, err := client.ResolveCollectionID(context.Background(), "my_collection")
 	if err != nil {
 		t.Errorf("ResolveCollectionID failed for existing collection: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestChromaClient_ResolveCollectionID(t *testing.T) {
 	}
 
 	// Test non-existing collection (should return input as ID)
-	id, err = client.ResolveCollectionID("non_existent")
+	id, err = client.ResolveCollectionID(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("ResolveCollectionID failed for non-existent collection: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestChromaClient_ResolveCollectionID_Error(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
 	// Should still work for non-existent collection (returns input as ID) even if listing fails
-	_, err := client.ResolveCollectionID("non_existent")
+	_, err := client.ResolveCollectionID(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("ResolveCollectionID should not error for non-existent collection when listing fails: %v", err)
 	}

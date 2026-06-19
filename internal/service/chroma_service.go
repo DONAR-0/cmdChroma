@@ -124,8 +124,10 @@ func (s *ChromaService) AddDocuments(collectionName string, docs []string, ids [
 	slog.Info("Adding documents",
 		"collection", collectionName,
 		"document_count", len(docs))
-	// Resolve collection name (or ID) to a valid collection ID
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	// Resolve collection name (or ID) to a valid collection ID.
+	// TODO(ctx-sweep): AddDocuments should accept ctx; passing Background to keep
+	// service-signature scope stable for this patch.
+	collectionID, err := s.client.ResolveCollectionID(context.Background(), collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
@@ -153,8 +155,9 @@ func (s *ChromaService) UpsertDocuments(collectionName string, docs []string, id
 	slog.Info("Upserting documents",
 		"collection", collectionName,
 		"document_count", len(docs))
-	// Resolve collection name (or ID) to a valid collection ID
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	// Resolve collection name (or ID) to a valid collection ID.
+	// TODO(ctx-sweep): UpsertDocuments should accept ctx.
+	collectionID, err := s.client.ResolveCollectionID(context.Background(), collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
@@ -183,8 +186,9 @@ func (s *ChromaService) QueryDocuments(collectionName string, queries []string, 
 		"collection", collectionName,
 		"query_count", len(queries),
 		"n_results", nResults)
-	// Resolve collection name (or ID) to a valid collection ID
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	// Resolve collection name (or ID) to a valid collection ID.
+	// TODO(ctx-sweep): QueryDocuments should accept ctx.
+	collectionID, err := s.client.ResolveCollectionID(context.Background(), collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
@@ -205,8 +209,8 @@ func (s *ChromaService) QueryDocuments(collectionName string, queries []string, 
 // It handles collection name→ID resolution internally.
 func (s *ChromaService) GetDocuments(collectionName string) (*client.GetRecordsResponse, error) {
 	slog.Info("Getting documents", "collection", collectionName)
-
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	// TODO(ctx-sweep): GetDocuments should accept ctx.
+	collectionID, err := s.client.ResolveCollectionID(context.Background(), collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
@@ -224,7 +228,8 @@ func (s *ChromaService) GetDocuments(collectionName string) (*client.GetRecordsR
 }
 
 // Query performs semantic search. It handles collection name→ID resolution
-// and embedder invocation internally.
+// and embedder invocation internally. ctx propagates to the resolve hop
+// so cancellation aborts the resolution HTTP round-trip.
 func (s *ChromaService) Query(ctx context.Context, collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
 	if s.embedder == nil {
 		err := errors.ErrEmbedderNotInitialized
@@ -238,7 +243,7 @@ func (s *ChromaService) Query(ctx context.Context, collectionName string, querie
 		"query_count", len(queries),
 		"n_results", nResults)
 
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
@@ -275,8 +280,9 @@ func (s *ChromaService) IngestRecords(collectionName, filePath string, cfg *inge
 		return errors.ErrEmbedderNotInitialized
 	}
 
-	// Resolve collection
-	collectionID, err := s.client.ResolveCollectionID(collectionName)
+	// Resolve collection. TODO(ctx-sweep): IngestRecords should accept ctx;
+	// using Background keeps the focused-patch scope.
+	collectionID, err := s.client.ResolveCollectionID(context.Background(), collectionName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}

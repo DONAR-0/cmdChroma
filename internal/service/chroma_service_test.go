@@ -74,7 +74,7 @@ func (m *mockChromaClient) GetIDByName(name string) (string, error) {
 	return m.getIDByNameResult, m.getIDByNameErr
 }
 
-func (m *mockChromaClient) ResolveCollectionID(input string) (string, error) {
+func (m *mockChromaClient) ResolveCollectionID(_ context.Context, input string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
 

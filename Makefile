@@ -83,6 +83,13 @@ build:
 	CGO_ENABLED=1 \
 	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
 
+.PHONY: build-mcp-server
+build-mcp-server: setup-deps ## Build the MCP server binary
+	@echo "Building MCP server..."
+	@mkdir -p ./dist
+	CGO_ENABLED=1 \
+	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/mcp-server ./cmd/mcp-server
+
 .PHONY: clean
 clean: ## Remove build artifacts, coverage profiles, and test caches
 	@echo "Cleaning up workspace..."
@@ -108,6 +115,13 @@ venom-clean: ## Remove Venom logs and reports
 	@echo "🧹 Cleaning Venom artifacts..."
 	rm -rf .ci/logs/*
 	@echo "✅ Clean complete"
+
+.PHONY: venom-mcp
+venom-mcp: build-mcp-server ## Run MCP server Venom integration tests
+	@echo "🚀 Preparing MCP Venom Integration Tests..."
+	@chmod +x ./.ci/scripts/run-venom.sh
+	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)"; \
+	TEST_FILES=".ci/tests/mcp/*.yml" ./.ci/scripts/run-venom.sh
 
 
 # ==============================================================================
@@ -138,6 +152,26 @@ build-all: build-linux build-darwin build-windows ## Build for all platforms
 # ==============================================================================
 # Maintenance & Tooling
 # ==============================================================================
+
+.PHONY: build-mcp-all
+build-mcp-all: build-mcp-linux build-mcp-darwin build-mcp-windows ## Build MCP server for all platforms (best-effort CGO)
+
+.PHONY: build-mcp-linux
+build-mcp-linux: build-mcp-server ## Build MCP server for Linux (amd64)
+	@mkdir -p $(BUILD_DIR)
+	cp $(BUILD_DIR)/mcp-server $(BUILD_DIR)/mcp-server-linux-amd64
+
+.PHONY: build-mcp-darwin
+build-mcp-darwin: setup-deps ## Build MCP server for macOS (amd64)
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
+		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp-server-darwin-amd64 ./cmd/mcp-server
+
+.PHONY: build-mcp-windows
+build-mcp-windows: setup-deps ## Build MCP server for Windows (amd64)
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp-server.exe ./cmd/mcp-server
 
 .PHONY: deps
 deps: ## Download and tidy go modules
