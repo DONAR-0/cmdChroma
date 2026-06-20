@@ -38,19 +38,19 @@ type mockChromaClient struct {
 	createDatabaseErr         error
 }
 
-func (m *mockChromaClient) TestConnection() error {
+func (m *mockChromaClient) TestConnection(_ context.Context) error {
 	return m.testConnectionErr
 }
 
-func (m *mockChromaClient) GetTenant() (bool, error) {
+func (m *mockChromaClient) GetTenant(_ context.Context) (bool, error) {
 	return m.getTenantResult, m.getTenantErr
 }
 
-func (m *mockChromaClient) ListDatabases() ([]client.Database, error) {
+func (m *mockChromaClient) ListDatabases(_ context.Context) ([]client.Database, error) {
 	return m.listDatabasesResult, m.listDatabasesErr
 }
 
-func (m *mockChromaClient) ListCollections() ([]client.Collection, error) {
+func (m *mockChromaClient) ListCollections(_ context.Context) ([]client.Collection, error) {
 	return m.listCollectionsResult, m.listCollectionsErr
 }
 
@@ -70,7 +70,7 @@ func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionId string, 
 	return m.queryBatchResult, m.queryBatchErr
 }
 
-func (m *mockChromaClient) GetIDByName(name string) (string, error) {
+func (m *mockChromaClient) GetIDByName(_ context.Context, name string) (string, error) {
 	return m.getIDByNameResult, m.getIDByNameErr
 }
 
@@ -78,23 +78,23 @@ func (m *mockChromaClient) ResolveCollectionID(_ context.Context, input string) 
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
 
-func (m *mockChromaClient) ListDocuments(collectionID string) (*client.GetRecordsResponse, error) {
+func (m *mockChromaClient) ListDocuments(_ context.Context, collectionID string) (*client.GetRecordsResponse, error) {
 	return m.listDocumentsResult, m.listDocumentsErr
 }
 
-func (m *mockChromaClient) DeleteCollection(name string) error {
+func (m *mockChromaClient) DeleteCollection(_ context.Context, name string) error {
 	return m.deleteCollectionErr
 }
 
-func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) error {
+func (m *mockChromaClient) DeleteRecords(_ context.Context, collectionID string, ids []string) error {
 	return m.deleteRecordsErr
 }
 
-func (m *mockChromaClient) CreateDatabase(name string) error {
+func (m *mockChromaClient) CreateDatabase(_ context.Context, name string) error {
 	return m.createDatabaseErr
 }
 
-func (m *mockChromaClient) CreateCollection(name string) (string, error) {
+func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (string, error) {
 	return "test-collection-id", nil
 }
 
@@ -122,7 +122,7 @@ func TestChromaService_TestConnection(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err := svc.TestConnection()
+	err := svc.TestConnection(context.Background())
 	if err != nil {
 		t.Errorf("TestConnection failed: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestChromaService_TestConnection_Error(t *testing.T) {
 	client := &mockChromaClient{testConnectionErr: errors.New("connection failed")}
 	svc := NewChromaService(client, nil)
 
-	err := svc.TestConnection()
+	err := svc.TestConnection(context.Background())
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}
@@ -142,7 +142,7 @@ func TestChromaService_GetTenant(t *testing.T) {
 	client := &mockChromaClient{getTenantResult: true}
 	svc := NewChromaService(client, nil)
 
-	result, err := svc.GetTenant()
+	result, err := svc.GetTenant(context.Background())
 	if err != nil {
 		t.Errorf("GetTenant failed: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestChromaService_GetTenant_Error(t *testing.T) {
 	client := &mockChromaClient{getTenantResult: false, getTenantErr: errors.New("tenant check failed")}
 	svc := NewChromaService(client, nil)
 
-	_, err := svc.GetTenant()
+	_, err := svc.GetTenant(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for GetTenant when client returns error")
 	}
@@ -166,7 +166,7 @@ func TestChromaService_ListDatabases(t *testing.T) {
 	client := &mockChromaClient{listDatabasesResult: []client.Database{{Id: "1", Name: "db1"}}}
 	svc := NewChromaService(client, nil)
 
-	dbs, err := svc.ListDatabases()
+	dbs, err := svc.ListDatabases(context.Background())
 	if err != nil {
 		t.Errorf("ListDatabases failed: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestChromaService_ListDatabases_Error(t *testing.T) {
 	client := &mockChromaClient{listDatabasesErr: errors.New("list databases failed")}
 	svc := NewChromaService(client, nil)
 
-	_, err := svc.ListDatabases()
+	_, err := svc.ListDatabases(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListDatabases when client returns error")
 	}
@@ -190,7 +190,7 @@ func TestChromaService_ListCollections(t *testing.T) {
 	client := &mockChromaClient{listCollectionsResult: []client.Collection{{ID: "1", Name: "col1"}}}
 	svc := NewChromaService(client, nil)
 
-	collections, err := svc.ListCollections()
+	collections, err := svc.ListCollections(context.Background())
 	if err != nil {
 		t.Errorf("ListCollections failed: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestChromaService_ListCollections_Error(t *testing.T) {
 	client := &mockChromaClient{listCollectionsErr: errors.New("list collections failed")}
 	svc := NewChromaService(client, nil)
 
-	_, err := svc.ListCollections()
+	_, err := svc.ListCollections(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListCollections when client returns error")
 	}
@@ -219,7 +219,7 @@ func TestChromaService_AddDocuments(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err := svc.AddDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.AddDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err != nil {
 		t.Errorf("AddDocuments failed: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestChromaService_AddDocuments_NoEmbedder(t *testing.T) {
 	client := &mockChromaClient{}
 	svc := NewChromaService(client, nil)
 
-	err := svc.AddDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.AddDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}
@@ -240,7 +240,7 @@ func TestChromaService_AddDocuments_Error(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err := svc.AddDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.AddDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err == nil {
 		t.Errorf("Expected error for AddDocuments when client returns error")
 	}
@@ -251,7 +251,7 @@ func TestChromaService_UpsertDocuments(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err := svc.UpsertDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.UpsertDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err != nil {
 		t.Errorf("UpsertDocuments failed: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestChromaService_UpsertDocuments_NoEmbedder(t *testing.T) {
 	client := &mockChromaClient{}
 	svc := NewChromaService(client, nil)
 
-	err := svc.UpsertDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.UpsertDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}
@@ -272,7 +272,7 @@ func TestChromaService_UpsertDocuments_Error(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err := svc.UpsertDocuments("col1", []string{"doc"}, []string{"id"})
+	err := svc.UpsertDocuments(context.Background(), "col1", []string{"doc"}, []string{"id"})
 	if err == nil {
 		t.Errorf("Expected error for UpsertDocuments when client returns error")
 	}
@@ -288,7 +288,7 @@ func TestChromaService_QueryDocuments(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	result, err := svc.QueryDocuments("col1", []string{"query"}, 1)
+	result, err := svc.QueryDocuments(context.Background(), "col1", []string{"query"}, 1)
 	if err != nil {
 		t.Errorf("QueryDocuments failed: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestChromaService_QueryDocuments_NoEmbedder(t *testing.T) {
 	client := &mockChromaClient{}
 	svc := NewChromaService(client, nil) // nil embedder
 
-	_, err := svc.QueryDocuments("col1", []string{"query"}, 1)
+	_, err := svc.QueryDocuments(context.Background(), "col1", []string{"query"}, 1)
 	if err == nil {
 		t.Errorf("Expected error for QueryDocuments when embedder is nil")
 	} else if !errors.Is(err, internalErrors.ErrEmbedderNotInitialized) {
@@ -315,7 +315,7 @@ func TestChromaService_QueryDocuments_Error(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	_, err := svc.QueryDocuments("col1", []string{"query"}, 1)
+	_, err := svc.QueryDocuments(context.Background(), "col1", []string{"query"}, 1)
 	if err == nil {
 		t.Errorf("Expected error for QueryDocuments when client returns error")
 	}
@@ -363,7 +363,7 @@ func TestChromaService_IngestRecords(t *testing.T) {
 	svc := NewChromaService(client, embedder)
 
 	// Test with default config
-	err = svc.IngestRecords("test_collection", tmpFile.Name(), nil)
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), nil)
 	if err != nil {
 		t.Errorf("IngestRecords failed: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestChromaService_IngestRecords_NoEmbedder(t *testing.T) {
 	client := &mockChromaClient{}
 	svc := NewChromaService(client, nil) // nil embedder
 
-	err = svc.IngestRecords("test_collection", tmpFile.Name(), nil)
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), nil)
 	if err == nil {
 		t.Errorf("Expected error for IngestRecords when embedder is nil")
 	} else if !errors.Is(err, internalErrors.ErrEmbedderNotInitialized) {
@@ -493,7 +493,7 @@ func TestChromaService_IngestRecords_BatchError(t *testing.T) {
 		IDField:      "id",
 	}
 
-	err = svc.IngestRecords("test_collection", tmpFile.Name(), cfg)
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
 	if err == nil {
 		t.Errorf("Expected error for IngestRecords when batch upload fails")
 	}
@@ -550,7 +550,7 @@ func TestChromaService_IngestRecords_UnsupportedFormat(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	err = svc.IngestRecords("test_collection", tmpFile.Name(), nil)
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), nil)
 	if err == nil {
 		t.Error("Expected error for unsupported file format")
 	}
@@ -595,7 +595,7 @@ func TestChromaService_IngestRecords_Batching(t *testing.T) {
 	// Use a small batch size to trigger batch uploads
 	cfg := &ingest.Config{BatchSize: 2}
 
-	err = svc.IngestRecords("test_collection", tmpFile.Name(), cfg)
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
 	if err != nil {
 		t.Fatalf("IngestRecords failed: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestChromaService_GetDocuments(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
 
-	result, err := svc.GetDocuments("my_collection")
+	result, err := svc.GetDocuments(context.Background(), "my_collection")
 	if err != nil {
 		t.Errorf("GetDocuments failed: %v", err)
 	}
@@ -637,7 +637,7 @@ func TestChromaService_GetDocuments_ListError(t *testing.T) {
 	}
 	svc := NewChromaService(client, &mockEmbedder{})
 
-	_, err := svc.GetDocuments("my_collection")
+	_, err := svc.GetDocuments(context.Background(), "my_collection")
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}

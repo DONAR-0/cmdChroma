@@ -35,6 +35,7 @@ const (
 	shutdownTimeout   = 5 * time.Second
 )
 
+
 func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInterface, mode string) *server.MCPServer {
 	_ = embedder
 
@@ -46,8 +47,15 @@ func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInte
 
 	storeTool := mcp.NewTool("store_documents",
 		mcp.WithDescription("Store text documents as embeddings in a ChromaDB collection"),
-		mcp.WithInputSchema[StoreDocumentsInput](),
-		mcp.WithOutputSchema[StoreDocumentsOutput](),
+		mcp.WithToolTitle("Store Documents"),
+		mcp.WithString("collection_id", mcp.Required(), mcp.Description("Target collection name or ID")),
+		mcp.WithArray("documents", mcp.Required(), mcp.Description("Texts to embed and store"), mcp.WithStringItems(), mcp.MinItems(1)),
+		mcp.WithArray("ids", mcp.Description("Optional explicit IDs; one per document"), mcp.WithStringItems()),
+		mcp.WithArray("metadatas", mcp.Description("Optional metadata, parallel to documents"), mcp.Items(map[string]any{"type": "object", "additionalProperties": true})),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("StoreDocumentsOutput")),
 	)
 	s.AddTool(storeTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args StoreDocumentsInput) (StoreDocumentsOutput, error) {
@@ -57,8 +65,15 @@ func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInte
 
 	queryTool := withOutputBudget(mcp.NewTool("query_documents",
 		mcp.WithDescription("Search semantically across stored documents in a collection"),
-		mcp.WithInputSchema[QueryDocumentsInput](),
-		mcp.WithOutputSchema[QueryDocumentsOutput](),
+		mcp.WithToolTitle("Query Documents"),
+		mcp.WithString("collection_id", mcp.Required(), mcp.Description("Target collection name or ID")),
+		mcp.WithArray("query_texts", mcp.Required(), mcp.Description("One or more natural-language queries"), mcp.WithStringItems(), mcp.MinItems(1)),
+		mcp.WithInteger("n_results", mcp.Description("Maximum hits to return per query"), mcp.DefaultNumber(5), mcp.Min(1), mcp.Max(1000)),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("QueryDocumentsOutput")),
 	), outputBudgetChars)
 	s.AddTool(queryTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args QueryDocumentsInput) (QueryDocumentsOutput, error) {
@@ -68,8 +83,12 @@ func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInte
 
 	collectionListTool := withOutputBudget(mcp.NewTool("collection_list",
 		mcp.WithDescription("List all collections accessible to the configured tenant/database"),
-		mcp.WithInputSchema[CollectionListInput](),
-		mcp.WithOutputSchema[CollectionListOutput](),
+		mcp.WithToolTitle("List Collections"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("CollectionListOutput")),
 	), outputBudgetChars)
 	s.AddTool(collectionListTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args CollectionListInput) (CollectionListOutput, error) {
@@ -79,30 +98,43 @@ func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInte
 
 	collectionCreateTool := mcp.NewTool("collection_create",
 		mcp.WithDescription("Create a new empty collection"),
-		mcp.WithInputSchema[CollectionCreateInput](),
-		mcp.WithOutputSchema[CollectionCreateOutput](),
+		mcp.WithToolTitle("Create Collection"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Collection name (1-64 chars)"), mcp.MinLength(1), mcp.MaxLength(64)),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("CollectionCreateOutput")),
 	)
 	s.AddTool(collectionCreateTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args CollectionCreateInput) (CollectionCreateOutput, error) {
-			return handleCollectionCreate(chroma, args)
+			return handleCollectionCreate(ctx, chroma, args)
 		},
 	))
 
 	collectionDeleteTool := mcp.NewTool("collection_delete",
 		mcp.WithDescription("Permanently delete a collection and all its data"),
-		mcp.WithInputSchema[CollectionDeleteInput](),
-		mcp.WithOutputSchema[CollectionDeleteOutput](),
+		mcp.WithToolTitle("Delete Collection"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Collection name to permanently delete"), mcp.MinLength(1)),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("CollectionDeleteOutput")),
 	)
 	s.AddTool(collectionDeleteTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args CollectionDeleteInput) (CollectionDeleteOutput, error) {
-			return handleCollectionDelete(chroma, args)
+			return handleCollectionDelete(ctx, chroma, args)
 		},
 	))
 
 	collectionStatsTool := withOutputBudget(mcp.NewTool("collection_stats",
 		mcp.WithDescription("Get document count and sample IDs for a collection"),
-		mcp.WithInputSchema[CollectionStatsInput](),
-		mcp.WithOutputSchema[CollectionStatsOutput](),
+		mcp.WithToolTitle("Collection Stats"),
+		mcp.WithString("collection_id", mcp.Required(), mcp.Description("Target collection name or ID")),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("CollectionStatsOutput")),
 	), outputBudgetChars)
 	s.AddTool(collectionStatsTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args CollectionStatsInput) (CollectionStatsOutput, error) {
@@ -112,8 +144,14 @@ func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInte
 
 	forgetTool := mcp.NewTool("forget",
 		mcp.WithDescription("Delete specific records from a collection by ID, or clear all records"),
-		mcp.WithInputSchema[ForgetInput](),
-		mcp.WithOutputSchema[ForgetOutput](),
+		mcp.WithToolTitle("Forget Documents"),
+		mcp.WithString("collection_id", mcp.Required(), mcp.Description("Target collection name or ID")),
+		mcp.WithArray("ids", mcp.Description("Specific record IDs to delete"), mcp.WithStringItems(), mcp.MinItems(1)),
+		mcp.WithBoolean("all", mcp.Description("Set true to delete every record in the collection")),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("ForgetOutput")),
 	)
 	s.AddTool(forgetTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args ForgetInput) (ForgetOutput, error) {
@@ -141,8 +179,16 @@ func withOutputBudget(t mcp.Tool, maxChars int) mcp.Tool {
 func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterface) {
 	storeMemTool := mcp.NewTool("store_memory",
 		mcp.WithDescription("Store a piece of knowledge for future retrieval"),
-		mcp.WithInputSchema[StoreMemoryInput](),
-		mcp.WithOutputSchema[StoreMemoryOutput](),
+		mcp.WithToolTitle("Store Memory"),
+		mcp.WithString("content", mcp.Required(), mcp.Description("The knowledge content")),
+		mcp.WithString("type", mcp.Description("Knowledge type — narrows search filters"), mcp.Enum("decision", "error_solution", "fact", "gotcha", "pattern", "session", "snippet")),
+		mcp.WithArray("tags", mcp.Description("Searchable tags"), mcp.WithStringItems()),
+		mcp.WithString("collection", mcp.Description("Collection name (default: mcp_memory)")),
+		mcp.WithString("id", mcp.Description("Optional ID (auto-generated if empty)")),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("StoreMemoryOutput")),
 	)
 	s.AddTool(storeMemTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args StoreMemoryInput) (StoreMemoryOutput, error) {
@@ -152,8 +198,16 @@ func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterfac
 
 	searchMemTool := withOutputBudget(mcp.NewTool("search_memories",
 		mcp.WithDescription("Search semantically across stored knowledge, optionally filtered by type"),
-		mcp.WithInputSchema[SearchMemoriesInput](),
-		mcp.WithOutputSchema[SearchMemoriesOutput](),
+		mcp.WithToolTitle("Search Memories"),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Natural language search query")),
+		mcp.WithInteger("n_results", mcp.Description("Maximum hits to return"), mcp.DefaultNumber(5), mcp.Min(1), mcp.Max(100)),
+		mcp.WithString("filter_type", mcp.Description("Optional type filter, e.g. decision|pattern|fact")),
+		mcp.WithString("collection", mcp.Description("Collection name (default: mcp_memory)")),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("SearchMemoriesOutput")),
 	), outputBudgetChars)
 	s.AddTool(searchMemTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args SearchMemoriesInput) (SearchMemoriesOutput, error) {
@@ -163,8 +217,17 @@ func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterfac
 
 	storeCodeTool := mcp.NewTool("store_code_snippet",
 		mcp.WithDescription("Index a reusable code snippet with language and description metadata"),
-		mcp.WithInputSchema[StoreCodeSnippetInput](),
-		mcp.WithOutputSchema[StoreCodeSnippetOutput](),
+		mcp.WithToolTitle("Store Code Snippet"),
+		mcp.WithString("code", mcp.Required(), mcp.Description("The source code to store")),
+		mcp.WithString("language", mcp.Description("Programming language")),
+		mcp.WithString("description", mcp.Description("Human-readable description")),
+		mcp.WithArray("tags", mcp.Description("Searchable tags"), mcp.WithStringItems()),
+		mcp.WithString("collection", mcp.Description("Collection name (default: mcp_memory)")),
+		mcp.WithString("id", mcp.Description("Optional ID (auto-generated if empty)")),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("StoreCodeSnippetOutput")),
 	)
 	s.AddTool(storeCodeTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args StoreCodeSnippetInput) (StoreCodeSnippetOutput, error) {
@@ -174,8 +237,16 @@ func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterfac
 
 	searchCodeTool := withOutputBudget(mcp.NewTool("search_code",
 		mcp.WithDescription("Find code snippets by semantic meaning, optionally filtered by language"),
-		mcp.WithInputSchema[SearchCodeInput](),
-		mcp.WithOutputSchema[SearchCodeOutput](),
+		mcp.WithToolTitle("Search Code Snippets"),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Semantic search query")),
+		mcp.WithInteger("n_results", mcp.Description("Maximum hits to return"), mcp.DefaultNumber(5), mcp.Min(1), mcp.Max(100)),
+		mcp.WithString("language", mcp.Description("Optional language filter")),
+		mcp.WithString("collection", mcp.Description("Collection name (default: mcp_memory)")),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("SearchCodeOutput")),
 	), outputBudgetChars)
 	s.AddTool(searchCodeTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args SearchCodeInput) (SearchCodeOutput, error) {
@@ -185,8 +256,14 @@ func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterfac
 
 	getSessionTool := mcp.NewTool("get_session",
 		mcp.WithDescription("Retrieve a previously saved session by its ID"),
-		mcp.WithInputSchema[GetSessionInput](),
-		mcp.WithOutputSchema[GetSessionOutput](),
+		mcp.WithToolTitle("Get Session"),
+		mcp.WithString("id", mcp.Required(), mcp.Description("Session ID to retrieve")),
+		mcp.WithString("collection", mcp.Description("Collection name (default: mcp_memory)")),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithRawOutputSchema(outputJSONSchema("GetSessionOutput")),
 	)
 	s.AddTool(getSessionTool, mcp.NewStructuredToolHandler(
 		func(ctx context.Context, req mcp.CallToolRequest, args GetSessionInput) (GetSessionOutput, error) {
@@ -308,7 +385,7 @@ func handleQueryDocuments(ctx context.Context, chroma client.ChromaClientInterfa
 }
 
 func handleCollectionList(ctx context.Context, chroma client.ChromaClientInterface) (CollectionListOutput, error) {
-	cols, err := chroma.ListCollections()
+	cols, err := chroma.ListCollections(ctx)
 	if err != nil {
 		return CollectionListOutput{}, fmt.Errorf("list collections failed: %v", err)
 	}
@@ -326,12 +403,12 @@ func handleCollectionList(ctx context.Context, chroma client.ChromaClientInterfa
 	return out, nil
 }
 
-func handleCollectionCreate(chroma client.ChromaClientInterface, in CollectionCreateInput) (CollectionCreateOutput, error) {
+func handleCollectionCreate(ctx context.Context, chroma client.ChromaClientInterface, in CollectionCreateInput) (CollectionCreateOutput, error) {
 	if in.Name == "" {
 		return CollectionCreateOutput{}, fmt.Errorf("name is required")
 	}
 
-	id, err := chroma.CreateCollection(in.Name)
+	id, err := chroma.CreateCollection(ctx, in.Name)
 	if err != nil {
 		return CollectionCreateOutput{}, fmt.Errorf("create collection failed: %v", err)
 	}
@@ -339,12 +416,12 @@ func handleCollectionCreate(chroma client.ChromaClientInterface, in CollectionCr
 	return CollectionCreateOutput{ID: id, Name: in.Name}, nil
 }
 
-func handleCollectionDelete(chroma client.ChromaClientInterface, in CollectionDeleteInput) (CollectionDeleteOutput, error) {
+func handleCollectionDelete(ctx context.Context, chroma client.ChromaClientInterface, in CollectionDeleteInput) (CollectionDeleteOutput, error) {
 	if in.Name == "" {
 		return CollectionDeleteOutput{}, fmt.Errorf("name is required")
 	}
 
-	if err := chroma.DeleteCollection(in.Name); err != nil {
+	if err := chroma.DeleteCollection(ctx, in.Name); err != nil {
 		return CollectionDeleteOutput{}, fmt.Errorf("delete collection failed: %v", err)
 	}
 
@@ -361,7 +438,7 @@ func handleCollectionStats(ctx context.Context, chroma client.ChromaClientInterf
 		return CollectionStatsOutput{}, fmt.Errorf("failed to resolve collection: %v", err)
 	}
 
-	records, err := chroma.ListDocuments(resolvedID)
+	records, err := chroma.ListDocuments(ctx, resolvedID)
 	if err != nil {
 		return CollectionStatsOutput{}, fmt.Errorf("list documents failed: %v", err)
 	}
@@ -404,7 +481,7 @@ func handleForget(ctx context.Context, chroma client.ChromaClientInterface, in F
 	var idsToDelete []string
 
 	if in.All {
-		records, err := chroma.ListDocuments(resolvedID)
+		records, err := chroma.ListDocuments(ctx, resolvedID)
 		if err != nil {
 			return ForgetOutput{}, fmt.Errorf("list documents failed: %v", err)
 		}
@@ -418,7 +495,7 @@ func handleForget(ctx context.Context, chroma client.ChromaClientInterface, in F
 		return ForgetOutput{DeletedCount: 0, Mode: "ids"}, nil
 	}
 
-	if err := chroma.DeleteRecords(resolvedID, idsToDelete); err != nil {
+	if err := chroma.DeleteRecords(ctx, resolvedID, idsToDelete); err != nil {
 		return ForgetOutput{}, fmt.Errorf("delete records failed: %v", err)
 	}
 

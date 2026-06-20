@@ -9,8 +9,37 @@
 // remain testable without CGO and trivially portable across SDK pins.
 package main
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
+// outputJSONSchema returns a raw JSON schema for the given tool name.
+// Used with mcp.WithRawOutputSchema to provide structured output.
+// Returns nil if no schema is defined for the name.
+func outputJSONSchema(name string) json.RawMessage {
+	schemas := map[string]json.RawMessage{
+		"StoreDocumentsOutput":   json.RawMessage(`{"type":"object","properties":{"count":{"type":"integer"},"ids":{"type":"array","items":{"type":"string"}}},"required":["count","ids"]}`),
+		"QueryDocumentsOutput":   json.RawMessage(`{"type":"object","properties":{"ids":{"type":"array","items":{"type":"array","items":{"type":"string"}}},"documents":{"type":"array","items":{"type":"array","items":{"type":"string"}}},"metadatas":{"type":"array"},"distances":{"type":"array","items":{"type":"array","items":{"type":"number"}}},"duration_ms":{"type":"integer"}},"required":["ids","documents","metadatas","distances","duration_ms"]}`),
+		"CollectionListOutput":   json.RawMessage(`{"type":"object","properties":{"collections":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"id":{"type":"string"}},"required":["name","id"]}}},"required":["collections"]}`),
+		"CollectionCreateOutput": json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"}},"required":["id","name"]}`),
+		"CollectionDeleteOutput": json.RawMessage(`{"type":"object","properties":{"deleted":{"type":"boolean"},"name":{"type":"string"}},"required":["deleted","name"]}`),
+		"CollectionStatsOutput":  json.RawMessage(`{"type":"object","properties":{"collection":{"type":"string"},"count":{"type":"integer"},"sample_ids":{"type":"array","items":{"type":"string"}}},"required":["collection","count"]}`),
+		"ForgetOutput":           json.RawMessage(`{"type":"object","properties":{"deleted_count":{"type":"integer"},"mode":{"type":"string"}},"required":["deleted_count","mode"]}`),
+		"StoreMemoryOutput":      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}}}`),
+		"SearchMemoriesOutput":   json.RawMessage(`{"type":"object","properties":{"results":{"type":"array","items":{"type":"object"}}}}`),
+		"StoreCodeSnippetOutput": json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}}}`),
+		"SearchCodeOutput":       json.RawMessage(`{"type":"object","properties":{"results":{"type":"array","items":{"type":"object"}}}}`),
+		"GetSessionOutput":       json.RawMessage(`{"type":"object","properties":{"session":{"type":"object"}}}`),
+	}
+	raw, ok := schemas[name]
+	if !ok {
+		return nil
+	}
+	return raw
+}
+
+// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // store_documents — persist docs (+ optional ids/metadatas) into a collection.
 // -----------------------------------------------------------------------------

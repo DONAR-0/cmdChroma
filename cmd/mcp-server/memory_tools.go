@@ -236,7 +236,7 @@ func handleGetSession(ctx context.Context, chroma client.ChromaClientInterface, 
 		return GetSessionOutput{}, fmt.Errorf("failed to resolve collection: %v", err)
 	}
 
-	records, err := chroma.ListDocuments(resolvedID)
+	records, err := chroma.ListDocuments(ctx, resolvedID)
 	if err != nil {
 		return GetSessionOutput{}, fmt.Errorf("list documents failed: %v", err)
 	}

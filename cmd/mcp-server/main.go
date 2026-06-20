@@ -100,7 +100,10 @@ func run(cfg *Config) {
 	chromaClient := client.NewChromaDBClient(cfg.Chroma.URL, cfg.Chroma.Tenant, cfg.Chroma.Database)
 	chromaClient.SetEmbedder(embedder)
 
-	if err := chromaClient.TestConnection(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := chromaClient.TestConnection(ctx); err != nil {
 		slog.Error("ChromaDB connection failed", "error", err)
 		os.Exit(1)
 	}
@@ -111,7 +114,7 @@ func run(cfg *Config) {
 		"mode", cfg.Server.Mode,
 	)
 
-	ctx := WaitForSignal()
+	ctx = WaitForSignal()
 
 	switch cfg.Server.Transport {
 	case "stdio":

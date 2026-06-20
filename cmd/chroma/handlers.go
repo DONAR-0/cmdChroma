@@ -72,7 +72,7 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 	host := cmd.String("host")
 	port := cmd.String("port")
 
-	slog.Info("operation_start", "op", opName, "host", host, "port", port)
+	slog.Info("operation_start", "op", "test_connection", "host", host, "port", port)
 
 	f := factory.NewServiceFactory()
 
@@ -89,7 +89,7 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 	rlCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	if err := svc.TestConnection(); err != nil {
+	if err := svc.TestConnection(ctx); err != nil {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
@@ -128,7 +128,7 @@ func handleCurrentTenants(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	tenantExists, err := chromaClient.GetTenant()
+	tenantExists, err := chromaClient.GetTenant(ctx)
 	if err != nil {
 		slog.Error("Failed to check tenant", "error", err)
 		printer.Error("Tenant check failed: %v", err)
@@ -158,7 +158,7 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	dbs, err := chromaClient.ListDatabases()
+	dbs, err := chromaClient.ListDatabases(ctx)
 	if err != nil {
 		slog.Error("Failed to list databases", "error", err)
 		printer.Error("Failed to list databases: %v", err)
@@ -185,7 +185,7 @@ func handleListDatabases(ctx context.Context, cmd *cli.Command) error {
 // ===== Collections =====
 
 // handleListCollection lists collections in the current database.
-func handleListCollection(_ context.Context, cmd *cli.Command) error {
+func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 	slog.Info("Listing collections", "tenant", cmd.String("tenant"), "database", cmd.String("database"))
 
 	f := factory.NewServiceFactory()
@@ -195,7 +195,7 @@ func handleListCollection(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	collections, err := chromaClient.ListCollections()
+	collections, err := chromaClient.ListCollections(ctx)
 	if err != nil {
 		slog.Error("Failed to list collections", "error", err)
 		return fmt.Errorf("failed to list collections: %w\n\nHint: Verify database exists: chroma databases", err)
@@ -220,7 +220,7 @@ func handleListCollection(_ context.Context, cmd *cli.Command) error {
 }
 
 // handleCreateCollection creates a new collection.
-func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
+func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 	start := time.Now()
 	opName := "create_collection"
 
@@ -239,7 +239,7 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 	}
 
 	// Try to create the collection
-	id, err := chromaClient.CreateCollection(collectionName)
+	id, err := chromaClient.CreateCollection(ctx, collectionName)
 	if err != nil {
 		// Check if the error is due to missing database
 		errMsg := err.Error()
@@ -251,7 +251,7 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 			dbName := cmd.String("database")
 			slog.Info("Auto-creating database", "database", dbName)
 
-			if createErr := chromaClient.CreateDatabase(dbName); createErr != nil {
+			if createErr := chromaClient.CreateDatabase(ctx, dbName); createErr != nil {
 				slog.Error("Failed to create database", "error", createErr)
 				return fmt.Errorf("failed to create database '%s': %w", dbName, createErr)
 			}
@@ -259,14 +259,14 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 			fmt.Printf("✅ Database '%s' created\n", dbName)
 
 			// Retry collection creation
-			id, err = chromaClient.CreateCollection(collectionName)
+			id, err = chromaClient.CreateCollection(ctx, collectionName)
 			if err != nil {
 				slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 				return fmt.Errorf("failed to create collection after database creation: %w", err)
 			}
 		} else if isDatabaseError {
 			// Provide helpful error message with available databases
-			dbs, listErr := chromaClient.ListDatabases()
+			dbs, listErr := chromaClient.ListDatabases(ctx)
 
 			var hint string
 			if listErr == nil && len(dbs) > 0 {
@@ -297,7 +297,7 @@ func handleCreateCollection(_ context.Context, cmd *cli.Command) error {
 }
 
 // handleDeleteCollection deletes a collection.
-func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
+func handleDeleteCollection(ctx context.Context, cmd *cli.Command) error {
 	collectionName := cmd.Args().Get(0)
 	if collectionName == "" {
 		return fmt.Errorf("collection name is required\n\nUsage: chroma delete <collection_name>\n\nExample: chroma delete my_collection")
@@ -312,7 +312,7 @@ func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	if err := chromaClient.DeleteCollection(collectionName); err != nil {
+	if err := chromaClient.DeleteCollection(ctx, collectionName); err != nil {
 		slog.Error("Collection deletion failed", "error", err)
 		// Check if it's a "not found" error (404)
 		if strings.Contains(err.Error(), "404") && (strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "not found")) {
@@ -331,7 +331,7 @@ func handleDeleteCollection(_ context.Context, cmd *cli.Command) error {
 // ===== Documents =====
 
 // handleListDocuments lists documents in a collection.
-func handleListDocuments(_ context.Context, c *cli.Command) error {
+func handleListDocuments(ctx context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
 		return fmt.Errorf("collection name is required\n\nUsage: chroma records <collection_name>\n\nExample: chroma records my_collection")
@@ -347,7 +347,7 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
-	docs, err := svc.GetDocuments(collectionName)
+	docs, err := svc.GetDocuments(ctx, collectionName)
 	if err != nil {
 		slog.Error("Failed to list documents", "error", err)
 		return fmt.Errorf("failed to list documents: %w\n\nHint: Verify collection exists and you have read permissions", err)
@@ -385,7 +385,7 @@ func handleListDocuments(_ context.Context, c *cli.Command) error {
 }
 
 // handleBatchAddDocuments adds documents to a collection.
-func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
+func handleBatchAddDocuments(ctx context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	docs := c.StringSlice("doc")
 
@@ -426,7 +426,7 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 	if upsert {
 		slog.Info("Upserting batch to Chroma", "collection", collectionName, "count", len(docs))
 
-		if err := svc.UpsertDocuments(collectionName, docs, ids); err != nil {
+		if err := svc.UpsertDocuments(ctx, collectionName, docs, ids); err != nil {
 			return fmt.Errorf("failed to upsert documents: %w\n\nHint: Check collection exists and you have write permissions", err)
 		}
 
@@ -435,7 +435,7 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 	} else {
 		slog.Info("Uploading batch to Chroma", "collection", collectionName, "count", len(docs))
 
-		if err := svc.AddDocuments(collectionName, docs, ids); err != nil {
+		if err := svc.AddDocuments(ctx, collectionName, docs, ids); err != nil {
 			return fmt.Errorf("failed to add documents: %w\n\nHint: Check collection exists and you have write permissions", err)
 		}
 
@@ -447,7 +447,7 @@ func handleBatchAddDocuments(_ context.Context, c *cli.Command) error {
 }
 
 // handleDeleteRecords deletes specific documents from a collection by IDs.
-func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
+func handleDeleteRecords(ctx context.Context, cmd *cli.Command) error {
 	collectionName := cmd.Args().Get(0)
 	ids := cmd.StringSlice("id")
 
@@ -468,7 +468,7 @@ func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	if err := chromaClient.DeleteRecords(collectionName, ids); err != nil {
+	if err := chromaClient.DeleteRecords(ctx, collectionName, ids); err != nil {
 		slog.Error("Delete records failed", "error", err)
 		return fmt.Errorf("failed to delete records: %w", err)
 	}
@@ -482,7 +482,7 @@ func handleDeleteRecords(_ context.Context, cmd *cli.Command) error {
 // ===== Search & Query =====
 
 // handleQueryBatchInCollection performs batch semantic search.
-func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
+func handleQueryBatchInCollection(ctx context.Context, c *cli.Command) error {
 	start := time.Now()
 	opName := "query"
 
@@ -518,7 +518,7 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 		printer.Info("Searching...")
 	}
 
-	response, err := svc.QueryDocuments(collectionName, queries, nResults)
+	response, err := svc.QueryDocuments(ctx, collectionName, queries, nResults)
 	if err != nil {
 		slog.Error("operation_failed", "op", opName, "collection", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("query failed: %w\n\nHint: Check collection exists and contains documents", err)
@@ -537,7 +537,7 @@ func handleQueryBatchInCollection(_ context.Context, c *cli.Command) error {
 
 // handleImportFileInChromaDb imports a file (JSONL or Parquet) with progress tracking.
 // All batching logic is handled by the service layer.
-func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
+func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
 		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>\n\nExample: chroma import my_collection data.jsonl")
@@ -609,7 +609,7 @@ func handleImportFileInChromaDb(_ context.Context, c *cli.Command) error {
 		printer.Info("Processing...")
 	}
 
-	if err := svc.IngestRecords(collectionName, safePath, cfg); err != nil {
+	if err := svc.IngestRecords(ctx, collectionName, safePath, cfg); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
 
@@ -677,7 +677,7 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
 
 	// Query for context
-	resp, err := svc.QueryDocuments(collectionName, []string{question}, nResults)
+	resp, err := svc.QueryDocuments(ctx, collectionName, []string{question}, nResults)
 	if err != nil {
 		slog.Error("operation_failed", "op", opName, "stage", "query", "error", err, "duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("failed to retrieve context: %w\n\nHint: Make sure collection exists and has documents", err)
@@ -805,7 +805,7 @@ Provide a clear, concise answer:`,
 // ============ Config Command Handlers ============
 
 // handleConfigShow displays the effective configuration after merging all sources.
-func handleConfigShow(_ context.Context, c *cli.Command) error {
+func handleConfigShow(ctx context.Context, c *cli.Command) error {
 	slog.Info("Displaying effective configuration")
 
 	// Load config from all sources
@@ -855,7 +855,7 @@ func handleConfigShow(_ context.Context, c *cli.Command) error {
 }
 
 // handleConfigInit creates a configuration file with sensible defaults.
-func handleConfigInit(_ context.Context, c *cli.Command) error {
+func handleConfigInit(ctx context.Context, c *cli.Command) error {
 	slog.Info("Initializing configuration file")
 
 	// Determine output path
@@ -946,7 +946,7 @@ func toStringRows(dbs []client.Database) [][]string {
 }
 
 // handleDoctor runs diagnostic checks and reports system status.
-func handleDoctor(_ context.Context, c *cli.Command) error {
+func handleDoctor(ctx context.Context, c *cli.Command) error {
 	// Header
 	printer.Print("🔍 Running diagnostics...")
 	printer.Print(strings.Repeat("=", 60))
@@ -1004,7 +1004,7 @@ func handleDoctor(_ context.Context, c *cli.Command) error {
 	if err != nil {
 		printer.Error("  ✗ Failed to create client: %v", err)
 	} else {
-		if err := client.TestConnection(); err != nil {
+		if err := client.TestConnection(ctx); err != nil {
 			printer.Error("  ✗ Connection failed: %v", err)
 		} else {
 			printer.Success("  ✓ Successfully connected to ChromaDB")

@@ -42,7 +42,7 @@ func callCollectionTool(t *testing.T, chroma client.ChromaClientInterface, toolN
 			mcp.WithOutputSchema[CollectionCreateOutput](),
 		), mcp.NewTypedToolHandler(
 			func(ctx context.Context, req mcp.CallToolRequest, args CollectionCreateInput) (*mcp.CallToolResult, error) {
-				out, err := handleCollectionCreate(chroma, args)
+				out, err := handleCollectionCreate(ctx, chroma, args)
 				if err != nil {
 					return mcp.NewToolResultError(err.Error()), nil
 				}
@@ -57,7 +57,7 @@ func callCollectionTool(t *testing.T, chroma client.ChromaClientInterface, toolN
 			mcp.WithOutputSchema[CollectionDeleteOutput](),
 		), mcp.NewTypedToolHandler(
 			func(ctx context.Context, req mcp.CallToolRequest, args CollectionDeleteInput) (*mcp.CallToolResult, error) {
-				out, err := handleCollectionDelete(chroma, args)
+				out, err := handleCollectionDelete(ctx, chroma, args)
 				if err != nil {
 					return mcp.NewToolResultError(err.Error()), nil
 				}

@@ -131,32 +131,32 @@ type mockChromaClient struct {
 	LastEmbedder onnx.EmbedderInterface
 }
 
-func (m *mockChromaClient) TestConnection() error {
+func (m *mockChromaClient) TestConnection(_ context.Context) error {
 	m.NoArg.TestConnection++
 	return m.TestConnectionErr
 }
 
-func (m *mockChromaClient) GetTenant() (bool, error) {
+func (m *mockChromaClient) GetTenant(_ context.Context) (bool, error) {
 	m.NoArg.GetTenant++
 	return m.GetTenantResult, m.GetTenantErr
 }
 
-func (m *mockChromaClient) ListDatabases() ([]client.Database, error) {
+func (m *mockChromaClient) ListDatabases(_ context.Context) ([]client.Database, error) {
 	m.NoArg.ListDatabases++
 	return m.ListDatabasesResult, m.ListDatabasesErr
 }
 
-func (m *mockChromaClient) CreateDatabase(name string) error {
+func (m *mockChromaClient) CreateDatabase(_ context.Context, name string) error {
 	m.CreateDatabaseCalls = append(m.CreateDatabaseCalls, createDatabaseCall{Name: name})
 	return m.CreateDatabaseErr
 }
 
-func (m *mockChromaClient) ListCollections() ([]client.Collection, error) {
+func (m *mockChromaClient) ListCollections(_ context.Context) ([]client.Collection, error) {
 	m.NoArg.ListCollections++
 	return m.ListCollectionsResult, m.ListCollectionsErr
 }
 
-func (m *mockChromaClient) CreateCollection(name string) (string, error) {
+func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (string, error) {
 	m.CreateCollectionCalls = append(m.CreateCollectionCalls, createCollectionCall{Name: name})
 
 	id := m.CreateCollectionResult
@@ -209,12 +209,12 @@ func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, 
 	return m.QueryResult, m.QueryErr
 }
 
-func (m *mockChromaClient) GetIDByName(name string) (string, error) {
+func (m *mockChromaClient) GetIDByName(_ context.Context, name string) (string, error) {
 	m.GetIDByNameCalls = append(m.GetIDByNameCalls, getIDByNameCall{Name: name})
 	return m.GetIDByNameResult, m.GetIDByNameErr
 }
 
-func (m *mockChromaClient) ListDocuments(collectionID string) (*client.GetRecordsResponse, error) {
+func (m *mockChromaClient) ListDocuments(_ context.Context, collectionID string) (*client.GetRecordsResponse, error) {
 	m.ListDocsCalls = append(m.ListDocsCalls, listDocsCall{CollectionID: collectionID})
 	return m.ListDocsResult, m.ListDocsErr
 }
@@ -224,12 +224,12 @@ func (m *mockChromaClient) ResolveCollectionID(_ context.Context, input string) 
 	return m.ResolveCollectionIDResult, m.ResolveCollectionIDErr
 }
 
-func (m *mockChromaClient) DeleteCollection(name string) error {
+func (m *mockChromaClient) DeleteCollection(_ context.Context, name string) error {
 	m.DeleteCollectionCalls = append(m.DeleteCollectionCalls, deleteCollectionCall{Name: name})
 	return m.DeleteCollectionErr
 }
 
-func (m *mockChromaClient) DeleteRecords(collectionID string, ids []string) error {
+func (m *mockChromaClient) DeleteRecords(_ context.Context, collectionID string, ids []string) error {
 	m.DeleteRecordsCalls = append(m.DeleteRecordsCalls, deleteRecordsCall{
 		CollectionID: collectionID,
 		IDs:          ids,
