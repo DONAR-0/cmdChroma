@@ -45,14 +45,7 @@ func Is(err error, target ...error) bool {
 }
 
 // As checks if an error can be cast to a specific type.
-// Kept for convenience but standard errors.As can be used.
+// Delegates to errors.AsType (Go 1.26+) for type-safe error unwrapping.
 func As[T error](err error) (T, bool) {
-	var t T
-	if errors.As(err, &t) {
-		return t, true
-	}
-
-	var zero T
-
-	return zero, false
+	return errors.AsType[T](err)
 }

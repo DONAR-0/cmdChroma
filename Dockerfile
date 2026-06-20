@@ -1,5 +1,5 @@
 # Stage 1: Build binary with dependencies
-FROM golang:1.25.7-bookworm AS builder
+FROM golang:1.26.4-bookworm AS builder
 
 # Install build dependencies for CGO and ONNX
 RUN apt-get update && apt-get install -y \

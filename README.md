@@ -134,7 +134,7 @@ By generating embeddings locally with ONNX Runtime, cmdChroma:
 ## 📦 Installation
 
 ### Prerequisites
-- **Go**: 1.21 or higher (for building from source)
+- **Go**: 1.26 or higher (for building from source)
 - **ChromaDB**: Running locally (see quick start above)
 - **ONNX Runtime**: `libonnxruntime.so` and model files (automatically handled by setup script)
 

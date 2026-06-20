@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 # --- build stage -------------------------------------------------------------
-FROM golang:1.22-bullseye AS builder
+FROM golang:1.26.4-bookworm AS builder
 
 WORKDIR /src
 

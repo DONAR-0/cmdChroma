@@ -8,7 +8,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 ### Prerequisites
 
-- **Go**: 1.21 or higher ([download](https://go.dev/dl/))
+- **Go**: 1.26 or higher ([download](https://go.dev/dl/))
 - **Git**: For version control
 - **Docker**: Required for running ChromaDB and integration tests (optional but recommended)
 - **GNU Make**: For using build targets (optional but convenient)
