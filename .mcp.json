@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "cmdchroma": {
+      "type": "stdio",
+      "command": "${CLAUDE_PROJECT_DIR:-.}/dist/mcp-server",
+      "args": ["--transport", "stdio"],
+      "timeout": 600000
+    }
+  }
+}

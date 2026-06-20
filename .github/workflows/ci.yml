@@ -73,6 +73,12 @@ jobs:
         fi
       if: runner.os != 'Windows'
 
+    - name: Test with race detector
+      run: |
+        LIBRARY_PATH="${{ env.TOKENIZER_LIB_DIR }}:${LIBRARY_PATH}" \
+        LD_LIBRARY_PATH="${{ env.ONNX_LIB_DIR }}:${LD_LIBRARY_PATH}" \
+        go test -race -count=1 ./cmd/mcp-server/
+
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       with:
@@ -115,8 +121,20 @@ jobs:
         CGO_ENABLED: 1
         LD_LIBRARY_PATH: ${{ env.ONNX_LIB_DIR }}:${{ env.LD_LIBRARY_PATH }}
 
+    - name: Build MCP server
+      run: make build-mcp-server
+      env:
+        CGO_ENABLED: 1
+        LD_LIBRARY_PATH: ${{ env.ONNX_LIB_DIR }}:${{ env.LD_LIBRARY_PATH }}
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: cmdChroma-linux-amd64
         path: ./dist/cmdChroma*
+
+    - name: Upload MCP server artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mcp-server-linux-amd64
+        path: ./dist/mcp-server*

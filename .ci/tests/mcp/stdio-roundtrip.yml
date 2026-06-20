@@ -1,0 +1,35 @@
+version: "2"
+name: MCP Server - Stdio Round-Trip
+vars:
+  mcp_server: mcp-server
+testcases:
+  - name: initialize and list tools
+    tags: ["mcp", "stdio"]
+    steps:
+      - type: exec
+        timeout: 30
+        script: |
+          cd ../../../
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"venom","version":"0.0.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+          | timeout 30 mcp-server --transport stdio --collection venom_test 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "tools"
+  - name: unknown tool returns error
+    tags: ["mcp", "stdio"]
+    steps:
+      - type: exec
+        timeout: 30
+        script: |
+          cd ../../../
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"venom","version":"0.0.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"store_doc"}}' \
+          | timeout 30 mcp-server --transport stdio --collection venom_test 2>/dev/null
+        assertions:
+          - result.code ShouldEqual 0
+          - result.systemout ShouldContainSubstring "-32602"

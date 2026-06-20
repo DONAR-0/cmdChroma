@@ -41,7 +41,7 @@ func TestChromaClient_TestConnection(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.TestConnection()
+	err := client.TestConnection(context.Background())
 	if err != nil {
 		t.Errorf("TestConnection failed: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestChromaClient_TestConnection_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.TestConnection()
+	err := client.TestConnection(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for TestConnection when server returns 500")
 	}
@@ -77,7 +77,7 @@ func TestChromaClient_GetTenant(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "test_tenant", "db")
 
-	exists, err := client.GetTenant()
+	exists, err := client.GetTenant(context.Background())
 	if err != nil {
 		t.Errorf("GetTenant failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestChromaClient_GetTenant_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "test_tenant", "db")
 
-	exists, err := client.GetTenant()
+	exists, err := client.GetTenant(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for GetTenant when server returns 500")
 	}
@@ -127,7 +127,7 @@ func TestChromaClient_ListDatabases(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	result, err := client.ListDatabases()
+	result, err := client.ListDatabases(context.Background())
 	if err != nil {
 		t.Errorf("ListDatabases failed: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestChromaClient_ListDatabases_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	_, err := client.ListDatabases()
+	_, err := client.ListDatabases(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListDatabases when server returns 500")
 	}
@@ -174,7 +174,7 @@ func TestChromaClient_ListCollections(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	result, err := client.ListCollections()
+	result, err := client.ListCollections(context.Background())
 	if err != nil {
 		t.Errorf("ListCollections failed: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestChromaClient_ListCollections_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	_, err := client.ListCollections()
+	_, err := client.ListCollections(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListCollections when server returns 500")
 	}
@@ -223,7 +223,7 @@ func TestChromaClient_CreateCollection(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	id, err := client.CreateCollection("test_collection")
+	id, err := client.CreateCollection(context.Background(), "test_collection")
 	if err != nil {
 		t.Errorf("CreateCollection failed: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestChromaClient_CreateCollection_Error(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 	client.Embedder = &mockEmbedder{}
 
-	_, err := client.CreateCollection("test_collection")
+	_, err := client.CreateCollection(context.Background(), "test_collection")
 	if err == nil {
 		t.Errorf("Expected error for CreateCollection when server returns 500")
 	}
@@ -272,7 +272,7 @@ func TestChromaClient_ListDocuments(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	result, err := client.ListDocuments("test")
+	result, err := client.ListDocuments(context.Background(), "test")
 	if err != nil {
 		t.Errorf("ListDocuments failed: %v", err)
 	}
@@ -298,7 +298,7 @@ func TestChromaClient_ListDocuments_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	_, err := client.ListDocuments("test")
+	_, err := client.ListDocuments(context.Background(), "test")
 	if err == nil {
 		t.Errorf("Expected error for ListDocuments when server returns 500")
 	}
@@ -323,7 +323,7 @@ func TestChromaClient_ResolveCollectionID(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
 	// Test existing collection
-	id, err := client.ResolveCollectionID("my_collection")
+	id, err := client.ResolveCollectionID(context.Background(), "my_collection")
 	if err != nil {
 		t.Errorf("ResolveCollectionID failed for existing collection: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestChromaClient_ResolveCollectionID(t *testing.T) {
 	}
 
 	// Test non-existing collection (should return input as ID)
-	id, err = client.ResolveCollectionID("non_existent")
+	id, err = client.ResolveCollectionID(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("ResolveCollectionID failed for non-existent collection: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestChromaClient_ResolveCollectionID_Error(t *testing.T) {
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
 	// Should still work for non-existent collection (returns input as ID) even if listing fails
-	_, err := client.ResolveCollectionID("non_existent")
+	_, err := client.ResolveCollectionID(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("ResolveCollectionID should not error for non-existent collection when listing fails: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestChromaClient_GetIDByName(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	id, err := client.GetIDByName("my_collection")
+	id, err := client.GetIDByName(context.Background(), "my_collection")
 	if err != nil {
 		t.Errorf("GetIDByName failed: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestChromaClient_GetIDByName(t *testing.T) {
 	}
 
 	// Test non-existing
-	id, err = client.GetIDByName("non_existent")
+	id, err = client.GetIDByName(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("GetIDByName failed for non-existent: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestChromaClient_GetIDByName_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	_, err := client.GetIDByName("non_existent")
+	_, err := client.GetIDByName(context.Background(), "non_existent")
 	if err != nil {
 		t.Errorf("GetIDByName should not error for non-existent collection when listing fails: %v", err)
 	}
@@ -430,7 +430,7 @@ func TestChromaClient_DeleteCollection(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.DeleteCollection("test_collection")
+	err := client.DeleteCollection(context.Background(), "test_collection")
 	if err != nil {
 		t.Errorf("DeleteCollection failed: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestChromaClient_DeleteCollection_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.DeleteCollection("test_collection")
+	err := client.DeleteCollection(context.Background(), "test_collection")
 	if err == nil {
 		t.Errorf("Expected error for DeleteCollection when server returns 500")
 	}
@@ -466,7 +466,7 @@ func TestChromaClient_DeleteRecords(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.DeleteRecords("test", []string{"id1", "id2"})
+	err := client.DeleteRecords(context.Background(), "test", []string{"id1", "id2"})
 	if err != nil {
 		t.Errorf("DeleteRecords failed: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestChromaClient_DeleteRecords_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.DeleteRecords("test", []string{"id1"})
+	err := client.DeleteRecords(context.Background(), "test", []string{"id1"})
 	if err == nil {
 		t.Errorf("Expected error for DeleteRecords when server returns 500")
 	}
@@ -777,7 +777,7 @@ func TestChromaClient_CreateDatabase(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.CreateDatabase("newdb")
+	err := client.CreateDatabase(context.Background(), "newdb")
 	if err != nil {
 		t.Errorf("CreateDatabase failed: %v", err)
 	}
@@ -796,7 +796,7 @@ func TestChromaClient_CreateDatabase_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	err := client.CreateDatabase("newdb")
+	err := client.CreateDatabase(context.Background(), "newdb")
 	if err == nil {
 		t.Error("Expected error for CreateDatabase when server returns 500")
 	}

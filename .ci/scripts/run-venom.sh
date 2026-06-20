@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+echo "DEBUG: Starting run-venom.sh"
+echo "DEBUG: REPO_ROOT=$REPO_ROOT"
+echo "DEBUG: PWD=$PWD"
+echo "DEBUG: PATH=$PATH"
 
 # Exit on error + unset vars + pipefail
 set -euo pipefail
@@ -36,6 +40,12 @@ export PATH="$REPO_ROOT/dist:$REPO_ROOT/.ci/bin:$PATH"
 
 # Also keep this for safety until RPATH is 100% verified
 export LD_LIBRARY_PATH="$REPO_ROOT/models/onnx_runtime/lib:${LD_LIBRARY_PATH:-}"
+
+# Debug info
+echo "DEBUG: REPO_ROOT=$REPO_ROOT"
+echo "DEBUG: PWD=$PWD"
+echo "DEBUG: PATH=$PATH"
+echo "DEBUG: Checking for mcp-server in dist: $(ls -la $REPO_ROOT/dist/mcp-server 2>/dev/null || echo 'not found')"
 
 # Ensure ChromaDB is running
 echo "Checking for ChromaDB..."

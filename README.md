@@ -44,7 +44,36 @@ That's it! 🎉
 - **Rich Error Messages**: Actionable hints when things go wrong.
 - **Dataset Import**: Stream large datasets from JSONL files with progress reporting.
 - **RAG-Ready**: Built-in chat command for Retrieval-Augmented Generation (supports both Ollama and NVIDIA NIM).
+- **MCP Server**: MCP-compatible server for Claude Code (and other MCP hosts) providing vector database tools with local ONNX embeddings.
 - **Cross-Platform**: Optimized for WSL/Linux with automated path resolution.
+
+---
+
+## 🧠 MCP Server (Claude Code Integration)
+
+cmdChroma includes an [MCP](https://modelcontextprotocol.io)-compatible server at `cmd/mcp-server/` that exposes ChromaDB vector search as tools for Claude Code and other MCP hosts.
+
+```bash
+# Build the MCP server
+make build-mcp-server
+
+# Run with stdio transport (for Claude Code)
+./dist/mcp-server --transport stdio
+
+# Run with HTTP transport (for remote access)
+./dist/mcp-server --transport http --port 9090
+
+# Run with memory-mode (extra tools for knowledge storage)
+./dist/mcp-server --transport stdio --mode memory
+```
+
+### Tools (generic mode — 7 tools)
+`store_documents`, `query_documents`, `collection_list`, `collection_create`, `collection_delete`, `collection_stats`, `forget`
+
+### Tools (memory mode — add 5 tools)
+`store_memory`, `search_memories`, `store_code_snippet`, `search_code`, `get_session`
+
+See [docs/mcp_server/](docs/mcp_server/) for full documentation.
 
 ---
 
