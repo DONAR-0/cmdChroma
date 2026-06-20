@@ -111,13 +111,13 @@ type annotationExpect struct {
 // See docs/mcp_server/researchv2.md Appendix A (corrected for openWorldHint=false).
 var expectedAnnotations = map[string]annotationExpect{
 	// Generic tools
-	"store_documents":    {false, true, false, false},
-	"query_documents":    {true, false, true, false},
-	"collection_list":    {true, false, true, false},
-	"collection_create":  {false, true, false, false},
-	"collection_delete":  {false, true, false, false},
-	"collection_stats":   {true, false, true, false},
-	"forget":             {false, true, false, false},
+	"store_documents":   {false, true, false, false},
+	"query_documents":   {true, false, true, false},
+	"collection_list":   {true, false, true, false},
+	"collection_create": {false, true, false, false},
+	"collection_delete": {false, true, false, false},
+	"collection_stats":  {true, false, true, false},
+	"forget":            {false, true, false, false},
 	// Memory-mode tools
 	"store_memory":       {false, true, false, false},
 	"search_memories":    {true, false, true, false},
@@ -132,9 +132,11 @@ func TestAnnotations_MatchMatrix(t *testing.T) {
 	for _, mode := range modes {
 		t.Run("mode="+mode, func(t *testing.T) {
 			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+
 			serverTools := srv.ListTools()
 			for _, st := range serverTools {
 				tool := st.Tool
+
 				exp, ok := expectedAnnotations[tool.Name]
 				if !ok {
 					t.Errorf("tool %q not in annotation matrix", tool.Name)
@@ -145,12 +147,15 @@ func TestAnnotations_MatchMatrix(t *testing.T) {
 				if got := tool.Annotations.ReadOnlyHint; *got != exp.readOnly {
 					t.Errorf("%s.ReadOnlyHint: want %v, got %v", tool.Name, exp.readOnly, *got)
 				}
+
 				if got := tool.Annotations.DestructiveHint; *got != exp.destructive {
 					t.Errorf("%s.DestructiveHint: want %v, got %v", tool.Name, exp.destructive, *got)
 				}
+
 				if got := tool.Annotations.IdempotentHint; *got != exp.idempotent {
 					t.Errorf("%s.IdempotentHint: want %v, got %v", tool.Name, exp.idempotent, *got)
 				}
+
 				if got := tool.Annotations.OpenWorldHint; *got != exp.openWorld {
 					t.Errorf("%s.OpenWorldHint: want %v, got %v", tool.Name, exp.openWorld, *got)
 				}
@@ -175,18 +180,22 @@ func TestTitles_Present(t *testing.T) {
 		"search_code":        "Search Code Snippets",
 		"get_session":        "Get Session",
 	}
+
 	modes := []string{"", "memory"}
 	for _, mode := range modes {
 		t.Run("mode="+mode, func(t *testing.T) {
 			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+
 			serverTools := srv.ListTools()
 			for _, st := range serverTools {
 				tool := st.Tool
+
 				title := tool.Title
 				if title == "" {
 					t.Errorf("%s.Title is empty", tool.Name)
 					continue
 				}
+
 				if expected, ok := expectedTitles[tool.Name]; ok {
 					if title != expected {
 						t.Errorf("%s.Title: want %q, got %q", tool.Name, expected, title)
@@ -201,31 +210,36 @@ func TestTitles_Present(t *testing.T) {
 
 // TestOutputSchema_NotEmpty verifies that each tool's RawOutputSchema is set and can be unmarshaled to a non-empty JSON object.
 func TestOutputSchema_NotEmpty(t *testing.T) {
-    modes := []string{"", "memory"}
-    for _, mode := range modes {
-        t.Run("mode="+mode, func(t *testing.T) {
-            srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
-            serverTools := srv.ListTools()
-            for _, st := range serverTools {
-                tool := st.Tool
-                raw := tool.RawOutputSchema
-                if raw == nil {
-                    t.Errorf("%s.RawOutputSchema is nil", tool.Name)
-                    continue
-                }
-                if len(raw) == 0 {
-                    t.Errorf("%s.RawOutputSchema is empty", tool.Name)
-                    continue
-                }
-                var v map[string]any
-                if err := json.Unmarshal(raw, &v); err != nil {
-                    t.Errorf("%s.RawOutputSchema failed to unmarshal: %v", tool.Name, err)
-                    continue
-                }
-                if len(v) == 0 {
-                    t.Errorf("%s.RawOutputSchema unmarshaled to empty object", tool.Name)
-                }
-            }
-        })
-    }
+	modes := []string{"", "memory"}
+	for _, mode := range modes {
+		t.Run("mode="+mode, func(t *testing.T) {
+			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+
+			serverTools := srv.ListTools()
+			for _, st := range serverTools {
+				tool := st.Tool
+
+				raw := tool.RawOutputSchema
+				if raw == nil {
+					t.Errorf("%s.RawOutputSchema is nil", tool.Name)
+					continue
+				}
+
+				if len(raw) == 0 {
+					t.Errorf("%s.RawOutputSchema is empty", tool.Name)
+					continue
+				}
+
+				var v map[string]any
+				if err := json.Unmarshal(raw, &v); err != nil {
+					t.Errorf("%s.RawOutputSchema failed to unmarshal: %v", tool.Name, err)
+					continue
+				}
+
+				if len(v) == 0 {
+					t.Errorf("%s.RawOutputSchema unmarshaled to empty object", tool.Name)
+				}
+			}
+		})
+	}
 }

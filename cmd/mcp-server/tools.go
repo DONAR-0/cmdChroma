@@ -35,7 +35,6 @@ const (
 	shutdownTimeout   = 5 * time.Second
 )
 
-
 func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInterface, mode string) *server.MCPServer {
 	_ = embedder
 

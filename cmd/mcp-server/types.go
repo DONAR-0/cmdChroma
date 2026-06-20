@@ -32,10 +32,12 @@ func outputJSONSchema(name string) json.RawMessage {
 		"SearchCodeOutput":       json.RawMessage(`{"type":"object","properties":{"results":{"type":"array","items":{"type":"object"}}}}`),
 		"GetSessionOutput":       json.RawMessage(`{"type":"object","properties":{"session":{"type":"object"}}}`),
 	}
+
 	raw, ok := schemas[name]
 	if !ok {
 		return nil
 	}
+
 	return raw
 }
 

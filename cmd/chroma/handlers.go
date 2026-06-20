@@ -208,7 +208,7 @@ func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	printer.Printf("Collections in database '%s':\n", cmd.String("database"))
+	printer.Info("Collections in database '%s':", cmd.String("database"))
 
 	for _, coll := range collections {
 		printer.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)

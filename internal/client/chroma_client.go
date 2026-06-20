@@ -303,6 +303,7 @@ func (c *ChromaClient) CreateDatabase(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
@@ -352,6 +353,7 @@ func (c *ChromaClient) ListCollections(ctx context.Context) ([]Collection, error
 
 func (c *ChromaClient) CreateCollection(ctx context.Context, name string) (string, error) {
 	slog.Info("Creating collection", "name", name)
+
 	endpoint := fmt.Sprintf(listCreateCollection, c.URL, c.Tenant, c.Database)
 	payload := CreateCollectionRequest{
 		Name:        name,
@@ -367,6 +369,7 @@ func (c *ChromaClient) CreateCollection(ctx context.Context, name string) (strin
 	if err != nil {
 		return "", fmt.Errorf("failed to create collection: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
@@ -415,6 +418,7 @@ func (c *ChromaClient) ListDocuments(ctx context.Context, collectionID string) (
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)

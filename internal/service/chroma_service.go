@@ -28,7 +28,7 @@ type ChromaService struct {
 	// embedder is used to generate embeddings for documents and queries.
 	// Must be non-nil for operations that require embeddings.
 	embedder onnx.EmbedderInterface
-}// NewChromaService creates a new service with the given client and embedder.
+} // NewChromaService creates a new service with the given client and embedder.
 // The embedder is automatically injected into the client via SetEmbedder,
 // enabling the client to perform embedding operations directly.
 //
@@ -156,6 +156,7 @@ func (s *ChromaService) UpsertDocuments(ctx context.Context, collectionName stri
 	slog.Info("Upserting documents",
 		"collection", collectionName,
 		"document_count", len(docs))
+
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
@@ -186,6 +187,7 @@ func (s *ChromaService) QueryDocuments(ctx context.Context, collectionName strin
 		"collection", collectionName,
 		"query_count", len(queries),
 		"n_results", nResults)
+
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
 		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)

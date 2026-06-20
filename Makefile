@@ -102,7 +102,7 @@ clean: ## Remove build artifacts, coverage profiles, and test caches
 # ==============================================================================
 
 .PHONY: venom
-venom: build ## Build and run Venom integration tests
+venom: build build-mcp-server ## Build and run Venom integration tests
 	@echo "🚀 Preparing Venom Integration Tests..."
 	@# Ensure the script is executable
 	@chmod +x ./.ci/scripts/run-venom.sh

@@ -16,6 +16,7 @@ func TestDumpSchema_CollectionCreateInput(t *testing.T) {
 		mcp.WithInputSchema[CollectionCreateInput](),
 	)
 	out, _ := json.MarshalIndent(t1, "", "  ")
+
 	fmt.Println("=== INPUT SCHEMA ===")
 	fmt.Println(string(out))
 }

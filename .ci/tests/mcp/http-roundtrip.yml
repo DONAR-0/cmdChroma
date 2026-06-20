@@ -1,7 +1,7 @@
 version: "2"
 name: MCP Server - HTTP Round-Trip
 vars:
-  mcp_server: ./dist/mcp-server
+  mcp_server: mcp-server
 testcases:
   - name: initialize via HTTP
     tags: ["mcp", "http"]
@@ -9,11 +9,12 @@ testcases:
       - type: exec
         timeout: 15
         script: |
+          cd ../../../
           PORT=9092
-          {{.mcp_server}} --transport http --port $PORT --collection venom_test &
+          mcp-server --transport http --port $PORT --collection venom_test &
           SERVER_PID=$!
           sleep 2
-          curl -s -X POST "http://127.0.0.1:$PORT/" \
+          curl -s -X POST "http://127.0.0.1:$PORT/mcp" \
             -H "Content-Type: application/json" \
             -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"venom","version":"0.0.0"}}}'
           kill $SERVER_PID 2>/dev/null || true
