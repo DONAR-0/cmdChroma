@@ -6,6 +6,7 @@ package ingest
 // large datasets via Go channels.
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,9 +17,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/parquet-go/parquet-go"
 	"github.com/tmc/langchaingo/textsplitter"
+
+	"github.com/DONAR-0/cmdChroma/internal"
 )
 
 // ============ Data Types ============
@@ -32,6 +34,19 @@ type Record struct {
 	// Metadata holds arbitrary key-value pairs for filtering and annotations.
 	Metadata map[string]any
 }
+
+// ProgressInfo holds the current state of an ingestion operation for UI display.
+type ProgressInfo struct {
+	Processed int
+	Total     int // 0 if unknown
+	BatchSize int
+	Batches   int   // batches uploaded so far
+	Elapsed   int64 // nanoseconds
+	Done      bool
+}
+
+// ProgressFunc is a callback for ingestion progress updates.
+type ProgressFunc func(ProgressInfo)
 
 // Config controls the ingestion pipeline behavior.
 type Config struct {
@@ -58,11 +73,32 @@ type Config struct {
 	ChunkSize int
 	// ChunkOverlap is the number of characters to overlap between chunks.
 	ChunkOverlap int
+
+	// AutoID ignores user-provided IDs and always generates content-hash IDs.
+	AutoID bool
+	// DedupMode controls handling of duplicate IDs: "none", "warn", or "skip".
+	// "warn" logs a warning and skips the duplicate; "skip" silently skips.
+	DedupMode string
+	// Upsert uses the upsert endpoint instead of add, so existing IDs are updated.
+	Upsert bool
+	// Total is the known total number of records (0 if unknown).
+	// Used for progress display.
+	Total int
+	// OnProgress is an optional callback for progress updates during ingestion.
+	OnProgress ProgressFunc
 }
 
 // Processor handles the ingestion workflow: reading, parsing, embedding, and uploading.
 type Processor struct {
 	cfg *Config
+	ctx context.Context // for cancellation; nil means not cancelable
+}
+
+// WithContext returns a copy of the processor with a context for cancellation.
+// The context is used by ProcessJSONL and ProcessParquet to abort early.
+func (p *Processor) WithContext(ctx context.Context) *Processor {
+	p.ctx = ctx
+	return p
 }
 
 // Primitive reflect.Kinds that can be kept as-is
@@ -105,7 +141,7 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 		defer close(errChan)
 
 		file, err := os.Open(filePath)
-		if err != nil && err != io.EOF {
+		if err != nil {
 			errChan <- fmt.Errorf("failed to open file: %w", err)
 			return
 		}
@@ -136,7 +172,15 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 			}
 
 			for _, record := range recordsList {
-				records <- record
+				if p.ctx != nil {
+					select {
+					case records <- record:
+					case <-p.ctx.Done():
+						return
+					}
+				} else {
+					records <- record
+				}
 			}
 
 			count++
@@ -232,7 +276,15 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 					}
 
 					for _, rec := range recordsList {
-						records <- rec
+						if p.ctx != nil {
+							select {
+							case records <- rec:
+							case <-p.ctx.Done():
+								return
+							}
+						} else {
+							records <- rec
+						}
 					}
 
 					total++
@@ -259,6 +311,30 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 	}()
 
 	return records, errChan
+}
+
+// ParquetRowCount returns the number of rows in a parquet file.
+// Returns 0 if the row count cannot be determined.
+func ParquetRowCount(filePath string) int {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	info, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+
+	pf, err := parquet.OpenFile(f, info.Size())
+	if err != nil {
+		return 0
+	}
+
+	return int(pf.NumRows())
 }
 
 // ============ Private Helpers ============
@@ -339,24 +415,29 @@ func (p *Processor) extractRecord(raw map[string]any) ([]*Record, error) {
 	// Generate or extract base ID
 	var baseID string
 
-	idVal := getNestedValue(raw, p.cfg.IDField)
-	if idVal != nil {
-		baseID = fmt.Sprintf("%v", idVal)
-	} else {
+	if p.cfg.AutoID {
 		hash := sha256.Sum256([]byte(content))
 		baseID = hex.EncodeToString(hash[:12])
+	} else {
+		idVal := getNestedValue(raw, p.cfg.IDField)
+		if idVal != nil {
+			baseID = fmt.Sprintf("%v", idVal)
+		} else {
+			hash := sha256.Sum256([]byte(content))
+			baseID = hex.EncodeToString(hash[:12])
+		}
 	}
 
 	// Extract metadata
 	meta := make(map[string]any)
 
-	if p.cfg.AllMetadata || len(p.cfg.MetadataFields) == 0 {
+	if p.cfg.AllMetadata {
 		for k, v := range raw {
 			if k != p.cfg.ContentField && k != p.cfg.IDField {
 				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
-	} else {
+	} else if len(p.cfg.MetadataFields) > 0 {
 		for _, k := range p.cfg.MetadataFields {
 			if v, exists := raw[k]; exists {
 				meta[k] = p.stringifyIfComplex(v)

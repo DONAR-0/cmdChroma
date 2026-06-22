@@ -106,7 +106,7 @@ testcases:
         script: cmdChroma --log-level error t --host doesnotexist.invalid --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Tenant/Database Display Tests ============
 

@@ -88,7 +88,7 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 	rlCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	if err := svc.TestConnection(ctx); err != nil {
+	if err := svc.TestConnection(rlCtx); err != nil {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
@@ -540,24 +540,57 @@ func handleQueryBatchInCollection(ctx context.Context, c *cli.Command) error {
 func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>\n\nExample: chroma import my_collection data.jsonl")
+		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet|url>\n\nExample: chroma import my_collection https://example.com/data.parquet")
 	}
 
 	filePathArg := c.Args().Get(1)
 	if filePathArg == "" {
-		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>")
+		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet|url>")
 	}
 
-	// Validate path
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
+	var (
+		safePath string
+		cleanup  func()
+	)
+
+	if ingest.IsURL(filePathArg) {
+		printer.Printf("⬇ Downloading from '%s'\n", filePathArg)
+
+		tmpPath, err := ingest.DownloadFile(ctx, filePathArg, func(downloaded, total int64) {
+			if total > 0 {
+				pct := float64(downloaded) / float64(total) * 100
+				printer.Printf("\r   %s / %s (%.0f%%)\033[K", ingest.FormatBytes(downloaded), ingest.FormatBytes(total), pct)
+			} else {
+				printer.Printf("\r   %s downloaded\033[K", ingest.FormatBytes(downloaded))
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("download failed: %w", err)
+		}
+
+		printer.Print("")
+
+		cleanup = func() {
+			if err := os.Remove(tmpPath); err != nil {
+				slog.Warn("Failed to remove temp file", "path", tmpPath, "error", err)
+			}
+		}
+		safePath = tmpPath
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+
+		safePath, err = internal.SafeJoin(cwd, filePathArg)
+		if err != nil {
+			return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
+		}
+
+		cleanup = func() {}
 	}
 
-	safePath, err := internal.SafeJoin(cwd, filePathArg)
-	if err != nil {
-		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
-	}
+	defer cleanup()
 
 	// Build ingest config
 	cfg := &ingest.Config{
@@ -567,6 +600,9 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		MetadataFields: c.StringSlice("field-metadata"),
 		AllMetadata:    c.Bool("all-metadata"),
 		Limit:          c.Int("n-ingest"),
+		AutoID:         c.Bool("auto-id"),
+		DedupMode:      c.String("dedup"),
+		Upsert:         c.Bool("upsert"),
 	}
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 100
@@ -580,6 +616,19 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		cfg.IDField = "id"
 	}
 
+	// Validate DedupMode
+	switch cfg.DedupMode {
+	case "none", "warn", "skip":
+		// valid
+	default:
+		return fmt.Errorf("invalid --dedup value: %q (must be: none, warn, or skip)", cfg.DedupMode)
+	}
+
+	// Get parquet row count for progress bar
+	if strings.HasSuffix(safePath, ".parquet") {
+		cfg.Total = ingest.ParquetRowCount(safePath)
+	}
+
 	// Setup service using factory
 	f := factory.NewServiceFactory()
 
@@ -589,9 +638,18 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
+	// Build output config and progress display
+	outputCfg := output.NewOutputConfig(c)
+	progress := output.NewIngestProgress(outputCfg, collectionName, filepath.Base(safePath))
+	cfg.OnProgress = progress.Update
+
 	// Print import info using printer
 	printer.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
 	printer.Printf("   Batch size: %d\n", cfg.BatchSize)
+
+	if cfg.Total > 0 {
+		printer.Printf("   Total: %d records\n", cfg.Total)
+	}
 
 	if cfg.Limit > 0 {
 		printer.Printf("   Limit: %d documents\n", cfg.Limit)
@@ -599,22 +657,11 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 
 	printer.Print("")
 
-	startTime := time.Now()
-
 	slog.Info("Starting import", "file", safePath, "collection", collectionName)
-
-	// Show working indicator in interactive mode
-	ui := output.NewUI()
-	if ui.IsInteractive() && !c.Bool("no-tui") {
-		printer.Info("Processing...")
-	}
 
 	if err := svc.IngestRecords(ctx, collectionName, safePath, cfg); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-
-	elapsed := time.Since(startTime)
-	printer.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
 
 	return nil
 }
@@ -956,11 +1003,11 @@ func handleDoctor(ctx context.Context, c *cli.Command) error {
 
 	f := factory.NewServiceFactory()
 
-	client, err := f.CreateChromaClient(c)
+	chromaClient, err := f.CreateChromaClient(c)
 	if err != nil {
 		printer.Error("  ✗ Failed to create client: %v", err)
 	} else {
-		if err := client.TestConnection(ctx); err != nil {
+		if err := chromaClient.TestConnection(ctx); err != nil {
 			printer.Error("  ✗ Connection failed: %v", err)
 		} else {
 			printer.Success("  ✓ Successfully connected to ChromaDB")

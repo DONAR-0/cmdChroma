@@ -14,23 +14,20 @@ func CheckDefer(closeFunc func() error) {
 	}
 
 	if err := closeFunc(); err != nil {
-		slog.Debug("error received", "err", err)
+		slog.Warn("deferred close failed", "error", err)
 	}
 }
 
 // SafeJoin joins root with relative path and ensures result stays within root.
-// It rejects paths containing ".." and absolute paths.
+// It rejects absolute paths and path traversal attempts.
 func SafeJoin(root, relPath string) (string, error) {
 	// Reject absolute paths
 	if filepath.IsAbs(relPath) {
 		return "", errors.New("absolute paths not allowed")
 	}
 
-	// Reject paths containing .. after cleaning
+	// Clean to resolve any internal .. components
 	clean := filepath.Clean(relPath)
-	if strings.Contains(clean, "..") {
-		return "", errors.New("path traversal not allowed")
-	}
 
 	// Join and verify the result is within root
 	joined := filepath.Join(root, clean)

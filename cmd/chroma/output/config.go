@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 )
@@ -119,7 +120,7 @@ func HasColorSupport() bool {
 	}
 
 	// Default to true if TERM contains "color" or "256"
-	return contains(term, "256") || contains(term, "color")
+	return strings.Contains(term, "256") || strings.Contains(term, "color")
 }
 
 // isInteractive checks if stdout is a terminal.
@@ -131,21 +132,6 @@ func isInteractive() bool {
 
 	// Check if it's a character device (TTY)
 	return (file.Mode() & os.ModeCharDevice) != 0
-}
-
-// contains is a simple helper to check if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-
-	return false
 }
 
 // String returns a human-readable description of the config.

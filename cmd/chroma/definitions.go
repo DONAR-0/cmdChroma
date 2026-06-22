@@ -315,15 +315,16 @@ EXAMPLES:
 var importCommand = &cli.Command{
 	Name:      "import",
 	Aliases:   []string{"ingest", "jsonl-import"},
-	Usage:     "Import documents from a file (JSONL or Parquet) into a collection",
-	ArgsUsage: "<collection_name> <file_path>",
-	Description: `Bulk import documents from JSONL or Parquet files.
+	Usage:     "Import documents from a file (JSONL or Parquet) or URL into a collection",
+	ArgsUsage: "<collection_name> <file_path|url>",
+	Description: `Bulk import documents from JSONL or Parquet files (or download from a URL).
 
 This command is optimized for large datasets and will:
+  • Download from URL if a web link is provided instead of a local file
   • Stream the file line by line (JSONL) or row by row (Parquet)
   • Generate embeddings locally for each document
   • Upload in configurable batches
-  • Show progress during import
+  • Show live progress bar during import
 
 JSONL format: Each line must be a valid JSON object.
 Parquet format: Column-based format; use --field-content and --field-id to map columns.
@@ -333,7 +334,10 @@ EXAMPLES:
   chroma import my_collection data.jsonl --field-content text
 
   # Import Parquet
-  chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata`,
+  chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata
+
+  # Import from a Hugging Face URL
+  chroma import my_collection https://huggingface.co/datasets/username/dataset/resolve/main/data.parquet --field-content target --auto-id`,
 	Action: handleImportFileInChromaDb,
 	Flags: []cli.Flag{
 		nIngestDocumentFlag,
@@ -342,6 +346,9 @@ EXAMPLES:
 		fieldMetadataFlag,
 		allMetadataFlag,
 		batchSizeFlag,
+		autoIdFlag,
+		dedupFlag,
+		upsertImportFlag,
 	},
 }
 
@@ -559,6 +566,22 @@ var (
 		Aliases: []string{"b"},
 		Value:   100,
 		Usage:   "Number of documents to process in each batch",
+	}
+
+	autoIdFlag = &cli.BoolFlag{
+		Name:  "auto-id",
+		Usage: "Ignore user-provided IDs and auto-generate deterministic content-hash IDs",
+	}
+
+	dedupFlag = &cli.StringFlag{
+		Name:  "dedup",
+		Value: "none",
+		Usage: "Duplicate ID handling: none (allow duplicates, let ChromaDB reject), warn (log and skip), skip (silently skip)",
+	}
+
+	upsertImportFlag = &cli.BoolFlag{
+		Name:  "upsert",
+		Usage: "Update existing documents if IDs already exist (uses upsert endpoint)",
 	}
 
 	// Database auto-creation flag
