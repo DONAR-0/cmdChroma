@@ -202,7 +202,7 @@ func (s *State) View() string {
 	b.WriteString(separator + "\n")
 
 	if !s.waiting {
-		b.WriteString(fmt.Sprintf("  > %s", s.input))
+		b.WriteString("  > " + s.input)
 	} else {
 		b.WriteString(dimStyle.Render(fmt.Sprintf("  > %s", s.input)))
 	}

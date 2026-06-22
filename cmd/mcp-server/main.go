@@ -30,6 +30,7 @@ func parseFlagsAndConfig() *Config {
 	modelPath := flag.String("model-path", "", "ONNX model path")
 	libraryPath := flag.String("library-path", "", "ONNX runtime library path")
 	configPath := flag.String("config", "", "Path to config file")
+
 	flag.Parse()
 
 	clr := CLIOverrides{

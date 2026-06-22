@@ -434,7 +434,7 @@ func TestExtractRecord(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Processor{cfg: tt.cfg}
 
-			gotRec, err := p.extractRecord(tt.input)
+			gotRecs, err := p.extractRecord(tt.input)
 			if tt.wantError {
 				require.Error(t, err)
 			} else {
@@ -442,9 +442,14 @@ func TestExtractRecord(t *testing.T) {
 			}
 
 			if tt.wantRecord == nil {
-				require.Nil(t, gotRec)
+				require.Nil(t, gotRecs)
 			} else {
-				require.NotNil(t, gotRec)
+				require.NotNil(t, gotRecs)
+				// In the new implementation, extractRecord returns a slice.
+				// For these tests, we expect the first chunk to match the wantRecord
+				// (since the test inputs are short and don't trigger splitting).
+				require.GreaterOrEqual(t, len(gotRecs), 1)
+				gotRec := gotRecs[0]
 				require.Equal(t, tt.wantRecord.ID, gotRec.ID)
 				require.Equal(t, tt.wantRecord.Content, gotRec.Content)
 				// Compare metadata loosely because maps may have different ordering

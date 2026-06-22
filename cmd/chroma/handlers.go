@@ -29,7 +29,6 @@ var (
 	// Validation errors with actionable hints
 	errCollectionNameRequired = "collection name is required\n\nUsage: chroma create <collection_name>\n\nExample: chroma create my_docs"
 	errInvalidNIMModel        = "invalid NIM model format: use nim://<model-id>\n\nExample: --llm-model nim://mistralai/mistral-7b-instruct-v0.3"
-	errNIMAPIKeyMissing       = "NVIDIA_API_KEY environment variable is required for NIM\n\nSet it with: export NVIDIA_API_KEY=your-key"
 )
 
 // validateNIMModel validates and extracts model ID from nim:// prefix.
@@ -269,6 +268,7 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 			dbs, listErr := chromaClient.ListDatabases(ctx)
 
 			var hint string
+
 			if listErr == nil && len(dbs) > 0 {
 				dbList := make([]string, len(dbs))
 				for i, db := range dbs {
@@ -642,30 +642,18 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 		model = "qwen:0.5b"
 	}
 
-	// Validate model format
 	if _, err := validateNIMModel(model); err != nil {
 		return err
 	}
 
-	// Get n-results with validation
 	nResults := c.Int("n-results")
 	if nResults <= 0 {
 		nResults = 3
 	}
 
-	distanceThreshold := c.Float64("distance-threshold")
-	if distanceThreshold < 0 {
-		return fmt.Errorf("distance-threshold must be >= 0")
-	}
+	slog.Info("operation_start", "op", opName, "collection", collectionName, "model", model)
 
-	slog.Info("operation_start",
-		"op", opName,
-		"collection", collectionName,
-		"model", model,
-		"n_results", nResults,
-		"distance_threshold", distanceThreshold)
-
-	// Setup service using factory
+	// Setup service and LLM using factories
 	f := factory.NewServiceFactory()
 
 	svc, _, cleanup, err := f.CreateChromaService(c)
@@ -674,68 +662,36 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
-	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
-
-	// Query for context
-	resp, err := svc.QueryDocuments(ctx, collectionName, []string{question}, nResults)
-	if err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "query", "error", err, "duration_ms", time.Since(start).Milliseconds())
-		return fmt.Errorf("failed to retrieve context: %w\n\nHint: Make sure collection exists and has documents", err)
-	}
-
-	// Build context from response
-	contextStr, hasRelevant, bestDistance := buildContextFromResponse(resp, distanceThreshold)
-
-	if !hasRelevant {
-		fmt.Println("⚠️  No relevant documents found. The LLM will be instructed to say so.")
-	} else {
-		fmt.Println("💭 Generating answer...")
-	}
-
-	// Build prompt based on whether we have context
-	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
-
-	// Get LLM provider using factory
 	llmFactory := factory.NewLLMProviderFactory()
-	if err := llmFactory.ValidateModel(model); err != nil {
-		return err
-	}
-
 	nimURL := c.String("nim-url")
 
 	provider, err := llmFactory.CreateProvider(model, nimURL)
 	if err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "provider_init", "error", err, "duration_ms", time.Since(start).Milliseconds())
-
-		if strings.Contains(err.Error(), "API key is required") {
-			return fmt.Errorf("%s: %w", errNIMAPIKeyMissing, err)
-		}
-
 		return err
 	}
 
-	if strings.HasPrefix(model, "nim://") {
-		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
-	} else {
-		fmt.Println("\n🤖 Using Ollama for generation")
+	// We can't use ProviderInterface directly for chains,
+	// but we know our providers now use LangChainAdapter.
+	// For this MVP, we'll use the existing RAG pipeline logic but
+	// move towards chains in the next sub-task.
+
+	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
+
+	resp, err := svc.QueryDocuments(ctx, collectionName, []string{question}, nResults)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve context: %w", err)
 	}
 
-	// Generate response
+	// Use existing prompt logic
+	distanceThreshold := c.Float64("distance-threshold")
+	contextStr, hasRelevant, _ := buildContextFromResponse(resp, distanceThreshold)
+	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
+
 	if err := provider.Generate(ctx, finalPrompt, model, printer.Stdout()); err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "generate", "error", err, "duration_ms", time.Since(start).Milliseconds())
-
-		if strings.HasPrefix(model, "nim://") {
-			return fmt.Errorf("NIM generation failed: %w\n\nHints:\n  • Ensure NVIDIA_API_KEY is set\n  • Verify model name (e.g., nim://mistralai/mistral-7b-instruct)\n  • Check your NIM endpoint URL", err)
-		}
-
-		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
+		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	slog.Info("operation_complete",
-		"op", opName,
-		"has_context", hasRelevant,
-		"best_distance", bestDistance,
-		"duration_ms", time.Since(start).Milliseconds())
+	slog.Info("operation_complete", "op", opName, "duration_ms", time.Since(start).Milliseconds())
 
 	return nil
 }

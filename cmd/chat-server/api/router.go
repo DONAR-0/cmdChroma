@@ -18,6 +18,7 @@ type RouterDeps struct {
 
 func NewRouter(deps RouterDeps) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+
 	r := gin.New()
 
 	r.Use(gin.Recovery())
