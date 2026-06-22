@@ -87,6 +87,7 @@ testcases:
         script: cmdChroma --log-level error t --port 60999
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on closed port
@@ -97,6 +98,7 @@ testcases:
         script: cmdChroma --log-level error t --port 19999
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on invalid host
@@ -106,6 +108,7 @@ testcases:
         script: cmdChroma --log-level error t --host doesnotexist.invalid --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Tenant/Database Display Tests ============

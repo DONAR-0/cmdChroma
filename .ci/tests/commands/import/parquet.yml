@@ -39,6 +39,7 @@ testcases:
             --batch-size 10
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Ingestion complete"
 
   - name: Verify record count matches Parquet file
     tags: ["integration"]

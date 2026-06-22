@@ -44,6 +44,7 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on localhost port with nothing listening
@@ -64,6 +65,7 @@ testcases:
         script: cmdChroma --log-level error t --port 19999 --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Invalid Hostname Tests ============
@@ -76,6 +78,7 @@ testcases:
         script: cmdChroma --log-level error t --host nonexistent.invalid.domain --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused with very short timeout
@@ -98,6 +101,7 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
           - result.systemout ShouldContainSubstring "refused"
 
@@ -109,6 +113,7 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
+          - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Timeout Edge Cases ============
