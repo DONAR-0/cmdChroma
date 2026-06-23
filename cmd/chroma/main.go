@@ -27,18 +27,23 @@ func main() {
 	// Apply panic recovery to all commands
 	ApplyRecovery(app.Commands)
 
-	// Recover from panic gracefully
+	var exitCode int
+
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("CLI application Panicked", "panic", r)
 			fmt.Printf("Error: An Unexpected error occurred: %v\n", r)
-			os.Exit(ExitError)
+
+			exitCode = ExitError
 		}
+
+		os.Exit(exitCode)
 	}()
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
 		slog.Error("CLI execution failed", "error", err)
 		fmt.Printf("Error: %v\n", err)
-		os.Exit(ExitError)
+
+		exitCode = ExitError
 	}
 }

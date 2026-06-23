@@ -10,13 +10,13 @@ import (
 // ConsolePrinter handles user-facing output (stdout).
 // All user-visible messages should go through this printer.
 type ConsolePrinter struct {
-	config *OutputConfig
+	config *Config
 }
 
 // NewConsolePrinter creates a new ConsolePrinter with the given config.
-func NewConsolePrinter(config *OutputConfig) *ConsolePrinter {
+func NewConsolePrinter(config *Config) *ConsolePrinter {
 	if config == nil {
-		config = DefaultOutputConfig()
+		config = DefaultConfig()
 	}
 
 	return &ConsolePrinter{config: config}

@@ -29,12 +29,9 @@ type ChromaService struct {
 	// embedder is used to generate embeddings for documents and queries.
 	// Must be non-nil for operations that require embeddings.
 	embedder onnx.EmbedderInterface
-} // NewChromaService creates a new service with the given client and embedder.
-// The embedder is automatically injected into the client via SetEmbedder,
-// enabling the client to perform embedding operations directly.
-//
-// Both c and e must be non-nil for full functionality. Passing a nil embedder
-// will cause methods that require embeddings to return errors.
+}
+
+// NewChromaService creates a new service with the given client and embedder.
 func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
 	c.SetEmbedder(e)
 

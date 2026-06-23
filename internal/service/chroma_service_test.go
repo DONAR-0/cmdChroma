@@ -67,31 +67,31 @@ func (m *mockChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID 
 	return m.upsertBatchGenericErr
 }
 
-func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
+func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return m.queryBatchResult, m.queryBatchErr
 }
 
-func (m *mockChromaClient) GetIDByName(_ context.Context, name string) (string, error) {
+func (m *mockChromaClient) GetIDByName(_ context.Context, _ string) (string, error) {
 	return m.getIDByNameResult, m.getIDByNameErr
 }
 
-func (m *mockChromaClient) ResolveCollectionID(_ context.Context, input string) (string, error) {
+func (m *mockChromaClient) ResolveCollectionID(_ context.Context, _ string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
 
-func (m *mockChromaClient) ListDocuments(_ context.Context, collectionID string) (*client.GetRecordsResponse, error) {
+func (m *mockChromaClient) ListDocuments(_ context.Context, _ string) (*client.GetRecordsResponse, error) {
 	return m.listDocumentsResult, m.listDocumentsErr
 }
 
-func (m *mockChromaClient) DeleteCollection(_ context.Context, name string) error {
+func (m *mockChromaClient) DeleteCollection(_ context.Context, _ string) error {
 	return m.deleteCollectionErr
 }
 
-func (m *mockChromaClient) DeleteRecords(_ context.Context, collectionID string, ids []string) error {
+func (m *mockChromaClient) DeleteRecords(_ context.Context, _ string, ids []string) error {
 	return m.deleteRecordsErr
 }
 
-func (m *mockChromaClient) CreateDatabase(_ context.Context, name string) error {
+func (m *mockChromaClient) CreateDatabase(_ context.Context, _ string) error {
 	return m.createDatabaseErr
 }
 
@@ -99,11 +99,11 @@ func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (str
 	return "test-collection-id", nil
 }
 
-func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {}
+func (m *mockChromaClient) SetEmbedder(_ onnx.EmbedderInterface) {}
 
 type mockEmbedder struct{}
 
-func (m *mockEmbedder) Embed(text string) ([]float32, error) {
+func (m *mockEmbedder) Embed(_ string) ([]float32, error) {
 	return []float32{0.1}, nil
 }
 
@@ -164,7 +164,7 @@ func TestChromaService_GetTenant_Error(t *testing.T) {
 }
 
 func TestChromaService_ListDatabases(t *testing.T) {
-	client := &mockChromaClient{listDatabasesResult: []client.Database{{Id: "1", Name: "db1"}}}
+	client := &mockChromaClient{listDatabasesResult: []client.Database{{ID: "1", Name: "db1"}}}
 	svc := NewChromaService(client, nil)
 
 	dbs, err := svc.ListDatabases(context.Background())
@@ -322,7 +322,7 @@ func TestChromaService_QueryDocuments_Error(t *testing.T) {
 	}
 }
 
-func TestChromaService_Close(t *testing.T) {
+func TestChromaService_Close(_ *testing.T) {
 	client := &mockChromaClient{}
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)

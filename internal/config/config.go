@@ -46,17 +46,17 @@ type LoggingConfig struct {
 	Format  string
 }
 
-// ConfigFile represents the structure of a YAML configuration file on disk.
-type ConfigFile struct {
-	Version  string             `yaml:"version"`
-	Chroma   ConfigFileChroma   `yaml:"chroma"`
-	Model    ConfigFileModel    `yaml:"model"`
-	Logging  ConfigFileLogging  `yaml:"logging"`
-	Features ConfigFileFeatures `yaml:"features"`
+// File represents the structure of a YAML configuration file on disk.
+type File struct {
+	Version  string   `yaml:"version"`
+	Chroma   Chroma   `yaml:"chroma"`
+	Model    Model    `yaml:"model"`
+	Logging  Logging  `yaml:"logging"`
+	Features Features `yaml:"features"`
 }
 
-// ConfigFileChroma represents the chroma section in the YAML config file.
-type ConfigFileChroma struct {
+// Chroma represents the chroma section in the YAML config file.
+type Chroma struct {
 	Host     string `yaml:"host"`
 	Port     string `yaml:"port"`
 	Tenant   string `yaml:"tenant"`
@@ -64,27 +64,27 @@ type ConfigFileChroma struct {
 	Timeout  int    `yaml:"timeout"`
 }
 
-// ConfigFileModel represents the model section in the YAML config file.
-type ConfigFileModel struct {
+// Model represents the model section in the YAML config file.
+type Model struct {
 	ONNXModel string `yaml:"onnx_model"`
 	Tokenizer string `yaml:"tokenizer"`
 	ONNXLib   string `yaml:"onnx_lib"`
 }
 
-// ConfigFileLogging represents the logging section in the YAML config file.
-type ConfigFileLogging struct {
+// Logging represents the logging section in the YAML config file.
+type Logging struct {
 	Level   string `yaml:"level"`
 	Format  string `yaml:"format"`
 	Verbose bool   `yaml:"verbose"`
 }
 
-// ConfigFileFeatures represents the features section in the YAML config file.
-type ConfigFileFeatures struct {
-	CreateCollection ConfigFileCreateCollection `yaml:"create_collection"`
+// Features represents the features section in the YAML config file.
+type Features struct {
+	CreateCollection CreateCollection `yaml:"create_collection"`
 }
 
-// ConfigFileCreateCollection represents feature flags for create_collection.
-type ConfigFileCreateCollection struct {
+// CreateCollection represents feature flags for create_collection.
+type CreateCollection struct {
 	AutoCreateDatabase bool `yaml:"auto_create_database"`
 }
 
@@ -138,7 +138,7 @@ func findConfigFile() (string, error) {
 }
 
 // applyFileConfig copies values from config file, only if field is non-zero
-func (cfg *RuntimeConfig) applyFileConfig(f *ConfigFile) {
+func (cfg *RuntimeConfig) applyFileConfig(f *File) {
 	if f.Chroma.Host != "" {
 		cfg.Chroma.Host = f.Chroma.Host
 	}
@@ -230,7 +230,7 @@ func (cfg *RuntimeConfig) loadFromFile(path string) error {
 		return err
 	}
 
-	var fileCfg ConfigFile
+	var fileCfg File
 	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
 		return fmt.Errorf("invalid YAML: %w", err)
 	}

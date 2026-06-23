@@ -8,7 +8,7 @@ import (
 )
 
 func TestIngestProgress_Interactive(t *testing.T) {
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Stdout: os.Stdout,
 		NoTTY:  false,
 	}
@@ -18,7 +18,7 @@ func TestIngestProgress_Interactive(t *testing.T) {
 }
 
 func TestIngestProgress_InteractiveNoTotal(t *testing.T) {
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Stdout: os.Stdout,
 		NoTTY:  false,
 	}
@@ -28,7 +28,7 @@ func TestIngestProgress_InteractiveNoTotal(t *testing.T) {
 }
 
 func TestIngestProgress_NonInteractive(t *testing.T) {
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Stdout: os.Stdout,
 		NoTTY:  true,
 	}
@@ -38,7 +38,7 @@ func TestIngestProgress_NonInteractive(t *testing.T) {
 }
 
 func TestIngestProgress_ZeroTotal(t *testing.T) {
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Stdout: os.Stdout,
 		NoTTY:  false,
 	}

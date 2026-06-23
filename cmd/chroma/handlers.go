@@ -245,7 +245,8 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 		isDatabaseError := strings.Contains(errMsg, "does not exist") ||
 			strings.Contains(errMsg, "Database") && strings.Contains(errMsg, "not found")
 
-		if isDatabaseError && cmd.Bool("create-db") {
+		switch {
+		case isDatabaseError && cmd.Bool("create-db"):
 			// User requested automatic database creation
 			dbName := cmd.String("database")
 			slog.Info("Auto-creating database", "database", dbName)
@@ -263,7 +264,7 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 				slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 				return fmt.Errorf("failed to create collection after database creation: %w", err)
 			}
-		} else if isDatabaseError {
+		case isDatabaseError:
 			// Provide helpful error message with available databases
 			dbs, listErr := chromaClient.ListDatabases(ctx)
 
@@ -284,7 +285,7 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 
 			return fmt.Errorf("database '%s' does not exist in tenant '%s'%s", cmd.String("database"), cmd.String("tenant"), hint)
-		} else {
+		default:
 			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 			return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
 		}
@@ -599,6 +600,7 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		IDField:        c.String("field-id"),
 		MetadataFields: c.StringSlice("field-metadata"),
 		AllMetadata:    c.Bool("all-metadata"),
+		ExcludeFields:  c.StringSlice("exclude-field"),
 		Limit:          c.Int("n-ingest"),
 		AutoID:         c.Bool("auto-id"),
 		DedupMode:      c.String("dedup"),
@@ -639,7 +641,7 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	defer cleanup()
 
 	// Build output config and progress display
-	outputCfg := output.NewOutputConfig(c)
+	outputCfg := output.NewConfig(c)
 	progress := output.NewIngestProgress(outputCfg, collectionName, filepath.Base(safePath))
 	cfg.OnProgress = progress.Update
 
@@ -886,27 +888,27 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 	}
 
 	// Create default configuration
-	defaultConfig := config.ConfigFile{
+	defaultConfig := config.File{
 		Version: "1.0",
-		Chroma: config.ConfigFileChroma{
+		Chroma: config.Chroma{
 			Host:     "localhost",
 			Port:     "8000",
 			Tenant:   "default_tenant",
 			Database: "default_database",
 			Timeout:  30,
 		},
-		Model: config.ConfigFileModel{
+		Model: config.Model{
 			ONNXModel: "models/all-MiniLM-L6-v2/model.onnx",
 			Tokenizer: "models/all-MiniLM-L6-v2/tokenizer.json",
 			ONNXLib:   "models/onnx_runtime/lib/libonnxruntime.so",
 		},
-		Logging: config.ConfigFileLogging{
+		Logging: config.Logging{
 			Level:   "info",
 			Format:  "text",
 			Verbose: false,
 		},
-		Features: config.ConfigFileFeatures{
-			CreateCollection: config.ConfigFileCreateCollection{
+		Features: config.Features{
+			CreateCollection: config.CreateCollection{
 				AutoCreateDatabase: false,
 			},
 		},
@@ -942,7 +944,7 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 func toStringRows(dbs []client.Database) [][]string {
 	rows := make([][]string, len(dbs))
 	for i, db := range dbs {
-		rows[i] = []string{db.Name, db.Id}
+		rows[i] = []string{db.Name, db.ID}
 	}
 
 	return rows

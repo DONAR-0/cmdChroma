@@ -17,6 +17,7 @@ type ChromaStore struct {
 	collectionID string
 }
 
+// NewChromaStore creates a new ChromaStore backed by the given client and collection.
 func NewChromaStore(c client.ChromaClientInterface, collectionID string) *ChromaStore {
 	return &ChromaStore{
 		client:       c,
@@ -24,6 +25,7 @@ func NewChromaStore(c client.ChromaClientInterface, collectionID string) *Chroma
 	}
 }
 
+// AddDocuments stores documents in ChromaDB with embeddings.
 func (cs *ChromaStore) AddDocuments(ctx context.Context, docs []schema.Document, options ...vectorstores.Option) ([]string, error) {
 	var (
 		contents  []string
@@ -48,6 +50,7 @@ func (cs *ChromaStore) AddDocuments(ctx context.Context, docs []schema.Document,
 	return ids, err
 }
 
+// SimilaritySearch finds similar documents by vector distance.
 func (cs *ChromaStore) SimilaritySearch(ctx context.Context, query string, numDocuments int, options ...vectorstores.Option) ([]schema.Document, error) {
 	resp, err := cs.client.QueryBatch(ctx, cs.collectionID, []string{query}, numDocuments)
 	if err != nil {
@@ -68,7 +71,7 @@ func (cs *ChromaStore) SimilaritySearch(ctx context.Context, query string, numDo
 	return docs, nil
 }
 
-// RetrievalQA handles the RAG pipeline using LangChainGo chains.
+// RunRetrievalQA handles the RAG pipeline using LangChainGo chains.
 func RunRetrievalQA(ctx context.Context, llm llms.Model, store vectorstores.VectorStore, query string) (string, error) {
 	retriever := vectorstores.ToRetriever(store, 3)
 

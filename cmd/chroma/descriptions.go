@@ -234,7 +234,14 @@ EXAMPLES:
   # Import with custom batch size
   chroma import my_collection large_data.jsonl \\
     --batch-size 500 \\
-    --all-metadata`
+    --all-metadata
+
+  # Import all fields as metadata, but exclude problematic long-text fields
+  chroma import my_collection data.parquet \\
+    --field-content answerText \\
+    --all-metadata \\
+    --exclude-field questionText \\
+    --exclude-field text`
 
 	// ChatCmdDescription documents RAG-based chat.
 	ChatCmdDescription = `Ask questions about your data using AI-powered retrieval.

@@ -9,7 +9,7 @@ import (
 
 func TestProvider_DelegatesToAdapter(t *testing.T) {
 	p := &Provider{adapter: NewLangChainAdapter(&mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+		generateContentFunc: func(_ context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "delegated"},
@@ -32,7 +32,7 @@ func TestProvider_DelegatesToAdapter(t *testing.T) {
 
 func TestNIMProvider_DelegatesToAdapter(t *testing.T) {
 	p := &NIMProvider{adapter: NewLangChainAdapter(&mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+		generateContentFunc: func(_ context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "nim delegated"},

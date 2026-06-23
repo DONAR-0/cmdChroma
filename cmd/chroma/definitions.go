@@ -74,7 +74,7 @@ func createApp() *cli.Command {
 			InitLogger(level, format)
 
 			// Initialize output printer
-			outputCfg := output.NewOutputConfig(c)
+			outputCfg := output.NewConfig(c)
 			printer = output.NewConsolePrinter(outputCfg)
 
 			if c.Bool("verbose") {
@@ -337,7 +337,10 @@ EXAMPLES:
   chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata
 
   # Import from a Hugging Face URL
-  chroma import my_collection https://huggingface.co/datasets/username/dataset/resolve/main/data.parquet --field-content target --auto-id`,
+  chroma import my_collection https://huggingface.co/datasets/username/dataset/resolve/main/data.parquet --field-content target --auto-id
+
+  # Import all fields as metadata, excluding specific fields
+  chroma import my_collection data.parquet --field-content answerText --all-metadata --exclude-field questionText --exclude-field text`,
 	Action: handleImportFileInChromaDb,
 	Flags: []cli.Flag{
 		nIngestDocumentFlag,
@@ -345,6 +348,7 @@ EXAMPLES:
 		fieldIdFlag,
 		fieldMetadataFlag,
 		allMetadataFlag,
+		excludeFieldFlag,
 		batchSizeFlag,
 		autoIdFlag,
 		dedupFlag,
@@ -403,7 +407,7 @@ EXAMPLES:
 
 // ============ Flag Definitions ============
 
-// Flags
+// Flags.
 var (
 	configFlag = &cli.StringFlag{
 		Name:  "config",
@@ -558,7 +562,12 @@ var (
 
 	allMetadataFlag = &cli.BoolFlag{
 		Name:  "all-metadata",
-		Usage: "Import all fields except content and ID as metadata",
+		Usage: "Import all fields as metadata (use --exclude-field to omit specific fields)",
+	}
+
+	excludeFieldFlag = &cli.StringSliceFlag{
+		Name:  "exclude-field",
+		Usage: "Field to exclude from metadata when --all-metadata is used (can repeat)",
 	}
 
 	batchSizeFlag = &cli.IntFlag{

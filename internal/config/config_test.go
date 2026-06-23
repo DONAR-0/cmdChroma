@@ -77,20 +77,20 @@ func TestConfig_GetChromaURL(t *testing.T) {
 
 func TestConfig_ApplyFileConfig(t *testing.T) {
 	cfg := &RuntimeConfig{}
-	file := &ConfigFile{
+	file := &File{
 		Version: "1.0",
-		Chroma: ConfigFileChroma{
+		Chroma: Chroma{
 			Host:     "filehost",
 			Port:     "9090",
 			Tenant:   "filetenant",
 			Database: "filedb",
 		},
-		Model: ConfigFileModel{
+		Model: Model{
 			ONNXModel: "file-model.onnx",
 			Tokenizer: "file-tokenizer.json",
 			ONNXLib:   "file-lib.so",
 		},
-		Logging: ConfigFileLogging{
+		Logging: Logging{
 			Level:   "debug",
 			Format:  "json",
 			Verbose: true,
@@ -508,7 +508,7 @@ func TestConfig_LoadFromFile_InvalidPath(t *testing.T) {
 func ExampleLoadConfig() {
 	// Create a mock CLI command with some flags set
 	// In real usage, this comes from urfave/cli
-	var mockCmd *cli.Command = nil // placeholder
+	var mockCmd *cli.Command // placeholder
 
 	// Load configuration with precedence: CLI > env > file > defaults
 	cfg, err := LoadConfig(mockCmd)

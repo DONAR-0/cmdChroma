@@ -10,15 +10,18 @@ import (
 	cli "github.com/urfave/cli/v3"
 )
 
+// Formatter formats ChromaDB query and document responses for display.
 type Formatter struct {
 	writer io.Writer
-	mode   OutputMode
+	mode   Mode
 }
 
-func NewFormatter(w io.Writer, mode OutputMode) *Formatter {
+// NewFormatter creates a Formatter that writes to w in the given mode.
+func NewFormatter(w io.Writer, mode Mode) *Formatter {
 	return &Formatter{writer: w, mode: mode}
 }
 
+// FormatQueryResponse prints query results to the output.
 func (f *Formatter) FormatQueryResponse(collection string, queries []string, resp *client.QueryResponse) {
 	switch f.mode {
 	case ModeJSON:
@@ -55,6 +58,7 @@ func (f *Formatter) printQueryResponseText(collection string, queries []string, 
 	}
 }
 
+// FormatDocumentList prints a list of documents to the output.
 func (f *Formatter) FormatDocumentList(collection string, docs *client.GetRecordsResponse) {
 	switch f.mode {
 	case ModeJSON:
@@ -109,7 +113,7 @@ func documentListAsMap(collection string, docs *client.GetRecordsResponse) map[s
 	}
 }
 
-func ModeFromCLI(c any) OutputMode {
+func ModeFromCLI(c any) Mode {
 	if cmd, ok := c.(*cli.Command); ok && cmd.Bool("json") {
 		return ModeJSON
 	}

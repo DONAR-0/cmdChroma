@@ -1,3 +1,4 @@
+// Package errors provides custom error types and sentinel errors for cmdChroma.
 package errors
 
 import (
@@ -9,6 +10,7 @@ import (
 type ErrorCode int
 
 const (
+	// ErrUnknown is the default/unknown error code.
 	ErrUnknown ErrorCode = iota
 	ErrConfig
 	ErrConnection

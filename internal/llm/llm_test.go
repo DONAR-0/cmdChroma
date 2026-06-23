@@ -50,7 +50,7 @@ func TestNewLangChainAdapter(t *testing.T) {
 
 func TestLangChainAdapter_Generate(t *testing.T) {
 	mock := &mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+		generateContentFunc: func(_ context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 			// Verify the message has the correct role and content
 			if len(messages) != 1 {
 				t.Fatalf("expected 1 message, got %d", len(messages))

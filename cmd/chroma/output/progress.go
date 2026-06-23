@@ -16,7 +16,7 @@ import (
 // IngestProgress is NOT safe for concurrent use: Update must be called
 // sequentially from a single goroutine.
 type IngestProgress struct {
-	cfg         *OutputConfig
+	cfg         *Config
 	collection  string
 	filePath    string
 	barWidth    int
@@ -26,7 +26,7 @@ type IngestProgress struct {
 }
 
 // NewIngestProgress creates a new ingestion progress display.
-func NewIngestProgress(cfg *OutputConfig, collection, filePath string) *IngestProgress {
+func NewIngestProgress(cfg *Config, collection, filePath string) *IngestProgress {
 	return &IngestProgress{
 		cfg:         cfg,
 		collection:  collection,
