@@ -626,9 +626,11 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		return fmt.Errorf("invalid --dedup value: %q (must be: none, warn, or skip)", cfg.DedupMode)
 	}
 
-	// Get parquet row count for progress bar
-	if strings.HasSuffix(safePath, ".parquet") {
+	switch {
+	case strings.HasSuffix(safePath, ".parquet"):
 		cfg.Total = ingest.ParquetRowCount(safePath)
+	case strings.HasSuffix(safePath, ".csv"):
+		cfg.Total = ingest.CSVRowCount(safePath)
 	}
 
 	// Setup service using factory

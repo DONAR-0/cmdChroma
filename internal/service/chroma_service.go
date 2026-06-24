@@ -215,8 +215,10 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		records, errChan = processor.ProcessJSONL(filePath)
 	case ".parquet":
 		records, errChan = processor.ProcessParquet(filePath)
+	case ".csv":
+		records, errChan = processor.ProcessCSV(filePath)
 	default:
-		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet)", ext)
+		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet, .csv)", ext)
 	}
 
 	// Batch accumulation with progress tracking

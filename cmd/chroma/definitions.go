@@ -311,23 +311,24 @@ EXAMPLES:
 	},
 }
 
-// importCommand ingests a file (JSONL or Parquet) into a collection.
+// importCommand ingests a file (JSONL, Parquet, or CSV) into a collection.
 var importCommand = &cli.Command{
 	Name:      "import",
 	Aliases:   []string{"ingest", "jsonl-import"},
-	Usage:     "Import documents from a file (JSONL or Parquet) or URL into a collection",
+	Usage:     "Import documents from a file (JSONL, Parquet, or CSV) or URL into a collection",
 	ArgsUsage: "<collection_name> <file_path|url>",
-	Description: `Bulk import documents from JSONL or Parquet files (or download from a URL).
+	Description: `Bulk import documents from JSONL, Parquet, or CSV files (or download from a URL).
 
 This command is optimized for large datasets and will:
   • Download from URL if a web link is provided instead of a local file
-  • Stream the file line by line (JSONL) or row by row (Parquet)
+  • Stream the file line by line (JSONL) or row by row (Parquet, CSV)
   • Generate embeddings locally for each document
   • Upload in configurable batches
   • Show live progress bar during import
 
 JSONL format: Each line must be a valid JSON object.
 Parquet format: Column-based format; use --field-content and --field-id to map columns.
+CSV format: First row is the header (column names); subsequent rows are records.
 
 EXAMPLES:
   # Import JSONL
@@ -335,6 +336,9 @@ EXAMPLES:
 
   # Import Parquet
   chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata
+
+  # Import CSV
+  chroma import my_collection data.csv --field-content text --field-id id --all-metadata
 
   # Import from a Hugging Face URL
   chroma import my_collection https://huggingface.co/datasets/username/dataset/resolve/main/data.parquet --field-content target --auto-id
