@@ -75,7 +75,7 @@ func TestEmbedder_EmbedDocuments(t *testing.T) {
 	}
 }
 
-func TestEmbedder_Close(t *testing.T) {
+func TestEmbedder_Close(_ *testing.T) {
 	// Close is tested in TestMain cleanup
 	// We can test that calling Close twice doesn't panic
 	testEmbedder.Close()

@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	// MustClose is a wrapper around internal.CheckDefer for cleaning up resources.
 	MustClose = internal.CheckDefer
 )
 

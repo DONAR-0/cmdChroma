@@ -168,5 +168,5 @@ func (h *ChatHandler) writeErrorSSE(c *gin.Context, msg string) {
 	c.Writer.Flush()
 }
 
-// compile-time interface check
+// compile-time interface check.
 var _ io.Writer = (*sseWriter)(nil)

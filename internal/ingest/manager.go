@@ -6,6 +6,7 @@ package ingest
 // large datasets via Go channels.
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,8 +17,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/parquet-go/parquet-go"
+	"github.com/tmc/langchaingo/textsplitter"
+
+	"github.com/DONAR-0/cmdChroma/internal"
 )
 
 // ============ Data Types ============
@@ -31,6 +34,19 @@ type Record struct {
 	// Metadata holds arbitrary key-value pairs for filtering and annotations.
 	Metadata map[string]any
 }
+
+// ProgressInfo holds the current state of an ingestion operation for UI display.
+type ProgressInfo struct {
+	Processed int
+	Total     int // 0 if unknown
+	BatchSize int
+	Batches   int   // batches uploaded so far
+	Elapsed   int64 // nanoseconds
+	Done      bool
+}
+
+// ProgressFunc is a callback for ingestion progress updates.
+type ProgressFunc func(ProgressInfo)
 
 // Config controls the ingestion pipeline behavior.
 type Config struct {
@@ -46,16 +62,45 @@ type Config struct {
 	// MetadataFields lists specific fields to extract as metadata.
 	// If empty and AllMetadata is false, no metadata is extracted.
 	MetadataFields []string // specific fields to extract
-	// AllMetadata, when true, extracts all JSON fields except ContentField and IDField.
+	// AllMetadata, when true, extracts all JSON fields except ContentField, IDField, and ExcludeFields.
 	AllMetadata bool // extract all fields except content/id
+	// ExcludeFields lists fields to exclude from metadata when AllMetadata is true.
+	ExcludeFields []string
 	// Limit restricts the maximum number of records to ingest.
 	// Zero means no limit.
 	Limit int // max records to ingest, 0 = unlimited
+
+	// ChunkSize is the maximum number of characters per chunk.
+	// If 0, no splitting is performed.
+	ChunkSize int
+	// ChunkOverlap is the number of characters to overlap between chunks.
+	ChunkOverlap int
+
+	// AutoID ignores user-provided IDs and always generates content-hash IDs.
+	AutoID bool
+	// DedupMode controls handling of duplicate IDs: "none", "warn", or "skip".
+	// "warn" logs a warning and skips the duplicate; "skip" silently skips.
+	DedupMode string
+	// Upsert uses the upsert endpoint instead of add, so existing IDs are updated.
+	Upsert bool
+	// Total is the known total number of records (0 if unknown).
+	// Used for progress display.
+	Total int
+	// OnProgress is an optional callback for progress updates during ingestion.
+	OnProgress ProgressFunc
 }
 
 // Processor handles the ingestion workflow: reading, parsing, embedding, and uploading.
 type Processor struct {
 	cfg *Config
+	ctx context.Context // for cancellation; nil means not cancelable
+}
+
+// WithContext returns a copy of the processor with a context for cancellation.
+// The context is used by ProcessJSONL and ProcessParquet to abort early.
+func (p *Processor) WithContext(ctx context.Context) *Processor {
+	p.ctx = ctx
+	return p
 }
 
 // Primitive reflect.Kinds that can be kept as-is
@@ -98,7 +143,7 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 		defer close(errChan)
 
 		file, err := os.Open(filePath)
-		if err != nil && err != io.EOF {
+		if err != nil {
 			errChan <- fmt.Errorf("failed to open file: %w", err)
 			return
 		}
@@ -118,17 +163,27 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 				continue
 			}
 
-			record, err := p.extractRecord(rec)
+			recordsList, err := p.extractRecord(rec)
 			if err != nil {
 				slog.Error("Skipping record", "error", err)
 				continue
 			}
 
-			if record == nil {
+			if len(recordsList) == 0 {
 				continue
 			}
 
-			records <- record
+			for _, record := range recordsList {
+				if p.ctx != nil {
+					select {
+					case records <- record:
+					case <-p.ctx.Done():
+						return
+					}
+				} else {
+					records <- record
+				}
+			}
 
 			count++
 
@@ -212,17 +267,27 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 						continue
 					}
 
-					rec, err := p.extractRecord(rowMap)
+					recordsList, err := p.extractRecord(rowMap)
 					if err != nil {
 						slog.Error("Skipping record", "error", err)
 						continue
 					}
 
-					if rec == nil {
+					if len(recordsList) == 0 {
 						continue
 					}
 
-					records <- rec
+					for _, rec := range recordsList {
+						if p.ctx != nil {
+							select {
+							case records <- rec:
+							case <-p.ctx.Done():
+								return
+							}
+						} else {
+							records <- rec
+						}
+					}
 
 					total++
 
@@ -248,6 +313,30 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 	}()
 
 	return records, errChan
+}
+
+// ParquetRowCount returns the number of rows in a parquet file.
+// Returns 0 if the row count cannot be determined.
+func ParquetRowCount(filePath string) int {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	info, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+
+	pf, err := parquet.OpenFile(f, info.Size())
+	if err != nil {
+		return 0
+	}
+
+	return int(pf.NumRows())
 }
 
 // ============ Private Helpers ============
@@ -277,7 +366,7 @@ func (p *Processor) stringifyIfComplex(value any) any {
 
 	rt := reflect.TypeOf(value)
 	// Pointers: dereference and check underlying type
-	for rt.Kind() == reflect.Ptr {
+	for rt.Kind() == reflect.Pointer {
 		v := reflect.ValueOf(value)
 		if v.IsNil() {
 			return nil
@@ -315,49 +404,92 @@ func (p *Processor) stringifyIfComplex(value any) any {
 	return fmt.Sprintf("%v", value)
 }
 
-// extractRecord converts raw JSON/Parquet map into a Record.
-func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
+// extractRecord converts a raw Parquet/JSON row into Records, splitting
+// content into chunks if ChunkSize is configured.
+func (p *Processor) extractRecord(raw map[string]any) ([]*Record, error) {
 	contentVal := getNestedValue(raw, p.cfg.ContentField)
 	if contentVal == nil {
-		return nil, nil // skip records without content
+		return nil, nil
 	}
 
 	content := fmt.Sprintf("%v", contentVal)
 
-	// Generate or extract ID
-	var id string
+	baseID := p.resolveID(raw, content)
 
-	idVal := getNestedValue(raw, p.cfg.IDField)
-	if idVal != nil {
-		id = fmt.Sprintf("%v", idVal)
-	} else {
-		// Deterministic hash from content
-		hash := sha256.Sum256([]byte(content))
-		id = hex.EncodeToString(hash[:12])
+	meta := p.collectMetadata(raw)
+
+	if p.cfg.ChunkSize <= 0 {
+		return []*Record{{ID: baseID, Content: content, Metadata: meta}}, nil
 	}
 
-	// Extract metadata
+	splitter := textsplitter.NewRecursiveCharacter(
+		textsplitter.WithChunkSize(p.cfg.ChunkSize),
+		textsplitter.WithChunkOverlap(p.cfg.ChunkOverlap),
+	)
+
+	chunks, err := splitter.SplitText(content)
+	if err != nil {
+		return nil, fmt.Errorf("text splitting failed: %w", err)
+	}
+
+	records := make([]*Record, 0, len(chunks))
+	for i, chunk := range chunks {
+		records = append(records, &Record{
+			ID:       fmt.Sprintf("%s_chunk%d", baseID, i),
+			Content:  chunk,
+			Metadata: meta,
+		})
+	}
+
+	return records, nil
+}
+
+// resolveID returns the record ID from the configured field, or a content hash.
+func (p *Processor) resolveID(raw map[string]any, content string) string {
+	if p.cfg.AutoID {
+		return p.contentHash(content)
+	}
+
+	if idVal := getNestedValue(raw, p.cfg.IDField); idVal != nil {
+		return fmt.Sprintf("%v", idVal)
+	}
+
+	return p.contentHash(content)
+}
+
+// contentHash returns a deterministic hex hash of the given string.
+func (p *Processor) contentHash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:12])
+}
+
+// collectMetadata extracts metadata from a raw row based on the config.
+func (p *Processor) collectMetadata(raw map[string]any) map[string]any {
 	meta := make(map[string]any)
 
-	if p.cfg.AllMetadata || len(p.cfg.MetadataFields) == 0 {
-		// Extract all fields except content and id
+	if p.cfg.AllMetadata {
+		excluded := map[string]bool{
+			p.cfg.ContentField: true,
+			p.cfg.IDField:      true,
+		}
+		for _, f := range p.cfg.ExcludeFields {
+			excluded[f] = true
+		}
+
 		for k, v := range raw {
-			if k != p.cfg.ContentField && k != p.cfg.IDField {
+			if !excluded[k] {
 				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
-	} else {
-		// Extract only specified metadata fields
-		for _, k := range p.cfg.MetadataFields {
-			if v, exists := raw[k]; exists {
-				meta[k] = p.stringifyIfComplex(v)
-			}
+
+		return meta
+	}
+
+	for _, k := range p.cfg.MetadataFields {
+		if v, ok := raw[k]; ok {
+			meta[k] = p.stringifyIfComplex(v)
 		}
 	}
 
-	return &Record{
-		ID:       id,
-		Content:  content,
-		Metadata: meta,
-	}, nil
+	return meta
 }

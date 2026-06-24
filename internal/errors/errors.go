@@ -6,20 +6,21 @@ package errors
 import "errors"
 
 var (
-	// Embedder errors
+	// ErrEmbedderNotInitialized is returned when the embedder is not configured.
 	ErrEmbedderNotInitialized = errors.New("embedder not initialized")
-	ErrEmbedderInitFailed     = errors.New("failed to initialize embedder")
+	// ErrEmbedderInitFailed is returned when the embedder fails to initialize.
+	ErrEmbedderInitFailed = errors.New("failed to initialize embedder")
 
-	// Collection errors
+	// ErrCollectionNotFound is returned when a collection does not exist.
 	ErrCollectionNotFound = errors.New("collection not found")
 	ErrCollectionExists   = errors.New("collection already exists")
 
-	// Client/connection errors
+	// ErrConnectionFailed is returned when a connection to ChromaDB fails.
 	ErrConnectionFailed = errors.New("connection failed")
 	ErrRequestFailed    = errors.New("request failed")
 	ErrInvalidResponse  = errors.New("invalid response from server")
 
-	// Validation errors
+	// ErrInvalidInput is returned for invalid user input.
 	ErrInvalidInput   = errors.New("invalid input")
 	ErrFileNotFound   = errors.New("file not found")
 	ErrPathTraversal  = errors.New("path traversal detected")
@@ -28,7 +29,7 @@ var (
 	ErrEmptyDocuments = errors.New("no documents provided")
 	ErrEmptyQueries   = errors.New("no queries provided")
 
-	// Configuration errors
+	// ErrMissingConfig is returned when required configuration is missing.
 	ErrMissingConfig = errors.New("missing configuration")
 	ErrInvalidConfig = errors.New("invalid configuration")
 )

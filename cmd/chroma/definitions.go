@@ -74,7 +74,7 @@ func createApp() *cli.Command {
 			InitLogger(level, format)
 
 			// Initialize output printer
-			outputCfg := output.NewOutputConfig(c)
+			outputCfg := output.NewConfig(c)
 			printer = output.NewConsolePrinter(outputCfg)
 
 			if c.Bool("verbose") {
@@ -311,29 +311,40 @@ EXAMPLES:
 	},
 }
 
-// importCommand ingests a file (JSONL or Parquet) into a collection.
+// importCommand ingests a file (JSONL, Parquet, or CSV) into a collection.
 var importCommand = &cli.Command{
 	Name:      "import",
 	Aliases:   []string{"ingest", "jsonl-import"},
-	Usage:     "Import documents from a file (JSONL or Parquet) into a collection",
-	ArgsUsage: "<collection_name> <file_path>",
-	Description: `Bulk import documents from JSONL or Parquet files.
+	Usage:     "Import documents from a file (JSONL, Parquet, or CSV) or URL into a collection",
+	ArgsUsage: "<collection_name> <file_path|url>",
+	Description: `Bulk import documents from JSONL, Parquet, or CSV files (or download from a URL).
 
 This command is optimized for large datasets and will:
-  • Stream the file line by line (JSONL) or row by row (Parquet)
+  • Download from URL if a web link is provided instead of a local file
+  • Stream the file line by line (JSONL) or row by row (Parquet, CSV)
   • Generate embeddings locally for each document
   • Upload in configurable batches
-  • Show progress during import
+  • Show live progress bar during import
 
 JSONL format: Each line must be a valid JSON object.
 Parquet format: Column-based format; use --field-content and --field-id to map columns.
+CSV format: First row is the header (column names); subsequent rows are records.
 
 EXAMPLES:
   # Import JSONL
   chroma import my_collection data.jsonl --field-content text
 
   # Import Parquet
-  chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata`,
+  chroma import my_collection data.parquet --field-content question --field-id conversation_id --all-metadata
+
+  # Import CSV
+  chroma import my_collection data.csv --field-content text --field-id id --all-metadata
+
+  # Import from a Hugging Face URL
+  chroma import my_collection https://huggingface.co/datasets/username/dataset/resolve/main/data.parquet --field-content target --auto-id
+
+  # Import all fields as metadata, excluding specific fields
+  chroma import my_collection data.parquet --field-content answerText --all-metadata --exclude-field questionText --exclude-field text`,
 	Action: handleImportFileInChromaDb,
 	Flags: []cli.Flag{
 		nIngestDocumentFlag,
@@ -341,7 +352,11 @@ EXAMPLES:
 		fieldIdFlag,
 		fieldMetadataFlag,
 		allMetadataFlag,
+		excludeFieldFlag,
 		batchSizeFlag,
+		autoIdFlag,
+		dedupFlag,
+		upsertImportFlag,
 	},
 }
 
@@ -396,7 +411,7 @@ EXAMPLES:
 
 // ============ Flag Definitions ============
 
-// Flags
+// Flags.
 var (
 	configFlag = &cli.StringFlag{
 		Name:  "config",
@@ -551,7 +566,12 @@ var (
 
 	allMetadataFlag = &cli.BoolFlag{
 		Name:  "all-metadata",
-		Usage: "Import all fields except content and ID as metadata",
+		Usage: "Import all fields as metadata (use --exclude-field to omit specific fields)",
+	}
+
+	excludeFieldFlag = &cli.StringSliceFlag{
+		Name:  "exclude-field",
+		Usage: "Field to exclude from metadata when --all-metadata is used (can repeat)",
 	}
 
 	batchSizeFlag = &cli.IntFlag{
@@ -559,6 +579,22 @@ var (
 		Aliases: []string{"b"},
 		Value:   100,
 		Usage:   "Number of documents to process in each batch",
+	}
+
+	autoIdFlag = &cli.BoolFlag{
+		Name:  "auto-id",
+		Usage: "Ignore user-provided IDs and auto-generate deterministic content-hash IDs",
+	}
+
+	dedupFlag = &cli.StringFlag{
+		Name:  "dedup",
+		Value: "none",
+		Usage: "Duplicate ID handling: none (allow duplicates, let ChromaDB reject), warn (log and skip), skip (silently skip)",
+	}
+
+	upsertImportFlag = &cli.BoolFlag{
+		Name:  "upsert",
+		Usage: "Update existing documents if IDs already exist (uses upsert endpoint)",
 	}
 
 	// Database auto-creation flag

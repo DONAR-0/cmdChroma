@@ -1,3 +1,4 @@
+// Package storage provides session storage for the chat server.
 package storage
 
 import (

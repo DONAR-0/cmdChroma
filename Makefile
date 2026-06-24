@@ -129,22 +129,22 @@ venom-mcp: build-mcp-server ## Run MCP server Venom integration tests
 # ==============================================================================
 
 .PHONY: build-linux
-build-linux: ## Build for Linux (amd64)
+build-linux: ## Build for Linux (amd64) with CGO and RPATH for native libs
 	@echo "Building for Linux..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
 
 .PHONY: build-darwin
-build-darwin: ## Build for macOS (amd64)
+build-darwin: ## Build for macOS (amd64) — CGO disabled for cross-compilation
 	@echo "Building for macOS..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME-darwin-amd64) $(MAIN_PATH)
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
 
 .PHONY: build-windows
-build-windows: ## Build for Windows (amd64)
+build-windows: ## Build for Windows (amd64) — CGO disabled for cross-compilation
 	@echo "Building for Windows..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME).exe $(MAIN_PATH)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 
 .PHONY: build-all
 build-all: build-linux build-darwin build-windows ## Build for all platforms

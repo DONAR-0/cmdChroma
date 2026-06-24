@@ -1,171 +1,41 @@
 package llm
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 
-	"github.com/DONAR-0/cmdChroma/internal"
+	"github.com/tmc/langchaingo/llms/ollama"
 )
 
-// ChatRequest is the payload sent to Ollama.
-type ChatRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-}
-
-// ChatResponse represents one chunk of streamed output.
-type ChatResponse struct {
-	Response string `json:"response"`
-	Done     bool   `json:"done"`
-}
-
-// Provider handles LLM interactions.
+// Provider handles LLM interactions using LangChainGo.
 type Provider struct {
-	baseURL string
-	client  *http.Client
+	adapter *LangChainAdapter
 }
 
-// NewProvider creates a new LLM provider.
+// NewProvider creates a new Ollama LLM provider using the LangChainGo adapter.
 func NewProvider(baseURL string) *Provider {
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
 	}
 
+	// Using the updated package path from latest langchaingo
+	llm, err := ollama.New(ollama.WithServerURL(baseURL))
+	if err != nil {
+		fmt.Printf("warning: failed to initialize ollama llm: %v\n", err)
+	}
+
 	return &Provider{
-		baseURL: baseURL,
-		client:  &http.Client{Timeout: 120 * time.Second}, // Default timeout for LLM calls
+		adapter: NewLangChainAdapter(llm),
 	}
 }
 
 // Generate streams response from the LLM.
 func (p *Provider) Generate(ctx context.Context, prompt, model string, w io.Writer) error {
-	start := time.Now()
-
-	if model == "" {
-		model = "qwen:0.5b"
-	}
-
-	if w == nil {
-		w = os.Stdout
-	}
-
-	slog.Info("ollama_generate_start", "model", model, "prompt_len", len(prompt))
-
-	reqBody := ChatRequest{
-		Model:  model,
-		Prompt: prompt,
-		Stream: true,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/api/generate", p.baseURL)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("ollama connection failed: %w", err)
-	}
-	defer internal.CheckDefer(resp.Body.Close)
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ollama returned status %d", resp.StatusCode)
-	}
-
-	// Stream output
-	scanner := bufio.NewScanner(resp.Body)
-
-	_, _ = fmt.Fprintln(w, "\n🤖 AI Response:")
-	_, _ = fmt.Fprintln(w, strings.Repeat("-", 20))
-
-	for scanner.Scan() {
-		var r ChatResponse
-		if err := json.Unmarshal(scanner.Bytes(), &r); err != nil {
-			continue
-		}
-
-		_, _ = fmt.Fprint(w, r.Response)
-
-		if r.Done {
-			break
-		}
-	}
-
-	_, _ = fmt.Fprintln(w, "\n"+strings.Repeat("-", 20))
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("stream reading error: %w", err)
-	}
-
-	slog.Info("ollama_generate_complete", "model", model, "duration_ms", time.Since(start).Milliseconds())
-
-	return nil
+	return p.adapter.Generate(ctx, prompt, model, w)
 }
 
-// GenerateSync returns the full response as a string (non-streaming).
+// GenerateSync returns the full response as a string.
 func (p *Provider) GenerateSync(ctx context.Context, prompt, model string) (string, error) {
-	// For now we could implement non-streaming by collecting streaming chunks
-	// Or Ollama also has /api/generate with stream=false
-	if model == "" {
-		model = "qwen:0.5b"
-	}
-
-	reqBody := ChatRequest{
-		Model:  model,
-		Prompt: prompt,
-		Stream: false,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/api/generate", p.baseURL)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("ollama connection failed: %w", err)
-	}
-	defer internal.CheckDefer(resp.Body.Close)
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var fullResp struct {
-		Response string `json:"response"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&fullResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return fullResp.Response, nil
+	return p.adapter.GenerateSync(ctx, prompt, model)
 }

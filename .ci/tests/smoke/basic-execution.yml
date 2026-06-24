@@ -9,6 +9,7 @@ testcases:
         script: cmdChroma --log-level info t
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
   - name: Chroma test
@@ -18,6 +19,7 @@ testcases:
         script: cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "default_tenant"
@@ -29,6 +31,7 @@ testcases:
         script: cmdChroma --log-level info test -tenant some_tenant
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
@@ -39,6 +42,7 @@ testcases:
         script: TENANT=some_tenant cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
@@ -49,6 +53,7 @@ testcases:
         script: TENANT=some_tenant DATABASE=some_database cmdChroma --log-level info test
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"
@@ -61,6 +66,7 @@ testcases:
         script: cmdChroma --log-level info test -tenant some_tenant -database some_database
         assertions:
           - result.code ShouldEqual 0
+          - result.systemerr ShouldContainSubstring "Initializing Chroma client"
           - result.systemout ShouldContainSubstring "Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "✅ Successfully connected to ChromaDB"
           - result.systemout ShouldContainSubstring "some_tenant"

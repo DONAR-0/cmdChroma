@@ -18,6 +18,9 @@ import (
 )
 
 func main() {
+	var exitCode int
+	defer func() { os.Exit(exitCode) }()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
@@ -44,7 +47,10 @@ func main() {
 	embedder, chromaClient, err := service.InitIntegrations(ctx, &cfg.Chroma, &cfg.Embedder)
 	if err != nil {
 		logger.Error("failed to initialize integrations", "err", err)
-		os.Exit(1)
+
+		exitCode = 1
+
+		return
 	}
 
 	// Build service layer

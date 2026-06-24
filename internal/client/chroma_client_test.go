@@ -111,7 +111,7 @@ func TestChromaClient_GetTenant_Error(t *testing.T) {
 
 func TestChromaClient_ListDatabases(t *testing.T) {
 	dbs := []Database{
-		{Id: "1", Name: "db1", Tenant: "tenant"},
+		{ID: "1", Name: "db1", Tenant: "tenant"},
 	}
 	data, _ := json.Marshal(dbs)
 
@@ -132,7 +132,7 @@ func TestChromaClient_ListDatabases(t *testing.T) {
 		t.Errorf("ListDatabases failed: %v", err)
 	}
 
-	if len(result) != 1 || result[0].Id != "1" {
+	if len(result) != 1 || result[0].ID != "1" {
 		t.Errorf("Unexpected result: %v", result)
 	}
 }
@@ -332,14 +332,10 @@ func TestChromaClient_ResolveCollectionID(t *testing.T) {
 		t.Errorf("Expected ID coll123, got %s", id)
 	}
 
-	// Test non-existing collection (should return input as ID)
-	id, err = client.ResolveCollectionID(context.Background(), "non_existent")
-	if err != nil {
-		t.Errorf("ResolveCollectionID failed for non-existent collection: %v", err)
-	}
-
-	if id != "non_existent" {
-		t.Errorf("Expected input as ID, got %s", id)
+	// Test non-existing collection (should error)
+	_, err = client.ResolveCollectionID(context.Background(), "non_existent")
+	if err == nil {
+		t.Error("ResolveCollectionID should error for non-existent collection")
 	}
 }
 
@@ -355,10 +351,10 @@ func TestChromaClient_ResolveCollectionID_Error(t *testing.T) {
 
 	client := NewChromaDBClient(server.URL, "tenant", "db")
 
-	// Should still work for non-existent collection (returns input as ID) even if listing fails
+	// Should error when listing fails
 	_, err := client.ResolveCollectionID(context.Background(), "non_existent")
-	if err != nil {
-		t.Errorf("ResolveCollectionID should not error for non-existent collection when listing fails: %v", err)
+	if err == nil {
+		t.Error("ResolveCollectionID should error when listing fails")
 	}
 }
 
@@ -456,9 +452,13 @@ func TestChromaClient_DeleteCollection_Error(t *testing.T) {
 
 func TestChromaClient_DeleteRecords(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test/delete" {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections":
+			data, _ := json.Marshal([]Collection{{ID: "test-uuid", Name: "test"}})
+			_, _ = w.Write(data)
+		case r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test-uuid/delete":
 			w.WriteHeader(http.StatusOK)
-		} else {
+		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
@@ -474,9 +474,13 @@ func TestChromaClient_DeleteRecords(t *testing.T) {
 
 func TestChromaClient_DeleteRecords_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test/delete" {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections":
+			data, _ := json.Marshal([]Collection{{ID: "test-uuid", Name: "test"}})
+			_, _ = w.Write(data)
+		case r.Method == "POST" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test-uuid/delete":
 			w.WriteHeader(http.StatusInternalServerError)
-		} else {
+		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))

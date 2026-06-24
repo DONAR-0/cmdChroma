@@ -30,6 +30,7 @@ func parseFlagsAndConfig() *Config {
 	modelPath := flag.String("model-path", "", "ONNX model path")
 	libraryPath := flag.String("library-path", "", "ONNX runtime library path")
 	configPath := flag.String("config", "", "Path to config file")
+
 	flag.Parse()
 
 	clr := CLIOverrides{
@@ -69,6 +70,9 @@ func parseFlagsAndConfig() *Config {
 }
 
 func run(cfg *Config) {
+	var exitCode int
+	defer func() { os.Exit(exitCode) }()
+
 	slog.Info("initializing MCP server",
 		"mode", cfg.Server.Mode,
 		"transport", cfg.Server.Transport,
@@ -87,7 +91,10 @@ func run(cfg *Config) {
 	embedder, err := onnx.NewEmbedder(embedderPath, tokenizerPath, cfg.Embedder.LibraryPath)
 	if err != nil {
 		slog.Error("failed to init embedder", "error", err)
-		os.Exit(1)
+
+		exitCode = 1
+
+		return
 	}
 	defer embedder.Close()
 
@@ -105,7 +112,10 @@ func run(cfg *Config) {
 
 	if err := chromaClient.TestConnection(ctx); err != nil {
 		slog.Error("ChromaDB connection failed", "error", err)
-		os.Exit(1)
+
+		exitCode = 1
+
+		return
 	}
 
 	srv := buildServer(chromaClient, embedder, cfg.Server.Mode)
@@ -120,17 +130,26 @@ func run(cfg *Config) {
 	case "stdio":
 		if err := RunStdio(ctx, srv); err != nil && err != context.Canceled {
 			slog.Error("stdio server error", "error", err)
-			os.Exit(1)
+
+			exitCode = 1
+
+			return
 		}
 	case "http":
 		addr := fmt.Sprintf(":%d", cfg.Server.Port)
 		if err := RunHTTP(ctx, srv, addr); err != nil && err != context.Canceled {
 			slog.Error("http server error", "error", err)
-			os.Exit(1)
+
+			exitCode = 1
+
+			return
 		}
 	default:
 		slog.Error("unsupported transport", "transport", cfg.Server.Transport)
-		os.Exit(1)
+
+		exitCode = 1
+
+		return
 	}
 
 	slog.Info("server stopped")

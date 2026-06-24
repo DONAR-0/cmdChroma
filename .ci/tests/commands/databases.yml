@@ -9,7 +9,7 @@ testcases:
         script: cmdChroma --log-level info dbs
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Listing databases"
+          - result.systemerr ShouldContainSubstring "Listing databases"
           - result.systemout ShouldContainSubstring "default_database"
   - name: ls-dbs should work
     tags: ["integration"]
@@ -18,6 +18,6 @@ testcases:
         script: cmdChroma --log-level info ls-dbs
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Listing databases"
+          - result.systemerr ShouldContainSubstring "Listing databases"
           - result.systemout ShouldContainSubstring "default_database"
 

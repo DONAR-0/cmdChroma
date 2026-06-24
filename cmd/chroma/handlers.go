@@ -29,7 +29,6 @@ var (
 	// Validation errors with actionable hints
 	errCollectionNameRequired = "collection name is required\n\nUsage: chroma create <collection_name>\n\nExample: chroma create my_docs"
 	errInvalidNIMModel        = "invalid NIM model format: use nim://<model-id>\n\nExample: --llm-model nim://mistralai/mistral-7b-instruct-v0.3"
-	errNIMAPIKeyMissing       = "NVIDIA_API_KEY environment variable is required for NIM\n\nSet it with: export NVIDIA_API_KEY=your-key"
 )
 
 // validateNIMModel validates and extracts model ID from nim:// prefix.
@@ -89,7 +88,7 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 	rlCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	if err := svc.TestConnection(ctx); err != nil {
+	if err := svc.TestConnection(rlCtx); err != nil {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
@@ -246,7 +245,8 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 		isDatabaseError := strings.Contains(errMsg, "does not exist") ||
 			strings.Contains(errMsg, "Database") && strings.Contains(errMsg, "not found")
 
-		if isDatabaseError && cmd.Bool("create-db") {
+		switch {
+		case isDatabaseError && cmd.Bool("create-db"):
 			// User requested automatic database creation
 			dbName := cmd.String("database")
 			slog.Info("Auto-creating database", "database", dbName)
@@ -264,11 +264,12 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 				slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 				return fmt.Errorf("failed to create collection after database creation: %w", err)
 			}
-		} else if isDatabaseError {
+		case isDatabaseError:
 			// Provide helpful error message with available databases
 			dbs, listErr := chromaClient.ListDatabases(ctx)
 
 			var hint string
+
 			if listErr == nil && len(dbs) > 0 {
 				dbList := make([]string, len(dbs))
 				for i, db := range dbs {
@@ -284,7 +285,7 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 
 			return fmt.Errorf("database '%s' does not exist in tenant '%s'%s", cmd.String("database"), cmd.String("tenant"), hint)
-		} else {
+		default:
 			slog.Error("operation_failed", "op", opName, "name", collectionName, "error", err, "duration_ms", time.Since(start).Milliseconds())
 			return fmt.Errorf("failed to create collection: %w\n\nHint: Check if collection already exists: chroma collections", err)
 		}
@@ -540,24 +541,57 @@ func handleQueryBatchInCollection(ctx context.Context, c *cli.Command) error {
 func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	collectionName := c.Args().Get(0)
 	if collectionName == "" {
-		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>\n\nExample: chroma import my_collection data.jsonl")
+		return fmt.Errorf("collection name is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet|url>\n\nExample: chroma import my_collection https://example.com/data.parquet")
 	}
 
 	filePathArg := c.Args().Get(1)
 	if filePathArg == "" {
-		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet>")
+		return fmt.Errorf("file path is required\n\nUsage: chroma import <collection> <file.jsonl|file.parquet|url>")
 	}
 
-	// Validate path
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
+	var (
+		safePath string
+		cleanup  func()
+	)
+
+	if ingest.IsURL(filePathArg) {
+		printer.Printf("⬇ Downloading from '%s'\n", filePathArg)
+
+		tmpPath, err := ingest.DownloadFile(ctx, filePathArg, func(downloaded, total int64) {
+			if total > 0 {
+				pct := float64(downloaded) / float64(total) * 100
+				printer.Printf("\r   %s / %s (%.0f%%)\033[K", ingest.FormatBytes(downloaded), ingest.FormatBytes(total), pct)
+			} else {
+				printer.Printf("\r   %s downloaded\033[K", ingest.FormatBytes(downloaded))
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("download failed: %w", err)
+		}
+
+		printer.Print("")
+
+		cleanup = func() {
+			if err := os.Remove(tmpPath); err != nil {
+				slog.Warn("Failed to remove temp file", "path", tmpPath, "error", err)
+			}
+		}
+		safePath = tmpPath
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+
+		safePath, err = internal.SafeJoin(cwd, filePathArg)
+		if err != nil {
+			return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
+		}
+
+		cleanup = func() {}
 	}
 
-	safePath, err := internal.SafeJoin(cwd, filePathArg)
-	if err != nil {
-		return fmt.Errorf("invalid file path: %w\n\nHint: Use relative paths within the current directory", err)
-	}
+	defer cleanup()
 
 	// Build ingest config
 	cfg := &ingest.Config{
@@ -566,7 +600,11 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		IDField:        c.String("field-id"),
 		MetadataFields: c.StringSlice("field-metadata"),
 		AllMetadata:    c.Bool("all-metadata"),
+		ExcludeFields:  c.StringSlice("exclude-field"),
 		Limit:          c.Int("n-ingest"),
+		AutoID:         c.Bool("auto-id"),
+		DedupMode:      c.String("dedup"),
+		Upsert:         c.Bool("upsert"),
 	}
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 100
@@ -580,6 +618,21 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 		cfg.IDField = "id"
 	}
 
+	// Validate DedupMode
+	switch cfg.DedupMode {
+	case "none", "warn", "skip":
+		// valid
+	default:
+		return fmt.Errorf("invalid --dedup value: %q (must be: none, warn, or skip)", cfg.DedupMode)
+	}
+
+	switch {
+	case strings.HasSuffix(safePath, ".parquet"):
+		cfg.Total = ingest.ParquetRowCount(safePath)
+	case strings.HasSuffix(safePath, ".csv"):
+		cfg.Total = ingest.CSVRowCount(safePath)
+	}
+
 	// Setup service using factory
 	f := factory.NewServiceFactory()
 
@@ -589,9 +642,18 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
+	// Build output config and progress display
+	outputCfg := output.NewConfig(c)
+	progress := output.NewIngestProgress(outputCfg, collectionName, filepath.Base(safePath))
+	cfg.OnProgress = progress.Update
+
 	// Print import info using printer
 	printer.Printf("📥 Importing from '%s' to collection '%s'\n", filepath.Base(safePath), collectionName)
 	printer.Printf("   Batch size: %d\n", cfg.BatchSize)
+
+	if cfg.Total > 0 {
+		printer.Printf("   Total: %d records\n", cfg.Total)
+	}
 
 	if cfg.Limit > 0 {
 		printer.Printf("   Limit: %d documents\n", cfg.Limit)
@@ -599,22 +661,11 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 
 	printer.Print("")
 
-	startTime := time.Now()
-
 	slog.Info("Starting import", "file", safePath, "collection", collectionName)
-
-	// Show working indicator in interactive mode
-	ui := output.NewUI()
-	if ui.IsInteractive() && !c.Bool("no-tui") {
-		printer.Info("Processing...")
-	}
 
 	if err := svc.IngestRecords(ctx, collectionName, safePath, cfg); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-
-	elapsed := time.Since(startTime)
-	printer.Printf("\n✅ Import completed in %s\n", elapsed.Round(time.Second))
 
 	return nil
 }
@@ -642,30 +693,18 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 		model = "qwen:0.5b"
 	}
 
-	// Validate model format
 	if _, err := validateNIMModel(model); err != nil {
 		return err
 	}
 
-	// Get n-results with validation
 	nResults := c.Int("n-results")
 	if nResults <= 0 {
 		nResults = 3
 	}
 
-	distanceThreshold := c.Float64("distance-threshold")
-	if distanceThreshold < 0 {
-		return fmt.Errorf("distance-threshold must be >= 0")
-	}
+	slog.Info("operation_start", "op", opName, "collection", collectionName, "model", model)
 
-	slog.Info("operation_start",
-		"op", opName,
-		"collection", collectionName,
-		"model", model,
-		"n_results", nResults,
-		"distance_threshold", distanceThreshold)
-
-	// Setup service using factory
+	// Setup service and LLM using factories
 	f := factory.NewServiceFactory()
 
 	svc, _, cleanup, err := f.CreateChromaService(c)
@@ -674,68 +713,36 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
-	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
-
-	// Query for context
-	resp, err := svc.QueryDocuments(ctx, collectionName, []string{question}, nResults)
-	if err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "query", "error", err, "duration_ms", time.Since(start).Milliseconds())
-		return fmt.Errorf("failed to retrieve context: %w\n\nHint: Make sure collection exists and has documents", err)
-	}
-
-	// Build context from response
-	contextStr, hasRelevant, bestDistance := buildContextFromResponse(resp, distanceThreshold)
-
-	if !hasRelevant {
-		fmt.Println("⚠️  No relevant documents found. The LLM will be instructed to say so.")
-	} else {
-		fmt.Println("💭 Generating answer...")
-	}
-
-	// Build prompt based on whether we have context
-	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
-
-	// Get LLM provider using factory
 	llmFactory := factory.NewLLMProviderFactory()
-	if err := llmFactory.ValidateModel(model); err != nil {
-		return err
-	}
-
 	nimURL := c.String("nim-url")
 
 	provider, err := llmFactory.CreateProvider(model, nimURL)
 	if err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "provider_init", "error", err, "duration_ms", time.Since(start).Milliseconds())
-
-		if strings.Contains(err.Error(), "API key is required") {
-			return fmt.Errorf("%s: %w", errNIMAPIKeyMissing, err)
-		}
-
 		return err
 	}
 
-	if strings.HasPrefix(model, "nim://") {
-		fmt.Println("\n🤖 Using NVIDIA NIM for generation")
-	} else {
-		fmt.Println("\n🤖 Using Ollama for generation")
+	// We can't use ProviderInterface directly for chains,
+	// but we know our providers now use LangChainAdapter.
+	// For this MVP, we'll use the existing RAG pipeline logic but
+	// move towards chains in the next sub-task.
+
+	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
+
+	resp, err := svc.QueryDocuments(ctx, collectionName, []string{question}, nResults)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve context: %w", err)
 	}
 
-	// Generate response
+	// Use existing prompt logic
+	distanceThreshold := c.Float64("distance-threshold")
+	contextStr, hasRelevant, _ := buildContextFromResponse(resp, distanceThreshold)
+	finalPrompt := buildRAGPrompt(question, contextStr, hasRelevant)
+
 	if err := provider.Generate(ctx, finalPrompt, model, printer.Stdout()); err != nil {
-		slog.Error("operation_failed", "op", opName, "stage", "generate", "error", err, "duration_ms", time.Since(start).Milliseconds())
-
-		if strings.HasPrefix(model, "nim://") {
-			return fmt.Errorf("NIM generation failed: %w\n\nHints:\n  • Ensure NVIDIA_API_KEY is set\n  • Verify model name (e.g., nim://mistralai/mistral-7b-instruct)\n  • Check your NIM endpoint URL", err)
-		}
-
-		return fmt.Errorf("LLM generation failed: %w\n\nHints:\n  • Is Ollama running? Start it with: ollama serve\n  • Pull the model: ollama pull %s\n  • Check: http://localhost:11434", err, model)
+		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	slog.Info("operation_complete",
-		"op", opName,
-		"has_context", hasRelevant,
-		"best_distance", bestDistance,
-		"duration_ms", time.Since(start).Milliseconds())
+	slog.Info("operation_complete", "op", opName, "duration_ms", time.Since(start).Milliseconds())
 
 	return nil
 }
@@ -883,27 +890,27 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 	}
 
 	// Create default configuration
-	defaultConfig := config.ConfigFile{
+	defaultConfig := config.File{
 		Version: "1.0",
-		Chroma: config.ConfigFileChroma{
+		Chroma: config.Chroma{
 			Host:     "localhost",
 			Port:     "8000",
 			Tenant:   "default_tenant",
 			Database: "default_database",
 			Timeout:  30,
 		},
-		Model: config.ConfigFileModel{
+		Model: config.Model{
 			ONNXModel: "models/all-MiniLM-L6-v2/model.onnx",
 			Tokenizer: "models/all-MiniLM-L6-v2/tokenizer.json",
 			ONNXLib:   "models/onnx_runtime/lib/libonnxruntime.so",
 		},
-		Logging: config.ConfigFileLogging{
+		Logging: config.Logging{
 			Level:   "info",
 			Format:  "text",
 			Verbose: false,
 		},
-		Features: config.ConfigFileFeatures{
-			CreateCollection: config.ConfigFileCreateCollection{
+		Features: config.Features{
+			CreateCollection: config.CreateCollection{
 				AutoCreateDatabase: false,
 			},
 		},
@@ -939,7 +946,7 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 func toStringRows(dbs []client.Database) [][]string {
 	rows := make([][]string, len(dbs))
 	for i, db := range dbs {
-		rows[i] = []string{db.Name, db.Id}
+		rows[i] = []string{db.Name, db.ID}
 	}
 
 	return rows
@@ -1000,11 +1007,11 @@ func handleDoctor(ctx context.Context, c *cli.Command) error {
 
 	f := factory.NewServiceFactory()
 
-	client, err := f.CreateChromaClient(c)
+	chromaClient, err := f.CreateChromaClient(c)
 	if err != nil {
 		printer.Error("  ✗ Failed to create client: %v", err)
 	} else {
-		if err := client.TestConnection(ctx); err != nil {
+		if err := chromaClient.TestConnection(ctx); err != nil {
 			printer.Error("  ✗ Connection failed: %v", err)
 		} else {
 			printer.Success("  ✓ Successfully connected to ChromaDB")

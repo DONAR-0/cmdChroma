@@ -9,7 +9,7 @@ testcases:
         script: cmdChroma --log-level info cT
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Checking tenant"
+          - result.systemerr ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "default_tenant"
           - result.systemout ShouldContainSubstring "[exists]"
   - name: Current Tenant with -tenant flag
@@ -19,7 +19,7 @@ testcases:
         script: cmdChroma --log-level info cT -tenant some_tenant
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Checking tenant"
+          - result.systemerr ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "some_tenant"
           - result.systemout ShouldContainSubstring "[not found]"
 
@@ -30,7 +30,7 @@ testcases:
         script: TENANT=some_tenant cmdChroma --log-level info cT
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Checking tenant"
+          - result.systemerr ShouldContainSubstring "Checking tenant"
           - result.systemout ShouldContainSubstring "some_tenant"
           - result.systemout ShouldContainSubstring "[not found]"
 

@@ -38,7 +38,7 @@ testcases:
         script: {{.cmdChroma}} --log-level info ingest {{.collection}} {{.test_file}} --n-ingest {{.limit_count}}
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Limit reached"
+          - result.systemerr ShouldContainSubstring "Limit reached"
 
   - name: test_generic_mapping_and_metadata
     tags: ["integration"]
@@ -61,7 +61,7 @@ testcases:
             --batch-size 1
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Import completed"
+          - result.systemerr ShouldContainSubstring "Ingestion complete"
 
       # Step 3: Verify the metadata and content mapping via list-docs
       - type: exec

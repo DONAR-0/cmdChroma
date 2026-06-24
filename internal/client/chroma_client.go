@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
@@ -22,6 +23,7 @@ import (
 // ============ Constants ============
 
 var (
+	// MustClose is a wrapper around internal.CheckDefer for cleaning up resources.
 	MustClose = internal.CheckDefer
 	// endpoints
 	testEndpoint         = "%s/api/v2/heartbeat"
@@ -100,7 +102,7 @@ type (
 		UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
 
 		// QueryBatch performs similarity search and returns matching documents.
-		QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*QueryResponse, error)
+		QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*QueryResponse, error)
 
 		// GetIDByName resolves a collection name to its ID.
 		GetIDByName(ctx context.Context, name string) (string, error)
@@ -126,6 +128,7 @@ type (
 // ============ Data Transfer Types ============
 
 type (
+	// CreateCollectionRequest represents the payload for creating a new collection.
 	CreateCollectionRequest struct {
 		Name        string         `json:"name"`
 		Metadata    map[string]any `json:"metadata"`
@@ -143,12 +146,14 @@ type (
 		Config    map[string]any `json:"configuration_json"`
 	}
 
+	// Database represents a ChromaDB database with its ID, name, and tenant.
 	Database struct {
-		Id     string `json:"id"`
+		ID     string `json:"id"`
 		Name   string `json:"name"`
 		Tenant string `json:"tenant"`
 	}
 
+	// GetRecordsRequest represents the payload for fetching documents from a collection.
 	GetRecordsRequest struct {
 		Tenant   string   `json:"tenant"`
 		Database string   `json:"database"`
@@ -158,12 +163,14 @@ type (
 		Offset   *int     `json:"offset"`
 	}
 
+	// GetRecordsResponse represents the response from fetching documents.
 	GetRecordsResponse struct {
 		IDs       []string         `json:"ids"`
 		Documents []string         `json:"documents"`
 		Metadatas []map[string]any `json:"metadatas"`
 	}
 
+	// AddRecordsRequest represents the payload for adding documents to a collection.
 	AddRecordsRequest struct {
 		IDs        []string         `json:"ids"`
 		Documents  []string         `json:"documents"`
@@ -474,9 +481,7 @@ func (c *ChromaClient) GetIDByName(ctx context.Context, name string) (string, er
 
 // ResolveCollectionID accepts a collection name OR a UUID and returns the UUID.
 // ctx propagates to the underlying HTTP request via http.NewRequestWithContext,
-// so a cancelled context aborts the in-flight call. We deliberately do not
-// chain to c.ListCollections() because that method's existing signature is
-// still pre-ctx — inlining the fetch here keeps the focused scope of this patch.
+// so a cancelled context aborts the in-flight call.
 func (c *ChromaClient) ResolveCollectionID(ctx context.Context, input string) (string, error) {
 	if _, err := uuid.Parse(input); err == nil {
 		return input, nil
@@ -486,22 +491,22 @@ func (c *ChromaClient) ResolveCollectionID(ctx context.Context, input string) (s
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return input, nil
+		return "", fmt.Errorf("failed to list collections: %w", err)
 	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return input, nil
+		return "", fmt.Errorf("failed to list collections: %w", err)
 	}
 	defer MustClose(resp.Body.Close)
 
 	if resp.StatusCode != http.StatusOK {
-		return input, nil
+		return "", fmt.Errorf("failed to list collections: server returned %d", resp.StatusCode)
 	}
 
 	var collections []Collection
 	if err := json.NewDecoder(resp.Body).Decode(&collections); err != nil {
-		return input, nil
+		return "", fmt.Errorf("failed to decode collections: %w", err)
 	}
 
 	for _, col := range collections {
@@ -510,7 +515,7 @@ func (c *ChromaClient) ResolveCollectionID(ctx context.Context, input string) (s
 		}
 	}
 
-	return input, nil
+	return "", fmt.Errorf("collection %q not found\nHint: Create it with: chroma create %s", input, input)
 }
 
 // ============ SetEmbedder ============
@@ -631,22 +636,22 @@ func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
 
 // ============ Querying ============
 
-func (c *ChromaClient) QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*QueryResponse, error) {
-	//1. Generate embeddings for all queries at once
+func (c *ChromaClient) QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*QueryResponse, error) {
+	// 1. Generate embeddings for all queries at once
 	// Assuming your local embedder can handle a slice of string
 	vectors, err := c.Embedder.EmbedDocuments(ctx, queryTexts)
 	if err != nil {
 		return nil, err
 	}
-	//2. Prepare payload for chroma
+	// 2. Prepare payload for chroma
 	payload := map[string]any{
 		"query_embeddings": vectors,
 		"n_results":        nResults,
 		"include":          []string{"documents", "metadatas", "distances"},
 	}
-	//3. Use the scoped query endpoint
+	// 3. Use the scoped query endpoint
 	endPoint := fmt.Sprintf(queryEndpoint,
-		c.URL, c.Tenant, c.Database, collectionId)
+		c.URL, c.Tenant, c.Database, collectionID)
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
@@ -769,10 +774,58 @@ func (c *ChromaClient) AddBatchGeneric(ctx context.Context, collectionID string,
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("chroma server error (%d): %s", resp.StatusCode, string(body))
+		return wrapChromaError(resp.StatusCode, body)
 	}
 
 	return nil
+}
+
+// chromaMetadataKeyHint extracts the failing field name from a ChromaDB 422
+// error like "metadatas[23].questionText: data did not match any variant...".
+func chromaMetadataKeyHint(body []byte) string {
+	const prefix = "metadatas["
+
+	s := string(body)
+
+	idx := strings.Index(s, prefix)
+	if idx < 0 {
+		return ""
+	}
+
+	remain := s[idx+len(prefix):]
+
+	dotIdx := strings.Index(remain, ".")
+	if dotIdx < 0 {
+		return ""
+	}
+
+	fieldPart := remain[dotIdx+1:]
+
+	colonIdx := strings.Index(fieldPart, ":")
+	if colonIdx < 0 {
+		return fieldPart
+	}
+
+	return strings.TrimSpace(fieldPart[:colonIdx])
+}
+
+// wrapChromaError enriches ChromaDB server errors with actionable hints.
+func wrapChromaError(statusCode int, body []byte) error {
+	if statusCode == 422 && strings.Contains(string(body), "MetadataValue") {
+		if field := chromaMetadataKeyHint(body); field != "" {
+			return fmt.Errorf(
+				"metadata field %q was rejected by ChromaDB (expected string, number, or boolean)\n"+
+					"Hint: Use --field-metadata to pick specific fields, "+
+					"or add --exclude-field %[1]q when using --all-metadata", field)
+		}
+
+		return fmt.Errorf(
+			"metadata values must be strings, numbers, or booleans\n" +
+				"Hint: Use --field-metadata to select specific metadata fields, " +
+				"or use --all-metadata with --exclude-field to omit problematic fields")
+	}
+
+	return fmt.Errorf("chroma server error (%d): %s", statusCode, string(body))
 }
 
 // UpsertBatchGeneric handles documents, IDs, and dynamic metadata maps for upserting (insert or update).
@@ -824,7 +877,7 @@ func (c *ChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID stri
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("chroma server error (%d): %s", resp.StatusCode, string(body))
+		return wrapChromaError(resp.StatusCode, body)
 	}
 
 	return nil
