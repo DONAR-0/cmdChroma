@@ -8,16 +8,19 @@ import (
 )
 
 type RouterDeps struct {
-	APIKey         string
-	ChatHandler    *handler.ChatHandler
-	QueryHandler   *handler.QueryHandler
-	SessionHandler *handler.SessionHandler
-	HealthHandler  *handler.HealthHandler
-	Collections    []config.CollectionEntry
+	APIKey            string
+	ChatHandler       *handler.ChatHandler
+	QueryHandler      *handler.QueryHandler
+	SessionHandler    *handler.SessionHandler
+	HealthHandler     *handler.HealthHandler
+	CollectionHandler *handler.CollectionHandler
+	ImportHandler     *handler.ImportHandler
+	Collections       []config.CollectionEntry
 }
 
 func NewRouter(deps RouterDeps) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
+
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -34,7 +37,14 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 		api.POST("/query", deps.QueryHandler.Query)
 		api.GET("/sessions", deps.SessionHandler.ListSessions)
 		api.DELETE("/sessions/:id", deps.SessionHandler.ClearSession)
-		api.GET("/collections", deps.SessionHandler.ListCollections(deps.Collections))
+		api.GET("/collections", deps.CollectionHandler.ListCollections)
+		api.POST("/collections", deps.CollectionHandler.CreateCollection)
+		api.DELETE("/collections/:name", deps.CollectionHandler.DeleteCollection)
+		api.GET("/collections/:name/documents", deps.CollectionHandler.ListDocuments)
+		api.POST("/collections/:name/documents", deps.CollectionHandler.AddDocuments)
+		api.DELETE("/collections/:name/documents", deps.CollectionHandler.DeleteDocuments)
+		api.POST("/collections/:name/import", deps.ImportHandler.ImportJSONL)
+		api.POST("/collections/:name/import/url", deps.ImportHandler.ImportFromURL)
 	}
 
 	return r

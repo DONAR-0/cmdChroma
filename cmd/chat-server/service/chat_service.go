@@ -8,8 +8,10 @@ import (
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/config"
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/storage"
 	"github.com/DONAR-0/cmdChroma/internal/client"
+	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
+	"github.com/DONAR-0/cmdChroma/internal/service"
 )
 
 // ChatService orchestrates: ChromaDB query → build RAG prompt → LLM stream.
@@ -112,6 +114,98 @@ func (s *ChatService) CreateProvider(model, nimKey string) (llm.ProviderInterfac
 
 // GetOllamaURL returns the configured Ollama base URL.
 func (s *ChatService) GetOllamaURL() string { return s.ollamaURL }
+
+// ImportFile ingests records from a JSONL/Parquet file into a collection with progress reporting.
+func (s *ChatService) ImportFile(ctx context.Context, collectionName, filePath string, contentField, idField string, progressFn func(int)) error {
+	svc := service.NewChromaService(s.chromaClient, s.embedder)
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: contentField,
+		IDField:      idField,
+		AllMetadata:  true,
+	}
+	if cfg.ContentField == "" {
+		cfg.ContentField = "text"
+	}
+
+	if cfg.IDField == "" {
+		cfg.IDField = "id"
+	}
+
+	return svc.IngestRecords(ctx, collectionName, filePath, cfg, progressFn)
+}
+
+// CollectionWithCount extends a ChromaDB collection with its document count.
+type CollectionWithCount struct {
+	client.Collection
+	Count int `json:"count"`
+}
+
+// ListCollections returns all collections from ChromaDB with metadata.
+func (s *ChatService) ListCollections(ctx context.Context) ([]client.Collection, error) {
+	return s.chromaClient.ListCollections(ctx)
+}
+
+// ListCollectionsWithCount returns all collections with their document counts.
+func (s *ChatService) ListCollectionsWithCount(ctx context.Context) ([]CollectionWithCount, error) {
+	collections, err := s.chromaClient.ListCollections(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CollectionWithCount, len(collections))
+	for i, col := range collections {
+		result[i] = CollectionWithCount{Collection: col}
+
+		records, err := s.chromaClient.ListDocuments(ctx, col.ID)
+		if err == nil && records != nil {
+			result[i].Count = len(records.IDs)
+		}
+	}
+
+	return result, nil
+}
+
+// CreateCollection creates a new collection and returns its ID.
+func (s *ChatService) CreateCollection(ctx context.Context, name string) (string, error) {
+	return s.chromaClient.CreateCollection(ctx, name)
+}
+
+// DeleteCollection removes a collection by name.
+func (s *ChatService) DeleteCollection(ctx context.Context, name string) error {
+	return s.chromaClient.DeleteCollection(ctx, name)
+}
+
+// ListDocuments returns all documents in a collection.
+func (s *ChatService) ListDocuments(ctx context.Context, collectionName string) (*client.GetRecordsResponse, error) {
+	collectionID, err := s.chromaClient.ResolveCollectionID(ctx, collectionName)
+	if err != nil {
+		return nil, fmt.Errorf("collection not found: %s", collectionName)
+	}
+
+	return s.chromaClient.ListDocuments(ctx, collectionID)
+}
+
+// AddDocuments adds documents with optional metadata to a collection.
+func (s *ChatService) AddDocuments(ctx context.Context, collectionName string, documents []string, ids []string, metadatas []map[string]any) error {
+	collectionID, err := s.chromaClient.ResolveCollectionID(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("collection not found: %s", collectionName)
+	}
+
+	return s.chromaClient.AddBatchGeneric(ctx, collectionID, documents, ids, metadatas)
+}
+
+// DeleteDocuments removes specific documents from a collection by their IDs.
+func (s *ChatService) DeleteDocuments(ctx context.Context, collectionName string, ids []string) error {
+	collectionID, err := s.chromaClient.ResolveCollectionID(ctx, collectionName)
+	if err != nil {
+		return fmt.Errorf("collection not found: %s", collectionName)
+	}
+
+	return s.chromaClient.DeleteRecords(ctx, collectionID, ids)
+}
 
 // BuildPromptWithHistory builds a RAG prompt with full session message history for multi-turn chat.
 func (s *ChatService) BuildPromptWithHistory(history []storage.Message, query, context string, hasContext bool) string {

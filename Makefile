@@ -125,6 +125,26 @@ venom-mcp: build-mcp-server ## Run MCP server Venom integration tests
 
 
 # ==============================================================================
+# Chat Server Targets
+# ==============================================================================
+
+CHAT_SERVER_MAIN=./cmd/chat-server
+
+.PHONY: run-chat-server
+run-chat-server: setup-deps ## Run the chat-server in dev mode
+	@echo "Starting chat-server..."
+	@mkdir -p $(BUILD_DIR)
+	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
+	go run $(CHAT_SERVER_MAIN)
+
+.PHONY: build-chat-server
+build-chat-server: setup-deps ## Build the chat-server binary
+	@echo "Building chat-server..."
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=1 \
+	go build -v -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/chat-server $(CHAT_SERVER_MAIN)
+
+# ==============================================================================
 # Cross-Compilation Targets
 # ==============================================================================
 

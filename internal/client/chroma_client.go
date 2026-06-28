@@ -404,9 +404,10 @@ func (c *ChromaClient) ListDocuments(ctx context.Context, collectionID string) (
 
 	slog.Info("Listing documents", "endpoint", endpoint)
 
-	// When using the scoped URL above, some Chroma versions expect a simpler body
+	// Use a high limit to bypass any ChromaDB default caps on the get endpoint
 	payload := map[string]any{
 		"include": []string{"documents", "metadatas"},
+		"limit":   100_000,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -436,6 +437,8 @@ func (c *ChromaClient) ListDocuments(ctx context.Context, collectionID string) (
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
+
+	slog.Info("Listing documents result", "count", len(result.IDs))
 
 	return &result, nil
 }

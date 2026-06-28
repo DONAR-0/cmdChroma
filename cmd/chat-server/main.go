@@ -56,15 +56,19 @@ func main() {
 	queryHandler := handler.NewQueryHandler(chatService)
 	sessionHandler := handler.NewSessionHandler(sessionStore)
 	healthHandler := handler.NewHealthHandler(chromaClient, embedder)
+	collectionHandler := handler.NewCollectionHandler(chatService)
+	importHandler := handler.NewImportHandler(chatService)
 
 	// Wire up router
 	router := api.NewRouter(api.RouterDeps{
-		APIKey:         cfg.Server.APIKey,
-		ChatHandler:    chatHandler,
-		QueryHandler:   queryHandler,
-		SessionHandler: sessionHandler,
-		HealthHandler:  healthHandler,
-		Collections:    cfg.Collections,
+		APIKey:             cfg.Server.APIKey,
+		ChatHandler:        chatHandler,
+		QueryHandler:       queryHandler,
+		SessionHandler:     sessionHandler,
+		HealthHandler:      healthHandler,
+		CollectionHandler:  collectionHandler,
+		ImportHandler:      importHandler,
+		Collections:        cfg.Collections,
 	})
 
 	// HTTP server

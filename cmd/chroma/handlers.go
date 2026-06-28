@@ -269,6 +269,7 @@ func handleCreateCollection(ctx context.Context, cmd *cli.Command) error {
 			dbs, listErr := chromaClient.ListDatabases(ctx)
 
 			var hint string
+
 			if listErr == nil && len(dbs) > 0 {
 				dbList := make([]string, len(dbs))
 				for i, db := range dbs {

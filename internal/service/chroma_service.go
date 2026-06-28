@@ -277,7 +277,9 @@ func (s *ChromaService) Close() {
 // generates embeddings, and uploads in batches. collectionName can be a name or UUID.
 // If cfg is nil, sensible defaults are used. ctx propagates to all client HTTP
 // calls so cancellation aborts the in-flight ingest.
-func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, filePath string, cfg *ingest.Config) error {
+// IngestRecords streams records from a file and uploads them to ChromaDB in batches.
+// If progress is provided, it is called after each batch with the cumulative count.
+func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, filePath string, cfg *ingest.Config, progress ...func(int)) error {
 	if s.embedder == nil {
 		return errors.ErrEmbedderNotInitialized
 	}
@@ -322,6 +324,12 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		nextProgress  = progressN
 	)
 
+	reportProgress := func(current int) {
+		if len(progress) > 0 && progress[0] != nil {
+			progress[0](current)
+		}
+	}
+
 	for record := range records {
 		docs = append(docs, record.Content)
 		ids = append(ids, record.ID)
@@ -334,6 +342,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		// Progress update every N documents
 		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
 			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
+			reportProgress(currentTotal)
 
 			nextProgress += progressN
 		}
@@ -344,6 +353,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 			}
 
 			totalUploaded += len(docs)
+			reportProgress(totalUploaded)
 			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 			docs, ids, metas = nil, nil, nil
 			batchIdx = 0
@@ -358,6 +368,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		}
 
 		totalUploaded += len(docs)
+		reportProgress(totalUploaded)
 		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 	}
 
@@ -366,6 +377,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		return fmt.Errorf("ingestion error: %w", err)
 	}
 
+	reportProgress(totalUploaded)
 	slog.Info("Ingestion complete", "total_documents", totalUploaded)
 
 	return nil

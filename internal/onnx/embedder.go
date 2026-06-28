@@ -76,7 +76,7 @@ func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOpti
 	ort.SetSharedLibraryPath(libpath)
 
 	if err := ort.InitializeEnvironment(); err != nil {
-		return nil, fmt.Errorf("error received when initialize the ONNX Library:  %w", err)
+		return nil, fmt.Errorf("error received when initialize the ONNX Library: %w", err)
 	}
 
 	//2. Load dictionary
@@ -91,7 +91,7 @@ func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOpti
 
 	sess, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error received when starting a session")
+		return nil, fmt.Errorf("error received when starting a session: %w", err)
 	}
 
 	e := &Embedder{tokenizer: tk, session: sess, numWorkers: runtime.NumCPU()}

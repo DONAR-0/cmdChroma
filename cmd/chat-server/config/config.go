@@ -70,7 +70,7 @@ func Default() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Host:               "0.0.0.0",
-			Port:               8080,
+			Port:               6700,
 			APIKey:             "changeme",
 			CORSAllowedOrigins: []string{"http://localhost:3000"},
 		},
