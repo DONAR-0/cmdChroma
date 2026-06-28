@@ -8,7 +8,7 @@ import (
 func TestConsolePrinter_Stream(t *testing.T) {
 	var buf strings.Builder
 
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Mode:   ModeHuman,
 		Stdout: &buf,
 		NoTTY:  true,
@@ -25,7 +25,7 @@ func TestConsolePrinter_Stream(t *testing.T) {
 func TestConsolePrinter_Stream_JSONMode(t *testing.T) {
 	var buf strings.Builder
 
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Mode:   ModeJSON,
 		Stdout: &buf,
 		NoTTY:  true,
@@ -46,7 +46,7 @@ func TestConsolePrinter_Stream_JSONMode(t *testing.T) {
 func TestConsolePrinter_Stdout(t *testing.T) {
 	var buf strings.Builder
 
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Mode:   ModeHuman,
 		Stdout: &buf,
 		NoTTY:  true,
@@ -69,7 +69,7 @@ func TestConsolePrinter_Stdout(t *testing.T) {
 func TestConsolePrinter_Stream_Multiple(t *testing.T) {
 	var buf strings.Builder
 
-	cfg := &OutputConfig{
+	cfg := &Config{
 		Mode:   ModeHuman,
 		Stdout: &buf,
 		NoTTY:  true,

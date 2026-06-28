@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -66,31 +67,31 @@ func (m *mockChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID 
 	return m.upsertBatchGenericErr
 }
 
-func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionId string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
+func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return m.queryBatchResult, m.queryBatchErr
 }
 
-func (m *mockChromaClient) GetIDByName(_ context.Context, name string) (string, error) {
+func (m *mockChromaClient) GetIDByName(_ context.Context, _ string) (string, error) {
 	return m.getIDByNameResult, m.getIDByNameErr
 }
 
-func (m *mockChromaClient) ResolveCollectionID(_ context.Context, input string) (string, error) {
+func (m *mockChromaClient) ResolveCollectionID(_ context.Context, _ string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
 
-func (m *mockChromaClient) ListDocuments(_ context.Context, collectionID string) (*client.GetRecordsResponse, error) {
+func (m *mockChromaClient) ListDocuments(_ context.Context, _ string) (*client.GetRecordsResponse, error) {
 	return m.listDocumentsResult, m.listDocumentsErr
 }
 
-func (m *mockChromaClient) DeleteCollection(_ context.Context, name string) error {
+func (m *mockChromaClient) DeleteCollection(_ context.Context, _ string) error {
 	return m.deleteCollectionErr
 }
 
-func (m *mockChromaClient) DeleteRecords(_ context.Context, collectionID string, ids []string) error {
+func (m *mockChromaClient) DeleteRecords(_ context.Context, _ string, ids []string) error {
 	return m.deleteRecordsErr
 }
 
-func (m *mockChromaClient) CreateDatabase(_ context.Context, name string) error {
+func (m *mockChromaClient) CreateDatabase(_ context.Context, _ string) error {
 	return m.createDatabaseErr
 }
 
@@ -98,11 +99,11 @@ func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (str
 	return "test-collection-id", nil
 }
 
-func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {}
+func (m *mockChromaClient) SetEmbedder(_ onnx.EmbedderInterface) {}
 
 type mockEmbedder struct{}
 
-func (m *mockEmbedder) Embed(text string) ([]float32, error) {
+func (m *mockEmbedder) Embed(_ string) ([]float32, error) {
 	return []float32{0.1}, nil
 }
 
@@ -163,7 +164,7 @@ func TestChromaService_GetTenant_Error(t *testing.T) {
 }
 
 func TestChromaService_ListDatabases(t *testing.T) {
-	client := &mockChromaClient{listDatabasesResult: []client.Database{{Id: "1", Name: "db1"}}}
+	client := &mockChromaClient{listDatabasesResult: []client.Database{{ID: "1", Name: "db1"}}}
 	svc := NewChromaService(client, nil)
 
 	dbs, err := svc.ListDatabases(context.Background())
@@ -321,7 +322,7 @@ func TestChromaService_QueryDocuments_Error(t *testing.T) {
 	}
 }
 
-func TestChromaService_Close(t *testing.T) {
+func TestChromaService_Close(_ *testing.T) {
 	client := &mockChromaClient{}
 	embedder := &mockEmbedder{}
 	svc := NewChromaService(client, embedder)
@@ -439,7 +440,7 @@ func TestChromaService_uploadBatch(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := &ChromaService{client: mockClient, embedder: embedder}
 
-	err := svc.uploadBatch(context.Background(), "coll", []string{"doc1"}, []string{"id1"}, nil)
+	err := svc.uploadBatch(context.Background(), "coll", []string{"doc1"}, []string{"id1"}, nil, false)
 	if err != nil {
 		t.Errorf("uploadBatch failed: %v", err)
 	}
@@ -450,7 +451,7 @@ func TestChromaService_uploadBatch_Empty(t *testing.T) {
 	embedder := &mockEmbedder{}
 	svc := &ChromaService{client: mockClient, embedder: embedder}
 
-	err := svc.uploadBatch(context.Background(), "coll", []string{}, []string{}, nil)
+	err := svc.uploadBatch(context.Background(), "coll", []string{}, []string{}, nil, false)
 	if err != nil {
 		t.Errorf("uploadBatch with empty docs should not return error, got: %v", err)
 	}
@@ -602,6 +603,130 @@ func TestChromaService_IngestRecords_Batching(t *testing.T) {
 	// If we get here, batching logic executed successfully
 }
 
+func TestChromaService_IngestRecords_WithProgressCallback(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	for i := 0; i < 5; i++ {
+		line := `{"id":"` + fmt.Sprintf("%d", i) + `","content":"doc ` + fmt.Sprintf("%d", i) + `"}`
+		_, _ = tmpFile.WriteString(line + "\n")
+	}
+
+	_ = tmpFile.Close()
+
+	var progressCalls []int
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		Total:        5,
+		OnProgress: func(info ingest.ProgressInfo) {
+			progressCalls = append(progressCalls, info.Processed)
+		},
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+
+	if len(progressCalls) == 0 {
+		t.Error("Expected at least one progress callback call")
+	}
+
+	if progressCalls[len(progressCalls)-1] != 5 {
+		t.Errorf("Last progress call should have Processed=5, got %d", progressCalls[len(progressCalls)-1])
+	}
+}
+
+func TestChromaService_IngestRecords_DedupSkip(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	// Two records with the same ID
+	_, _ = tmpFile.WriteString(`{"id":"dup","content":"first"}` + "\n")
+	_, _ = tmpFile.WriteString(`{"id":"dup","content":"second"}` + "\n")
+	_ = tmpFile.Close()
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		DedupMode:    "skip",
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_DedupWarn(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, _ = tmpFile.WriteString(`{"id":"dup","content":"first"}` + "\n")
+	_, _ = tmpFile.WriteString(`{"id":"dup","content":"second"}` + "\n")
+	_ = tmpFile.Close()
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		DedupMode:    "warn",
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_Upsert(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, _ = tmpFile.WriteString(`{"id":"1","content":"doc1"}` + "\n")
+	_ = tmpFile.Close()
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		Upsert:       true,
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords with Upsert failed: %v", err)
+	}
+}
+
 func TestChromaService_GetDocuments(t *testing.T) {
 	client := &mockChromaClient{
 		resolveCollectionIDResult: "resolved-id",
@@ -661,7 +786,7 @@ func TestChromaService_Query(t *testing.T) {
 
 	ctx := context.Background()
 
-	result, err := svc.Query(ctx, "my_collection", []string{"query"}, 5)
+	result, err := svc.QueryDocuments(ctx, "my_collection", []string{"query"}, 5)
 	if err != nil {
 		t.Errorf("Query failed: %v", err)
 	}
@@ -679,7 +804,7 @@ func TestChromaService_Query_NoEmbedder(t *testing.T) {
 	client := &mockChromaClient{}
 	svc := NewChromaService(client, nil) // no embedder
 
-	_, err := svc.Query(context.Background(), "coll", []string{"q"}, 1)
+	_, err := svc.QueryDocuments(context.Background(), "coll", []string{"q"}, 1)
 	if err == nil {
 		t.Errorf("Expected error, got nil")
 	}

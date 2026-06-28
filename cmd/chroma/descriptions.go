@@ -12,7 +12,7 @@ processing entirely on your local machine.
 Use it to:
   • Test connectivity to your ChromaDB instance
   • Create and manage collections
-  • Ingest documents from JSONL files
+  • Ingest documents from JSONL, Parquet, or CSV files
   • Add documents with local embedding generation
   • Perform semantic search with batch queries
   • Chat with your data using RAG (Retrieval-Augmented Generation)
@@ -234,6 +234,19 @@ EXAMPLES:
   # Import with custom batch size
   chroma import my_collection large_data.jsonl \\
     --batch-size 500 \\
+    --all-metadata
+
+  # Import all fields as metadata, but exclude problematic long-text fields
+  chroma import my_collection data.parquet \
+    --field-content answerText \
+    --all-metadata \
+    --exclude-field questionText \
+    --exclude-field text
+
+  # Import CSV with explicit column mapping
+  chroma import my_collection data.csv \
+    --field-content body \
+    --field-id doc_id \
     --all-metadata`
 
 	// ChatCmdDescription documents RAG-based chat.

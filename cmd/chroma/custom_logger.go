@@ -48,7 +48,7 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 	// 3. Final Output - Include log level
 	// Format: [LEVEL] timestamp:file:location:message
 	levelStr := r.Level.String()
-	_, _ = fmt.Fprintf(os.Stdout, "[%s] %s:%s:%s\n", levelStr, timeStr, location, r.Message)
+	_, _ = fmt.Fprintf(os.Stderr, "[%s] %s:%s:%s\n", levelStr, timeStr, location, r.Message)
 
 	// Merge handler attrs + record attrs
 	allAttrs := make([]slog.Attr, 0, len(h.attrs))
@@ -74,7 +74,7 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 		}
 
 		if a.Value.String() != "" {
-			fmt.Printf("	└ %s: %v\n", key, a.Value)
+			fmt.Fprintf(os.Stderr, "	└ %s: %v\n", key, a.Value)
 		}
 	}
 
@@ -101,7 +101,7 @@ func InitLogger(level slog.Level, format string) {
 	var handler slog.Handler
 
 	if format == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			Level:     level,
 			AddSource: true,
 		})

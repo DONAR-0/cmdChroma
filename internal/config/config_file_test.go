@@ -21,7 +21,7 @@ features:
     auto_create_database: true
 `
 
-	var cfg ConfigFile
+	var cfg File
 	if err := yaml.Unmarshal([]byte(yamlData), &cfg); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
@@ -62,7 +62,7 @@ chroma:
   host: only-host-set
 `
 
-	var cfg ConfigFile
+	var cfg File
 	if err := yaml.Unmarshal([]byte(yamlData), &cfg); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
@@ -91,7 +91,7 @@ chroma:
 }
 
 func TestConfigFile_EmptyYAML(t *testing.T) {
-	var cfg ConfigFile
+	var cfg File
 	if err := yaml.Unmarshal([]byte(""), &cfg); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
@@ -133,7 +133,7 @@ features:
     auto_create_database: true
 `
 
-	var cfg ConfigFile
+	var cfg File
 	if err := yaml.Unmarshal([]byte(yamlData), &cfg); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}

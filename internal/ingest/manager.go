@@ -6,6 +6,7 @@ package ingest
 // large datasets via Go channels.
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,8 +17,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/parquet-go/parquet-go"
+	"github.com/tmc/langchaingo/textsplitter"
+
+	"github.com/DONAR-0/cmdChroma/internal"
 )
 
 // ============ Data Types ============
@@ -31,6 +34,19 @@ type Record struct {
 	// Metadata holds arbitrary key-value pairs for filtering and annotations.
 	Metadata map[string]any
 }
+
+// ProgressInfo holds the current state of an ingestion operation for UI display.
+type ProgressInfo struct {
+	Processed int
+	Total     int // 0 if unknown
+	BatchSize int
+	Batches   int   // batches uploaded so far
+	Elapsed   int64 // nanoseconds
+	Done      bool
+}
+
+// ProgressFunc is a callback for ingestion progress updates.
+type ProgressFunc func(ProgressInfo)
 
 // Config controls the ingestion pipeline behavior.
 type Config struct {
@@ -46,16 +62,45 @@ type Config struct {
 	// MetadataFields lists specific fields to extract as metadata.
 	// If empty and AllMetadata is false, no metadata is extracted.
 	MetadataFields []string // specific fields to extract
-	// AllMetadata, when true, extracts all JSON fields except ContentField and IDField.
+	// AllMetadata, when true, extracts all JSON fields except ContentField, IDField, and ExcludeFields.
 	AllMetadata bool // extract all fields except content/id
+	// ExcludeFields lists fields to exclude from metadata when AllMetadata is true.
+	ExcludeFields []string
 	// Limit restricts the maximum number of records to ingest.
 	// Zero means no limit.
 	Limit int // max records to ingest, 0 = unlimited
+
+	// ChunkSize is the maximum number of characters per chunk.
+	// If 0, no splitting is performed.
+	ChunkSize int
+	// ChunkOverlap is the number of characters to overlap between chunks.
+	ChunkOverlap int
+
+	// AutoID ignores user-provided IDs and always generates content-hash IDs.
+	AutoID bool
+	// DedupMode controls handling of duplicate IDs: "none", "warn", or "skip".
+	// "warn" logs a warning and skips the duplicate; "skip" silently skips.
+	DedupMode string
+	// Upsert uses the upsert endpoint instead of add, so existing IDs are updated.
+	Upsert bool
+	// Total is the known total number of records (0 if unknown).
+	// Used for progress display.
+	Total int
+	// OnProgress is an optional callback for progress updates during ingestion.
+	OnProgress ProgressFunc
 }
 
 // Processor handles the ingestion workflow: reading, parsing, embedding, and uploading.
 type Processor struct {
 	cfg *Config
+	ctx context.Context // for cancellation; nil means not cancelable
+}
+
+// WithContext returns a copy of the processor with a context for cancellation.
+// The context is used by ProcessJSONL and ProcessParquet to abort early.
+func (p *Processor) WithContext(ctx context.Context) *Processor {
+	p.ctx = ctx
+	return p
 }
 
 // Primitive reflect.Kinds that can be kept as-is
@@ -98,7 +143,7 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 		defer close(errChan)
 
 		file, err := os.Open(filePath)
-		if err != nil && err != io.EOF {
+		if err != nil {
 			errChan <- fmt.Errorf("failed to open file: %w", err)
 			return
 		}
@@ -118,17 +163,27 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 				continue
 			}
 
-			record, err := p.extractRecord(rec)
+			recordsList, err := p.extractRecord(rec)
 			if err != nil {
 				slog.Error("Skipping record", "error", err)
 				continue
 			}
 
-			if record == nil {
+			if len(recordsList) == 0 {
 				continue
 			}
 
-			records <- record
+			for _, record := range recordsList {
+				if p.ctx != nil {
+					select {
+					case records <- record:
+					case <-p.ctx.Done():
+						return
+					}
+				} else {
+					records <- record
+				}
+			}
 
 			count++
 

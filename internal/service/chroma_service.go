@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/errors"
@@ -28,18 +29,10 @@ type ChromaService struct {
 	// embedder is used to generate embeddings for documents and queries.
 	// Must be non-nil for operations that require embeddings.
 	embedder onnx.EmbedderInterface
-} // NewChromaService creates a new service with the given client and embedder.
-// The embedder is automatically injected into the client via SetEmbedder,
-// enabling the client to perform embedding operations directly.
-//
-// Both c and e must be non-nil for full functionality. Passing a nil embedder
-// will cause methods that require embeddings to return errors.
-func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
-	slog.Info("Creating ChromaService",
-		"client_type", fmt.Sprintf("%T", c),
-		"embedder_type", fmt.Sprintf("%T", e))
+}
 
-	// Inject embedder into the client via the interface method
+// NewChromaService creates a new service with the given client and embedder.
+func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
 	c.SetEmbedder(e)
 
 	return &ChromaService{
@@ -53,13 +46,9 @@ func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) 
 // TestConnection tests the connection to ChromaDB. ctx propagates to the HTTP
 // round trip.
 func (s *ChromaService) TestConnection(ctx context.Context) error {
-	slog.Info("Testing ChromaDB connection")
-
 	err := s.client.TestConnection(ctx)
 	if err != nil {
 		slog.Error("Connection test failed", "error", err)
-	} else {
-		slog.Info("Connection test successful")
 	}
 
 	return err
@@ -67,13 +56,9 @@ func (s *ChromaService) TestConnection(ctx context.Context) error {
 
 // GetTenant checks if the tenant exists. ctx propagates to the HTTP round trip.
 func (s *ChromaService) GetTenant(ctx context.Context) (bool, error) {
-	slog.Info("Checking tenant existence")
-
 	exists, err := s.client.GetTenant(ctx)
 	if err != nil {
 		slog.Error("Tenant check failed", "error", err)
-	} else {
-		slog.Info("Tenant check completed", "exists", exists)
 	}
 
 	return exists, err
@@ -82,15 +67,11 @@ func (s *ChromaService) GetTenant(ctx context.Context) (bool, error) {
 // ListDatabases lists all databases for the tenant. ctx propagates to the HTTP
 // round trip.
 func (s *ChromaService) ListDatabases(ctx context.Context) ([]client.Database, error) {
-	slog.Info("Listing databases")
-
 	databases, err := s.client.ListDatabases(ctx)
 	if err != nil {
 		slog.Error("Failed to list databases", "error", err)
 		return nil, err
 	}
-
-	slog.Info("Databases listed", "count", len(databases))
 
 	return databases, nil
 }
@@ -98,15 +79,11 @@ func (s *ChromaService) ListDatabases(ctx context.Context) ([]client.Database, e
 // ListCollections lists all collections in the database. ctx propagates to the
 // HTTP round trip.
 func (s *ChromaService) ListCollections(ctx context.Context) ([]client.Collection, error) {
-	slog.Info("Listing collections")
-
 	collections, err := s.client.ListCollections(ctx)
 	if err != nil {
 		slog.Error("Failed to list collections", "error", err)
 		return nil, err
 	}
-
-	slog.Info("Collections listed", "count", len(collections))
 
 	return collections, nil
 }
@@ -117,27 +94,17 @@ func (s *ChromaService) ListCollections(ctx context.Context) ([]client.Collectio
 // to all client HTTP calls.
 func (s *ChromaService) AddDocuments(ctx context.Context, collectionName string, docs []string, ids []string) error {
 	if s.embedder == nil {
-		err := errors.ErrEmbedderNotInitialized
-		slog.Error("Cannot add documents: embedder not initialized", "error", err)
-
-		return err
+		return errors.ErrEmbedderNotInitialized
 	}
 
-	slog.Info("Adding documents",
-		"collection", collectionName,
-		"document_count", len(docs))
-	// Resolve collection name (or ID) to a valid collection ID.
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
-		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
 	err = s.client.AddBatchGeneric(ctx, collectionID, docs, ids, nil)
 	if err != nil {
 		slog.Error("Failed to add batch", "collection", collectionName, "batch_size", len(docs), "error", err)
-	} else {
-		slog.Info("Documents added successfully", "collection", collectionName, "count", len(docs))
 	}
 
 	return err
@@ -147,27 +114,17 @@ func (s *ChromaService) AddDocuments(ctx context.Context, collectionName string,
 // or update). ctx propagates to all client HTTP calls.
 func (s *ChromaService) UpsertDocuments(ctx context.Context, collectionName string, docs []string, ids []string) error {
 	if s.embedder == nil {
-		err := errors.ErrEmbedderNotInitialized
-		slog.Error("Cannot upsert documents: embedder not initialized", "error", err)
-
-		return err
+		return errors.ErrEmbedderNotInitialized
 	}
-
-	slog.Info("Upserting documents",
-		"collection", collectionName,
-		"document_count", len(docs))
 
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
-		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
 	err = s.client.UpsertBatchGeneric(ctx, collectionID, docs, ids, nil)
 	if err != nil {
 		slog.Error("Failed to upsert batch", "collection", collectionName, "batch_size", len(docs), "error", err)
-	} else {
-		slog.Info("Documents upserted successfully", "collection", collectionName, "count", len(docs))
 	}
 
 	return err
@@ -177,20 +134,11 @@ func (s *ChromaService) UpsertDocuments(ctx context.Context, collectionName stri
 // client HTTP calls.
 func (s *ChromaService) QueryDocuments(ctx context.Context, collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
 	if s.embedder == nil {
-		err := errors.ErrEmbedderNotInitialized
-		slog.Error("Cannot query: embedder not initialized", "error", err)
-
-		return nil, err
+		return nil, errors.ErrEmbedderNotInitialized
 	}
-
-	slog.Info("Querying documents",
-		"collection", collectionName,
-		"query_count", len(queries),
-		"n_results", nResults)
 
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
-		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
@@ -199,8 +147,6 @@ func (s *ChromaService) QueryDocuments(ctx context.Context, collectionName strin
 		slog.Error("Query failed", "collection", collectionName, "error", err)
 		return nil, err
 	}
-
-	slog.Info("Query completed", "collection", collectionName, "results_count", len(result.IDs))
 
 	return result, nil
 }
@@ -209,11 +155,8 @@ func (s *ChromaService) QueryDocuments(ctx context.Context, collectionName strin
 // collection name→ID resolution internally. ctx propagates to all client
 // HTTP calls.
 func (s *ChromaService) GetDocuments(ctx context.Context, collectionName string) (*client.GetRecordsResponse, error) {
-	slog.Info("Getting documents", "collection", collectionName)
-
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
-		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
 	}
 
@@ -222,41 +165,6 @@ func (s *ChromaService) GetDocuments(ctx context.Context, collectionName string)
 		slog.Error("Failed to list documents", "collection", collectionName, "error", err)
 		return nil, fmt.Errorf("failed to list documents from '%s': %w", collectionName, err)
 	}
-
-	slog.Info("Documents retrieved", "collection", collectionName, "count", len(result.IDs))
-
-	return result, nil
-}
-
-// Query performs semantic search. It handles collection name→ID resolution
-// and embedder invocation internally. ctx propagates to all client HTTP calls
-// so cancellation aborts resolution + query round-trips.
-func (s *ChromaService) Query(ctx context.Context, collectionName string, queries []string, nResults int) (*client.QueryResponse, error) {
-	if s.embedder == nil {
-		err := errors.ErrEmbedderNotInitialized
-		slog.Error("Cannot query: embedder not initialized", "error", err)
-
-		return nil, err
-	}
-
-	slog.Info("Querying documents",
-		"collection", collectionName,
-		"query_count", len(queries),
-		"n_results", nResults)
-
-	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
-	if err != nil {
-		slog.Error("Failed to resolve collection", "collection", collectionName, "error", err)
-		return nil, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
-	}
-
-	result, err := s.client.QueryBatch(ctx, collectionID, queries, nResults)
-	if err != nil {
-		slog.Error("Query failed", "collection", collectionName, "error", err)
-		return nil, err
-	}
-
-	slog.Info("Query completed", "collection", collectionName, "results_count", len(result.IDs))
 
 	return result, nil
 }
@@ -294,7 +202,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		cfg = ingest.DefaultConfig()
 	}
 
-	processor := ingest.NewProcessor(cfg)
+	processor := ingest.NewProcessor(cfg).WithContext(ctx)
 
 	// Detect file format and stream records
 	ext := getFileExt(filePath)
@@ -309,8 +217,10 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		records, errChan = processor.ProcessJSONL(filePath)
 	case ".parquet":
 		records, errChan = processor.ProcessParquet(filePath)
+	case ".csv":
+		records, errChan = processor.ProcessCSV(filePath)
 	default:
-		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet)", ext)
+		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet, .csv)", ext)
 	}
 
 	// Batch accumulation with progress tracking
@@ -320,8 +230,11 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		metas         []map[string]any
 		batchIdx      int
 		totalUploaded int
+		totalBatches  int
 		progressN     = 10 // log progress every N documents processed
 		nextProgress  = progressN
+		seenIDs       map[string]int // dedup tracking; lazily allocated
+		startTime     = time.Now()
 	)
 
 	reportProgress := func(current int) {
@@ -331,6 +244,24 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 	}
 
 	for record := range records {
+		// Dedup check
+		if seenIDs != nil {
+			if _, exists := seenIDs[record.ID]; exists {
+				switch cfg.DedupMode {
+				case "warn":
+					slog.Warn("Duplicate ID skipped", "id", record.ID)
+				case "skip":
+					// silent skip
+				}
+
+				continue
+			}
+		}
+
+		if seenIDs != nil {
+			seenIDs[record.ID] = 1
+		}
+
 		docs = append(docs, record.Content)
 		ids = append(ids, record.ID)
 		metas = append(metas, record.Metadata)
@@ -348,7 +279,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		}
 
 		if batchIdx >= cfg.BatchSize {
-			if err := s.uploadBatch(ctx, collectionID, docs, ids, metas); err != nil {
+			if err := s.uploadBatch(ctx, collectionID, docs, ids, metas, cfg.Upsert); err != nil {
 				return fmt.Errorf("batch upload failed at document %d: %w", totalUploaded, err)
 			}
 
@@ -363,7 +294,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 
 	// Final batch
 	if len(docs) > 0 {
-		if err := s.uploadBatch(ctx, collectionID, docs, ids, metas); err != nil {
+		if err := s.uploadBatch(ctx, collectionID, docs, ids, metas, cfg.Upsert); err != nil {
 			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
 		}
 
@@ -371,6 +302,8 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		reportProgress(totalUploaded)
 		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 	}
+
+	emitProgress(totalUploaded, true)
 
 	// Check for errors from processor
 	if err, ok := <-errChan; ok && err != nil {
@@ -403,9 +336,22 @@ func getFileExt(filePath string) string {
 
 // uploadBatch uploads a batch of documents to Chroma.
 // The client's AddBatchGeneric generates embeddings internally.
-func (s *ChromaService) uploadBatch(ctx context.Context, collectionID string, docs, ids []string, metas []map[string]any) error {
+// If upsert is true, UpsertBatchGeneric is used instead to update existing documents.
+func (s *ChromaService) uploadBatch(ctx context.Context, collectionID string, docs, ids []string, metas []map[string]any, upsert bool) error {
 	if len(docs) == 0 {
 		return nil
+	}
+
+	if len(docs) != len(ids) {
+		return fmt.Errorf("batch slice length mismatch: docs=%d ids=%d", len(docs), len(ids))
+	}
+
+	if metas == nil {
+		metas = []map[string]any{}
+	}
+
+	if upsert {
+		return s.client.UpsertBatchGeneric(ctx, collectionID, docs, ids, metas)
 	}
 
 	return s.client.AddBatchGeneric(ctx, collectionID, docs, ids, metas)

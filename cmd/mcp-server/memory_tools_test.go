@@ -203,10 +203,10 @@ func parseJSONContent[T any](t *testing.T, res *mcp.CallToolResult) T {
 	return val
 }
 
-// errMock returns an error that satisfies the error interface.
-type errMock string
+// mockErr returns an error that satisfies the error interface.
+type mockErr string
 
-func (e errMock) Error() string { return string(e) }
+func (e mockErr) Error() string { return string(e) }
 
 func TestStoreMemory(t *testing.T) {
 	tests := []struct {
@@ -264,7 +264,7 @@ func TestStoreMemory(t *testing.T) {
 		{
 			name: "resolve collection error",
 			chroma: &mockChromaClient{
-				ResolveCollectionIDErr: errMock("collection not found"),
+				ResolveCollectionIDErr: mockErr("collection not found"),
 			},
 			args: map[string]any{
 				"content": "test",
@@ -275,7 +275,7 @@ func TestStoreMemory(t *testing.T) {
 			name: "store error",
 			chroma: &mockChromaClient{
 				ResolveCollectionIDResult: "col-uuid",
-				AddBatchGenericErr:        errMock("add failed"),
+				AddBatchGenericErr:        mockErr("add failed"),
 			},
 			args: map[string]any{
 				"content": "test",
@@ -407,7 +407,7 @@ func TestSearchMemories(t *testing.T) {
 			name: "query error",
 			chroma: &mockChromaClient{
 				ResolveCollectionIDResult: "col-uuid",
-				QueryErr:                  errMock("query failed"),
+				QueryErr:                  mockErr("query failed"),
 			},
 			args:    map[string]any{"query": "test"},
 			wantErr: true,
@@ -628,7 +628,7 @@ func TestGetSession(t *testing.T) {
 		{
 			name: "resolve error",
 			chroma: &mockChromaClient{
-				ResolveCollectionIDErr: errMock("bad collection"),
+				ResolveCollectionIDErr: mockErr("bad collection"),
 			},
 			args:    map[string]any{"id": "session-1"},
 			wantErr: true,

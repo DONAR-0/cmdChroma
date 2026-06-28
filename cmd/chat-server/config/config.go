@@ -1,3 +1,4 @@
+// Package config provides configuration types for the chat server.
 package config
 
 import (
@@ -17,6 +18,7 @@ type Config struct {
 	Collections []CollectionEntry `yaml:"collections"`
 }
 
+// ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	Host               string   `yaml:"host"`
 	Port               int      `yaml:"port"`
@@ -24,23 +26,27 @@ type ServerConfig struct {
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"`
 }
 
+// ChromaConfig holds ChromaDB connection settings.
 type ChromaConfig struct {
 	URL      string `yaml:"url"`
 	Tenant   string `yaml:"tenant"`
 	Database string `yaml:"database"`
 }
 
+// EmbedderConfig holds ONNX embedder settings.
 type EmbedderConfig struct {
 	ModelPath   string `yaml:"model_path"`
 	LibraryPath string `yaml:"library_path"`
 }
 
+// LLMConfig holds LLM provider settings.
 type LLMConfig struct {
 	DefaultModel string `yaml:"default_model"`
 	OllamaURL    string `yaml:"ollama_url"`
 	NIMURL       string `yaml:"nim_url"`
 }
 
+// CollectionEntry describes a single collection to manage.
 type CollectionEntry struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
@@ -94,7 +100,7 @@ func Default() *Config {
 
 // applyEnvOverrides reads prefixed env vars and overrides config fields.
 // Prefix: CHAT_
-// Examples: CHAT_SERVER_API_KEY, CHAT_SERVER_PORT, CHAT_CHROMA_URL, CHAT_LLM_DEFAULT_MODEL
+// Examples: CHAT_SERVER_API_KEY, CHAT_SERVER_PORT, CHAT_CHROMA_URL, CHAT_LLM_DEFAULT_MODEL.
 func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("CHAT_SERVER_API_KEY"); v != "" {
 		cfg.Server.APIKey = v

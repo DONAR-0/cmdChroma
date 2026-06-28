@@ -9,8 +9,8 @@ testcases:
         script: cmdChroma --log-level info ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[INFO]"
-      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldNotContainSubstring "[DEBUG]"
 
   - name: Debug level shows INFO logs
     tags: ["integration"]
@@ -19,7 +19,7 @@ testcases:
         script: cmdChroma --log-level debug ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
 
   - name: Verbose flag enables debug logging level
     tags: ["integration"]
@@ -28,7 +28,7 @@ testcases:
         script: cmdChroma ping --verbose
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
 
   - name: Warn level hides INFO logs
     tags: ["integration"]
@@ -37,8 +37,8 @@ testcases:
         script: cmdChroma --log-level warn ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldNotContainSubstring "[INFO]"
-      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+      - result.systemerr ShouldNotContainSubstring "[INFO]"
+      - result.systemerr ShouldNotContainSubstring "[DEBUG]"
 
   # New tests for --log-format flag
 
@@ -49,10 +49,10 @@ testcases:
         script: cmdChroma --log-format json --log-level debug ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring '"level"'
-      - result.systemout ShouldContainSubstring '"msg"'
-      - result.systemout ShouldNotContainSubstring "[DEBUG]"
-      - result.systemout ShouldNotContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring '"level"'
+      - result.systemerr ShouldContainSubstring '"msg"'
+      - result.systemerr ShouldNotContainSubstring "[DEBUG]"
+      - result.systemerr ShouldNotContainSubstring "[INFO]"
 
   - name: Log level flag with error level
     tags: ["integration"]
@@ -61,9 +61,9 @@ testcases:
         script: cmdChroma --log-level error ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldNotContainSubstring "[DEBUG]"
-      - result.systemout ShouldNotContainSubstring "[INFO]"
-      - result.systemout ShouldNotContainSubstring "[WARN]"
+      - result.systemerr ShouldNotContainSubstring "[DEBUG]"
+      - result.systemerr ShouldNotContainSubstring "[INFO]"
+      - result.systemerr ShouldNotContainSubstring "[WARN]"
 
   - name: Log format flag with text format
     tags: ["integration"]
@@ -72,9 +72,9 @@ testcases:
         script: cmdChroma --log-format text --log-level debug ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[DEBUG]"
-      - result.systemout ShouldContainSubstring "[INFO]"
-      - result.systemout ShouldNotContainSubstring '"level"'
+      - result.systemerr ShouldContainSubstring "[DEBUG]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldNotContainSubstring '"level"'
 
   - name: Environment variables for new logging flags
     tags: ["integration"]
@@ -83,9 +83,9 @@ testcases:
         script: CHROMA_LOG_LEVEL=warn CHROMA_LOG_FORMAT=json cmdChroma ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring '"level"'
-      - result.systemout ShouldNotContainSubstring "[WARN]"
-      - result.systemout ShouldNotContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring '"level"'
+      - result.systemerr ShouldNotContainSubstring "[WARN]"
+      - result.systemerr ShouldNotContainSubstring "[INFO]"
 
   - name: Log format json with info level
     tags: ["integration"]
@@ -94,8 +94,8 @@ testcases:
         script: cmdChroma --log-format json --log-level info tenant
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring '"level":"info"'
-      - result.systemout ShouldNotContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring '"level":"info"'
+      - result.systemerr ShouldNotContainSubstring "[INFO]"
 
   - name: Mixed log levels with text format
     tags: ["integration"]
@@ -104,8 +104,8 @@ testcases:
         script: cmdChroma --log-level debug --log-format text databases
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[DEBUG]"
-      - result.systemout ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldContainSubstring "[DEBUG]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
 
   - name: Short alias for log-level flag
     tags: ["integration"]
@@ -114,7 +114,7 @@ testcases:
         script: cmdChroma -l debug ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[DEBUG]"
+      - result.systemerr ShouldContainSubstring "[DEBUG]"
 
   - name: Default log level is info
     tags: ["integration"]
@@ -123,5 +123,5 @@ testcases:
         script: cmdChroma ping
     assertions:
       - result.code ShouldEqual 0
-      - result.systemout ShouldContainSubstring "[INFO]"
-      - result.systemout ShouldNotContainSubstring "[DEBUG]"
+      - result.systemerr ShouldContainSubstring "[INFO]"
+      - result.systemerr ShouldNotContainSubstring "[DEBUG]"

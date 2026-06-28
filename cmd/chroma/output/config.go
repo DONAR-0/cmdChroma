@@ -4,23 +4,24 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 )
 
-// OutputMode represents the output format mode.
-type OutputMode int
+// Mode represents the output format mode.
+type Mode int
 
 const (
 	// ModeHuman outputs human-readable formatted text.
-	ModeHuman OutputMode = iota
+	ModeHuman Mode = iota
 	// ModeJSON outputs machine-readable JSON.
 	ModeJSON
 	// ModeMinimal outputs minimal text (errors only).
 	ModeMinimal
 )
 
-func (m OutputMode) String() string {
+func (m Mode) String() string {
 	switch m {
 	case ModeJSON:
 		return "json"
@@ -31,10 +32,10 @@ func (m OutputMode) String() string {
 	}
 }
 
-// OutputConfig holds configuration for all output behavior.
-type OutputConfig struct {
+// Config holds configuration for all output behavior.
+type Config struct {
 	// Mode determines the output format (human, json, minimal).
-	Mode OutputMode
+	Mode Mode
 
 	// Verbose controls whether diagnostic logs are shown.
 	// When false, only errors and warnings are logged.
@@ -54,9 +55,9 @@ type OutputConfig struct {
 	Stderr io.Writer
 }
 
-// DefaultOutputConfig returns the default configuration for interactive terminal use.
-func DefaultOutputConfig() *OutputConfig {
-	return &OutputConfig{
+// DefaultConfig returns the default configuration for interactive terminal use.
+func DefaultConfig() *Config {
+	return &Config{
 		Mode:    ModeHuman,
 		Verbose: false,
 		NoColor: false,
@@ -66,9 +67,9 @@ func DefaultOutputConfig() *OutputConfig {
 	}
 }
 
-// NewOutputConfig creates an OutputConfig from CLI flags.
-func NewOutputConfig(cmd *cli.Command) *OutputConfig {
-	cfg := DefaultOutputConfig()
+// NewConfig creates a Config from CLI flags.
+func NewConfig(cmd *cli.Command) *Config {
+	cfg := DefaultConfig()
 
 	// JSON mode takes precedence over quiet/minimal
 	if cmd.Bool("json") {
@@ -119,7 +120,7 @@ func HasColorSupport() bool {
 	}
 
 	// Default to true if TERM contains "color" or "256"
-	return contains(term, "256") || contains(term, "color")
+	return strings.Contains(term, "256") || strings.Contains(term, "color")
 }
 
 // isInteractive checks if stdout is a terminal.
@@ -133,23 +134,8 @@ func isInteractive() bool {
 	return (file.Mode() & os.ModeCharDevice) != 0
 }
 
-// contains is a simple helper to check if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-
-	return false
-}
-
 // String returns a human-readable description of the config.
-func (c *OutputConfig) String() string {
-	return fmt.Sprintf("OutputConfig{Mode:%s, Verbose:%v, NoColor:%v, NoTTY:%v}",
+func (c *Config) String() string {
+	return fmt.Sprintf("Config{Mode:%s, Verbose:%v, NoColor:%v, NoTTY:%v}",
 		c.Mode, c.Verbose, c.NoColor, c.NoTTY)
 }

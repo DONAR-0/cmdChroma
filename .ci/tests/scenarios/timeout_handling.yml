@@ -44,7 +44,8 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemerr ShouldContainSubstring "Connection test failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused on localhost port with nothing listening
     tags: ["integration"]
@@ -64,7 +65,8 @@ testcases:
         script: cmdChroma --log-level error t --port 19999 --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemerr ShouldContainSubstring "Connection test failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Invalid Hostname Tests ============
 
@@ -76,7 +78,8 @@ testcases:
         script: cmdChroma --log-level error t --host nonexistent.invalid.domain --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemerr ShouldContainSubstring "Connection test failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   - name: Connection refused with very short timeout
     tags: ["integration"]
@@ -98,7 +101,8 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 5
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemerr ShouldContainSubstring "Connection test failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
           - result.systemout ShouldContainSubstring "refused"
 
   - name: Error message contains connection information
@@ -109,7 +113,8 @@ testcases:
         script: cmdChroma --log-level error t --port 59999 --timeout 3
         assertions:
           - result.code ShouldNotEqual 0
-          - result.systemout ShouldContainSubstring "connection"
+          - result.systemerr ShouldContainSubstring "Connection test failed"
+          - result.systemout ShouldContainSubstring "Connection failed"
 
   # ============ Timeout Edge Cases ============
 

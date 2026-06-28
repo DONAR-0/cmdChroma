@@ -25,7 +25,7 @@ testcases:
         script: cmdChroma --log-level info q t8_testcoll --query "How do I add records?"
         assertions:
           - result.code ShouldEqual 0
-          - result.systemout ShouldContainSubstring "Loading AI embedding engine"
+          - result.systemerr ShouldContainSubstring "Loading AI embedding engine"
           - result.systemout ShouldContainSubstring "Search results for collection"
           - result.systemout ShouldContainSubstring "Query 1:"
           - result.systemout ShouldContainSubstring "Distance:"

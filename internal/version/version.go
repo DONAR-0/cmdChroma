@@ -2,7 +2,6 @@
 //
 // This package is designed to be updated via `go generate`.
 // Run `go generate ./...` to regenerate the build metadata.
-
 package version
 
 //go:generate go run gen.go

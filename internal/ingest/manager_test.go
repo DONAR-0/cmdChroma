@@ -334,6 +334,7 @@ func TestExtractRecord(t *testing.T) {
 			cfg: &Config{
 				ContentField: "text",
 				IDField:      "id",
+				AllMetadata:  true,
 			},
 			input: map[string]any{
 				"id":   "123",
@@ -434,7 +435,7 @@ func TestExtractRecord(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Processor{cfg: tt.cfg}
 
-			gotRec, err := p.extractRecord(tt.input)
+			gotRecs, err := p.extractRecord(tt.input)
 			if tt.wantError {
 				require.Error(t, err)
 			} else {
@@ -442,9 +443,14 @@ func TestExtractRecord(t *testing.T) {
 			}
 
 			if tt.wantRecord == nil {
-				require.Nil(t, gotRec)
+				require.Nil(t, gotRecs)
 			} else {
-				require.NotNil(t, gotRec)
+				require.NotNil(t, gotRecs)
+				// In the new implementation, extractRecord returns a slice.
+				// For these tests, we expect the first chunk to match the wantRecord
+				// (since the test inputs are short and don't trigger splitting).
+				require.GreaterOrEqual(t, len(gotRecs), 1)
+				gotRec := gotRecs[0]
 				require.Equal(t, tt.wantRecord.ID, gotRec.ID)
 				require.Equal(t, tt.wantRecord.Content, gotRec.Content)
 				// Compare metadata loosely because maps may have different ordering
@@ -456,6 +462,88 @@ func TestExtractRecord(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractRecord_AutoID verifies that AutoID:true always generates content-hash IDs,
+// even when an ID field is present in the data.
+func TestExtractRecord_AutoID(t *testing.T) {
+	cfg := &Config{
+		ContentField: "text",
+		IDField:      "id",
+		AutoID:       true,
+	}
+	p := &Processor{cfg: cfg}
+
+	input := map[string]any{
+		"id":   "should-be-ignored",
+		"text": "hello world",
+	}
+
+	recs, err := p.extractRecord(input)
+	require.NoError(t, err)
+	require.Len(t, recs, 1)
+
+	// AutoID should produce a hash-based ID, not the "should-be-ignored" value
+	require.NotEqual(t, "should-be-ignored", recs[0].ID)
+	require.Len(t, recs[0].ID, 24) // 12 bytes hex-encoded = 24 chars
+}
+
+// TestExtractRecord_AutoID_MissingContent verifies that AutoID doesn't affect
+// skipping records with no content field.
+func TestExtractRecord_AutoID_MissingContent(t *testing.T) {
+	cfg := &Config{
+		ContentField: "text",
+		IDField:      "id",
+		AutoID:       true,
+	}
+	p := &Processor{cfg: cfg}
+
+	input := map[string]any{"id": "123"}
+
+	recs, err := p.extractRecord(input)
+	require.NoError(t, err)
+	require.Nil(t, recs)
+}
+
+// TestParquetRowCount verifies the helper returns correct row count for a parquet file.
+func TestParquetRowCount(t *testing.T) {
+	// Create a small parquet file
+	tmpfile, err := os.CreateTemp("", "test.parquet")
+	require.NoError(t, err)
+
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+
+	type Row struct {
+		ID   string `parquet:"id,name=id"`
+		Text string `parquet:"text,name=text"`
+	}
+
+	rows := []Row{
+		{ID: "1", Text: "doc1"},
+		{ID: "2", Text: "doc2"},
+		{ID: "3", Text: "doc3"},
+	}
+
+	fw, err := os.Create(tmpfile.Name())
+	require.NoError(t, err)
+
+	pw := parquet.NewGenericWriter[Row](fw)
+	n, err := pw.Write(rows)
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+
+	err = pw.Close()
+	require.NoError(t, err)
+
+	// Test ParquetRowCount
+	count := ParquetRowCount(tmpfile.Name())
+	require.Equal(t, 3, count)
+}
+
+// TestParquetRowCount_NonExistentFile verifies 0 is returned for missing files.
+func TestParquetRowCount_NonExistentFile(t *testing.T) {
+	count := ParquetRowCount("/nonexistent/file.parquet")
+	require.Equal(t, 0, count)
 }
 
 // TestProcessParquetGenerated tests the Parquet processing by generating a small parquet file.
