@@ -814,6 +814,79 @@ func TestChromaService_Query_NoEmbedder(t *testing.T) {
 	}
 }
 
+func TestChromaService_IngestRecords_WithCSV(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.csv")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, _ = tmpFile.WriteString("id,content\n")
+	_, _ = tmpFile.WriteString("1,hello from csv\n")
+	_ = tmpFile.Close()
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords with CSV failed: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_ProgressInfoFields(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	for i := 0; i < 3; i++ {
+		line := `{"id":"` + fmt.Sprintf("%d", i) + `","content":"doc ` + fmt.Sprintf("%d", i) + `"}`
+		_, _ = tmpFile.WriteString(line + "\n")
+	}
+
+	_ = tmpFile.Close()
+
+	var lastInfo ingest.ProgressInfo
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		Total:        3,
+		OnProgress: func(info ingest.ProgressInfo) {
+			lastInfo = info
+		},
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+
+	if lastInfo.Processed != 3 {
+		t.Errorf("Expected Processed=3, got %d", lastInfo.Processed)
+	}
+
+	if lastInfo.Total != 3 {
+		t.Errorf("Expected Total=3, got %d", lastInfo.Total)
+	}
+
+	if !lastInfo.Done {
+		t.Error("Expected Done=true")
+	}
+}
+
 // ExampleChromaService demonstrates creating a service and using its main methods.
 // This example shows the typical workflow: create service, add documents, query.
 func ExampleChromaService() {

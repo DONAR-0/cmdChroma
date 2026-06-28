@@ -223,7 +223,6 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		return fmt.Errorf("unsupported file format: %s (supported: .jsonl, .parquet, .csv)", ext)
 	}
 
-	// Batch accumulation with progress tracking
 	var (
 		docs          []string
 		ids           []string
@@ -231,34 +230,45 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		batchIdx      int
 		totalUploaded int
 		totalBatches  int
-		progressN     = 10 // log progress every N documents processed
+		progressN     = 10
 		nextProgress  = progressN
-		seenIDs       map[string]int // dedup tracking; lazily allocated
+		seenIDs       map[string]int
 		startTime     = time.Now()
 	)
+
+	if cfg.DedupMode == "warn" || cfg.DedupMode == "skip" {
+		seenIDs = make(map[string]int)
+	}
 
 	reportProgress := func(current int) {
 		if len(progress) > 0 && progress[0] != nil {
 			progress[0](current)
 		}
+
+		if cfg.OnProgress != nil {
+			cfg.OnProgress(ingest.ProgressInfo{
+				Processed: current,
+				Total:     cfg.Total,
+				BatchSize: cfg.BatchSize,
+				Batches:   totalBatches,
+				Elapsed:   time.Since(startTime).Nanoseconds(),
+				Done:      current >= cfg.Total && cfg.Total > 0,
+			})
+		}
 	}
 
 	for record := range records {
-		// Dedup check
 		if seenIDs != nil {
 			if _, exists := seenIDs[record.ID]; exists {
 				switch cfg.DedupMode {
 				case "warn":
 					slog.Warn("Duplicate ID skipped", "id", record.ID)
 				case "skip":
-					// silent skip
 				}
 
 				continue
 			}
-		}
 
-		if seenIDs != nil {
 			seenIDs[record.ID] = 1
 		}
 
@@ -267,10 +277,8 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		metas = append(metas, record.Metadata)
 		batchIdx++
 
-		// Current total processed (including current batch)
 		currentTotal := totalUploaded + batchIdx
 
-		// Progress update every N documents
 		if currentTotal >= nextProgress && batchIdx < cfg.BatchSize {
 			slog.Info("Progress", "total_processed", currentTotal, "batch_accumulated", batchIdx)
 			reportProgress(currentTotal)
@@ -284,28 +292,30 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 			}
 
 			totalUploaded += len(docs)
+			totalBatches++
+
 			reportProgress(totalUploaded)
 			slog.Info("Batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 			docs, ids, metas = nil, nil, nil
 			batchIdx = 0
-			nextProgress = totalUploaded + progressN // set next milestone
+			nextProgress = totalUploaded + progressN
 		}
 	}
 
-	// Final batch
 	if len(docs) > 0 {
 		if err := s.uploadBatch(ctx, collectionID, docs, ids, metas, cfg.Upsert); err != nil {
 			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
 		}
 
 		totalUploaded += len(docs)
+		totalBatches++
+
 		reportProgress(totalUploaded)
 		slog.Info("Final batch uploaded", "batch_size", len(docs), "total_uploaded", totalUploaded)
 	}
 
-	emitProgress(totalUploaded, true)
+	reportProgress(totalUploaded)
 
-	// Check for errors from processor
 	if err, ok := <-errChan; ok && err != nil {
 		return fmt.Errorf("ingestion error: %w", err)
 	}

@@ -62,7 +62,7 @@ func (p *Processor) ProcessCSV(filePath string) (<-chan *Record, <-chan error) {
 				}
 			}
 
-			recordsList, recErr := p.extractRecord(raw)
+			recs, recErr := p.extractRecord(raw)
 			if recErr != nil {
 				slog.Error("Skipping csv record", "line", lineNo+1, "error", recErr)
 				lineNo++
@@ -70,12 +70,12 @@ func (p *Processor) ProcessCSV(filePath string) (<-chan *Record, <-chan error) {
 				continue
 			}
 
-			if len(recordsList) == 0 {
+			if len(recs) == 0 {
 				lineNo++
 				continue
 			}
 
-			for _, record := range recordsList {
+			for _, record := range recs {
 				if p.ctx != nil {
 					select {
 					case records <- record:

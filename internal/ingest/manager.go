@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/parquet-go/parquet-go"
-	"github.com/tmc/langchaingo/textsplitter"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 )
@@ -163,17 +162,17 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 				continue
 			}
 
-			recordsList, err := p.extractRecord(rec)
+			recs, err := p.extractRecord(rec)
 			if err != nil {
 				slog.Error("Skipping record", "error", err)
 				continue
 			}
 
-			if len(recordsList) == 0 {
+			if len(recs) == 0 {
 				continue
 			}
 
-			for _, record := range recordsList {
+			for _, record := range recs {
 				if p.ctx != nil {
 					select {
 					case records <- record:
@@ -265,17 +264,19 @@ func (p *Processor) processParquetReader(reader *parquet.GenericReader[any], rec
 					}
 				}
 
-				rec, err := p.extractRecordWithField(rowMap, contentField, p.cfg.IDField)
+				recs, err := p.extractRecordWithField(rowMap, contentField, p.cfg.IDField)
 				if err != nil {
 					slog.Error("Skipping record", "error", err)
 					continue
 				}
 
-				if rec == nil {
+				if len(recs) == 0 {
 					continue
 				}
 
-				records <- rec
+				for _, rec := range recs {
+					records <- rec
+				}
 
 				total++
 
@@ -403,31 +404,47 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 }
 
 // extractRecordWithField converts raw JSON/Parquet map into a Record using explicit field names.
-func (p *Processor) extractRecordWithField(raw map[string]any, contentField, idField string) (*Record, error) {
+func (p *Processor) extractRecordWithField(raw map[string]any, contentField, idField string) ([]*Record, error) {
 	contentVal := getNestedValue(raw, contentField)
 	if contentVal == nil {
 		return nil, nil // skip records without content
 	}
 
-	content := fmt.Sprintf("%v", contentVal)
+	rawContent := fmt.Sprintf("%v", contentVal)
 
 	// Generate or extract ID
 	var id string
 
-	idVal := getNestedValue(raw, idField)
-	if idVal != nil {
+	if p.cfg.AutoID {
+		hash := sha256.Sum256([]byte(rawContent))
+		id = hex.EncodeToString(hash[:12])
+	} else if idVal := getNestedValue(raw, idField); idVal != nil {
 		id = fmt.Sprintf("%v", idVal)
 	} else {
-		hash := sha256.Sum256([]byte(content))
+		hash := sha256.Sum256([]byte(rawContent))
 		id = hex.EncodeToString(hash[:12])
 	}
 
 	// Extract metadata
 	meta := make(map[string]any)
 
+	isExcluded := func(k string) bool {
+		if k == contentField || k == idField {
+			return true
+		}
+
+		for _, ex := range p.cfg.ExcludeFields {
+			if k == ex {
+				return true
+			}
+		}
+
+		return false
+	}
+
 	if p.cfg.AllMetadata || len(p.cfg.MetadataFields) == 0 {
 		for k, v := range raw {
-			if k != contentField && k != idField {
+			if !isExcluded(k) {
 				meta[k] = p.stringifyIfComplex(v)
 			}
 		}
@@ -439,11 +456,11 @@ func (p *Processor) extractRecordWithField(raw map[string]any, contentField, idF
 		}
 	}
 
-	return &Record{
-		ID:       id,
-		Content:  content,
-		Metadata: meta,
-	}, nil
+	if p.cfg.ChunkSize <= 0 || len(rawContent) <= p.cfg.ChunkSize {
+		return []*Record{{ID: id, Content: rawContent, Metadata: meta}}, nil
+	}
+
+	return p.chunkContent(id, rawContent, meta), nil
 }
 
 // ============ Private Helpers ============
@@ -511,7 +528,71 @@ func (p *Processor) stringifyIfComplex(value any) any {
 	return fmt.Sprintf("%v", value)
 }
 
-// extractRecord converts raw JSON/Parquet map into a Record using the configured field names.
-func (p *Processor) extractRecord(raw map[string]any) (*Record, error) {
+// chunkContent splits content into overlapping chunks.
+func (p *Processor) chunkContent(baseID, content string, meta map[string]any) []*Record {
+	var records []*Record
+
+	chunkSize := p.cfg.ChunkSize
+	overlap := p.cfg.ChunkOverlap
+	start := 0
+	chunkIdx := 0
+
+	for start < len(content) {
+		end := start + chunkSize
+		if end > len(content) {
+			end = len(content)
+		}
+
+		chunkID := baseID
+		if chunkIdx > 0 {
+			chunkID = fmt.Sprintf("%s_chunk_%d", baseID, chunkIdx)
+		}
+
+		records = append(records, &Record{
+			ID:       chunkID,
+			Content:  content[start:end],
+			Metadata: meta,
+		})
+
+		if end >= len(content) {
+			break
+		}
+
+		start = end - overlap
+		if start < 0 {
+			start = 0
+		}
+
+		chunkIdx++
+	}
+
+	return records
+}
+
+// ParquetRowCount returns the number of rows in a Parquet file.
+// Returns 0 if the file cannot be opened or read.
+func ParquetRowCount(filePath string) int {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = f.Close() }()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+
+	pf, err := parquet.OpenFile(f, fi.Size())
+	if err != nil {
+		return 0
+	}
+
+	return int(pf.NumRows())
+}
+
+// extractRecord converts raw JSON/Parquet map into Records using the configured field names.
+// Returns multiple records when chunking is enabled.
+func (p *Processor) extractRecord(raw map[string]any) ([]*Record, error) {
 	return p.extractRecordWithField(raw, p.cfg.ContentField, p.cfg.IDField)
 }

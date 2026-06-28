@@ -528,6 +528,52 @@ func (c *ChromaClient) SetEmbedder(e onnx.EmbedderInterface) {
 	c.Embedder = e
 }
 
+// sendBatch is shared by AddBatchGeneric and UpsertBatchGeneric.
+func (c *ChromaClient) sendBatch(ctx context.Context, endpoint string, documents []string, ids []string, metadatas []map[string]any) error {
+	if len(documents) == 0 {
+		return nil
+	}
+
+	embeddings, err := c.Embedder.EmbedDocuments(ctx, documents)
+	if err != nil {
+		return fmt.Errorf("embedding failed: %w", err)
+	}
+
+	sanitizedMetadatas := sanitizeMetadataForChroma(metadatas)
+
+	payload := map[string]any{
+		"ids":        ids,
+		"embeddings": embeddings,
+		"metadatas":  sanitizedMetadatas,
+		"documents":  documents,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal batch payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("http request failed: %w", err)
+	}
+	defer internal.CheckDefer(resp.Body.Close)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return wrapChromaError(resp.StatusCode, body)
+	}
+
+	return nil
+}
+
 // ============ Deletion ============
 
 func (c *ChromaClient) DeleteCollection(ctx context.Context, name string) error {
@@ -730,57 +776,8 @@ func (c *ChromaClient) AddBatch(ctx context.Context, collectionID string, docs [
 
 // AddBatchGeneric handles documents, IDs, and dynamic metadata maps.
 func (c *ChromaClient) AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
-	if len(documents) == 0 {
-		return nil
-	}
-
-	// 1. Generate Embeddings for the batch
-	// Ensure your embedder is initialized before calling this
-	embeddings, err := c.Embedder.EmbedDocuments(ctx, documents)
-	if err != nil {
-		return fmt.Errorf("embedding failed: %w", err)
-	}
-
-	// 2. Prepare the Request Body
-	// Chroma API expects: { "ids": [], "embeddings": [], "metadatas": [], "documents": [] }
-	// Sanitize metadata to ensure ChromaDB compatibility (no nested maps/arrays)
-	sanitizedMetadatas := sanitizeMetadataForChroma(metadatas)
-
-	payload := map[string]any{
-		"ids":        ids,
-		"embeddings": embeddings,
-		"metadatas":  sanitizedMetadatas,
-		"documents":  documents,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal batch payload: %w", err)
-	}
-
-	// 3. Execute the Request
-	endpoint := fmt.Sprintf(batchAdd,
-		c.URL, c.Tenant, c.Database, collectionID)
-
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("http request failed: %w", err)
-	}
-	defer internal.CheckDefer(resp.Body.Close)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return wrapChromaError(resp.StatusCode, body)
-	}
-
-	return nil
+	endpoint := fmt.Sprintf(batchAdd, c.URL, c.Tenant, c.Database, collectionID)
+	return c.sendBatch(ctx, endpoint, documents, ids, metadatas)
 }
 
 // chromaMetadataKeyHint extracts the failing field name from a ChromaDB 422
@@ -833,57 +830,8 @@ func wrapChromaError(statusCode int, body []byte) error {
 
 // UpsertBatchGeneric handles documents, IDs, and dynamic metadata maps for upserting (insert or update).
 func (c *ChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
-	if len(documents) == 0 {
-		return nil
-	}
-
-	// 1. Generate Embeddings for the batch
-	// Ensure your embedder is initialized before calling this
-	embeddings, err := c.Embedder.EmbedDocuments(ctx, documents)
-	if err != nil {
-		return fmt.Errorf("embedding failed: %w", err)
-	}
-
-	// 2. Prepare the Request Body
-	// Chroma API expects: { "ids": [], "embeddings": [], "metadatas": [], "documents": [] }
-	// Sanitize metadata to ensure ChromaDB compatibility (no nested maps/arrays)
-	sanitizedMetadatas := sanitizeMetadataForChroma(metadatas)
-
-	payload := map[string]any{
-		"ids":        ids,
-		"embeddings": embeddings,
-		"metadatas":  sanitizedMetadatas,
-		"documents":  documents,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal batch payload: %w", err)
-	}
-
-	// 3. Execute the Request to upsert endpoint
-	endpoint := fmt.Sprintf(batchUpsert,
-		c.URL, c.Tenant, c.Database, collectionID)
-
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("http request failed: %w", err)
-	}
-	defer internal.CheckDefer(resp.Body.Close)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return wrapChromaError(resp.StatusCode, body)
-	}
-
-	return nil
+	endpoint := fmt.Sprintf(batchUpsert, c.URL, c.Tenant, c.Database, collectionID)
+	return c.sendBatch(ctx, endpoint, documents, ids, metadatas)
 }
 
 // sanitizeMetadataForChroma converts complex metadata values (nested maps, slices)

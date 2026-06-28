@@ -67,14 +67,14 @@ func main() {
 
 	// Wire up router
 	router := api.NewRouter(api.RouterDeps{
-		APIKey:             cfg.Server.APIKey,
-		ChatHandler:        chatHandler,
-		QueryHandler:       queryHandler,
-		SessionHandler:     sessionHandler,
-		HealthHandler:      healthHandler,
-		CollectionHandler:  collectionHandler,
-		ImportHandler:      importHandler,
-		Collections:        cfg.Collections,
+		APIKey:            cfg.Server.APIKey,
+		ChatHandler:       chatHandler,
+		QueryHandler:      queryHandler,
+		SessionHandler:    sessionHandler,
+		HealthHandler:     healthHandler,
+		CollectionHandler: collectionHandler,
+		ImportHandler:     importHandler,
+		Collections:       cfg.Collections,
 	})
 
 	// HTTP server

@@ -7,69 +7,6 @@ import (
 	"testing"
 )
 
-func BenchmarkContentHash(b *testing.B) {
-	p := &Processor{}
-	short := "hello world"
-	long := strings.Repeat("Go is a statically typed, compiled programming language designed at Google. ", 1000)
-
-	b.Run("short_string", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			p.contentHash(short)
-		}
-	})
-
-	b.Run("long_string", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			p.contentHash(long)
-		}
-	})
-}
-
-func BenchmarkCollectMetadata(b *testing.B) {
-	raw := buildBenchRow(50)
-
-	b.Run("AllMetadata_true", func(b *testing.B) {
-		p := &Processor{cfg: &Config{
-			ContentField:  "text",
-			IDField:       "id",
-			AllMetadata:   true,
-			ExcludeFields: []string{"skip_this"},
-		}}
-
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			p.collectMetadata(raw)
-		}
-	})
-
-	b.Run("AllMetadata_false_10_fields", func(b *testing.B) {
-		p := &Processor{cfg: &Config{
-			MetadataFields: []string{"f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9"},
-		}}
-
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			p.collectMetadata(raw)
-		}
-	})
-
-	b.Run("AllMetadata_false_empty_list", func(b *testing.B) {
-		p := &Processor{cfg: &Config{}}
-
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			p.collectMetadata(raw)
-		}
-	})
-}
-
 func BenchmarkStringifyIfComplex(b *testing.B) {
 	p := &Processor{}
 

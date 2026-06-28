@@ -211,21 +211,12 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 		go func(idx int, txt string) {
 			defer wg.Done()
 
-			// Acquire semaphore slot (limits concurrency)
 			select {
 			case semaphore <- struct{}{}:
 				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errors[idx] = ctx.Err()
 				return
-			}
-
-			// Check context again after acquiring slot
-			select {
-			case <-ctx.Done():
-				errors[idx] = ctx.Err()
-				return
-			default:
 			}
 
 			vec, err := e.Embed(txt)
@@ -240,7 +231,6 @@ func (e *Embedder) embedParallel(ctx context.Context, texts []string) ([][]float
 
 	wg.Wait()
 
-	// Return first error encountered
 	for _, err := range errors {
 		if err != nil {
 			return nil, err
