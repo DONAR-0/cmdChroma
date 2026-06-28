@@ -31,7 +31,10 @@ func (h *ImportHandler) importSSE(c *gin.Context, collectionName, filePath, cont
 	}
 
 	sendEvent := func(event string, data string) {
-		fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, data)
+		if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, data); err != nil {
+			return
+		}
+
 		c.Writer.Flush()
 	}
 
@@ -57,7 +60,9 @@ func (h *ImportHandler) importSSE(c *gin.Context, collectionName, filePath, cont
 
 	sendEvent("done", `{"status":"completed"}`)
 
-	os.Remove(filePath)
+	if err := os.Remove(filePath); err != nil {
+		fmt.Fprintf(os.Stderr, "error removing temp file %s: %v\n", filePath, err)
+	}
 }
 
 func (h *ImportHandler) ImportJSONL(c *gin.Context) {
@@ -72,7 +77,11 @@ func (h *ImportHandler) ImportJSONL(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file required: " + err.Error()})
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing uploaded file: %v\n", err)
+		}
+	}()
 
 	ext := filepath.Ext(header.Filename)
 	if ext != ".jsonl" && ext != ".parquet" {
@@ -85,16 +94,25 @@ func (h *ImportHandler) ImportJSONL(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temp file"})
 		return
 	}
-	defer tmpFile.Close()
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing temp file: %v\n", err)
+		}
+	}()
 
 	if _, err := io.Copy(tmpFile, file); err != nil {
-		os.Remove(tmpFile.Name())
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			fmt.Fprintf(os.Stderr, "error removing temp file: %v\n", err)
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 
 		return
 	}
 
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "error closing temp file: %v\n", err)
+	}
 
 	h.importSSE(c, collectionName, tmpFile.Name(), "text", "id")
 }
@@ -124,7 +142,11 @@ func (h *ImportHandler) ImportFromURL(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to download: " + err.Error()})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing response body: %v\n", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("download failed: HTTP %d", resp.StatusCode)})
@@ -150,13 +172,18 @@ func (h *ImportHandler) ImportFromURL(c *gin.Context) {
 	}
 
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		os.Remove(tmpFile.Name())
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			fmt.Fprintf(os.Stderr, "error removing temp file: %v\n", err)
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save downloaded file"})
 
 		return
 	}
 
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "error closing temp file: %v\n", err)
+	}
 
 	h.importSSE(c, collectionName, tmpFile.Name(), req.Content, req.ID)
 }

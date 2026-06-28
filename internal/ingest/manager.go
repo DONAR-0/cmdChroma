@@ -327,7 +327,10 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 			return
 		}
 
-		f.Seek(0, 0)
+		if _, err := f.Seek(0, 0); err != nil {
+			errChan <- fmt.Errorf("failed to seek parquet file: %w", err)
+			return
+		}
 
 		// Use GenericReader to read rows as map[string]any
 		reader := parquet.NewGenericReader[any](f)
