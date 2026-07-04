@@ -1,27 +1,12 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from 'tailwindcss';
-import autoprefixer from 'autoprefixer';
+import tailwindcss from '@tailwindcss/vite';
 import { TanStackRouterVite } from '@tanstack/router-devtools/vite';
 
 export default defineConfig({
   plugins: [
-    react(),
+    tailwindcss(),
     TanStackRouterVite(),
   ],
-  css: {
-    postcss: {
-      plugins: [
-        tailwindcss(),
-        autoprefixer(),
-      ],
-    },
-  },
-  resolve: {
-    alias: {
-      '@': './src',
-    },
-  },
   server: {
     port: 3000,
     proxy: {
