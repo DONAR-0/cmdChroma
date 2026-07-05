@@ -170,6 +170,35 @@ build-windows: ## Build for Windows (amd64) — CGO disabled for cross-compilati
 build-all: build-linux build-darwin build-windows ## Build for all platforms
 
 # ==============================================================================
+# Web Client Targets
+# ==============================================================================
+
+WEB_DIR=./web
+
+.PHONY: web-install
+web-install: ## Install web dependencies
+	cd $(WEB_DIR) && npm install
+
+.PHONY: web-dev
+web-dev: web-install ## Run web dev server
+	cd $(WEB_DIR) && npm run dev
+
+.PHONY: web-build
+web-build: web-install ## Build web for production
+	cd $(WEB_DIR) && npm run build
+
+.PHONY: web-preview
+web-preview: web-build ## Preview production build
+	cd $(WEB_DIR) && npm run preview
+
+.PHONY: web-typecheck
+web-typecheck: web-install ## Type check web
+	cd $(WEB_DIR) && npm run typecheck
+
+.PHONY: web-scaffold
+web-scaffold: web-install web-build ## Scaffold: install deps and build
+
+# ==============================================================================
 # Maintenance & Tooling
 # ==============================================================================
 
