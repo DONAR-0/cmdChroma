@@ -1,14 +1,17 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/service"
+	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,6 +41,10 @@ func (h *ImportHandler) importSSE(c *gin.Context, collectionName, filePath, cont
 		c.Writer.Flush()
 	}
 
+	h.importSSEWithEvents(c, collectionName, filePath, contentField, idField, sendEvent)
+}
+
+func (h *ImportHandler) importSSEWithEvents(c *gin.Context, collectionName, filePath, contentField, idField string, sendEvent func(string, string)) {
 	sendEvent("start", `{"status":"importing"}`)
 
 	progressFn := func(processed int) {
@@ -52,12 +59,21 @@ func (h *ImportHandler) importSSE(c *gin.Context, collectionName, filePath, cont
 		idField = "id"
 	}
 
-	err := h.svc.ImportFile(c.Request.Context(), collectionName, filePath, contentField, idField, progressFn)
+	// Use a detached context so the import continues even if the HTTP request
+	// context is cancelled by WriteTimeout. The SSE stream stays alive via
+	// sendEvent writes to c.Writer which are independent of the context.
+	// No timeout - the import runs until complete or cancelled by the user.
+	importCtx := context.Background()
+
+	slog.Info("Starting import", "collection", collectionName, "file", filePath)
+	err := h.svc.ImportFile(importCtx, collectionName, filePath, contentField, idField, progressFn)
 	if err != nil {
+		slog.Error("Import failed", "error", err)
 		sendEvent("error", fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 		return
 	}
 
+	slog.Info("Import completed successfully, sending done event")
 	sendEvent("done", `{"status":"completed"}`)
 
 	if err := os.Remove(filePath); err != nil {
@@ -136,54 +152,58 @@ func (h *ImportHandler) ImportFromURL(c *gin.Context) {
 		return
 	}
 
-	// Download file
-	resp, err := http.Get(req.URL)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to download: " + err.Error()})
-		return
+	// Start SSE connection
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	if f, ok := c.Writer.(http.Flusher); ok {
+		f.Flush()
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing response body: %v\n", err)
+
+	sendEvent := func(event string, data string) {
+		if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, data); err != nil {
+			return
 		}
-	}()
+		c.Writer.Flush()
+	}
 
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("download failed: HTTP %d", resp.StatusCode)})
+	// Send start event with downloading status
+	sendEvent("start", `{"status":"downloading"}`)
+
+	// Use a detached context for download so it's not affected by WriteTimeout
+	downloadCtx := context.Background()
+
+	// Download file with progress tracking
+	tmpFilePath, err := ingest.DownloadFile(downloadCtx, req.URL, func(downloaded, total int64) {
+		sendEvent("download-progress", fmt.Sprintf(`{"downloaded":%d,"total":%d}`, downloaded, total))
+	})
+	if err != nil {
+		sendEvent("error", fmt.Sprintf(`{"error":"%s"}`, err.Error()))
 		return
 	}
 
-	// Detect format from Content-Type header, fallback to URL extension
-	contentType := resp.Header.Get("Content-Type")
+	// Send download complete event
+	sendEvent("download-complete", `{"status":"downloaded"}`)
 
+	// Detect format from URL extension
 	ext := filepath.Ext(req.URL)
-	if strings.Contains(contentType, "json") || ext == ".jsonl" {
-		ext = ".jsonl"
-	} else if strings.Contains(contentType, "parquet") || ext == ".parquet" {
-		ext = ".parquet"
-	} else {
+	if ext != ".jsonl" && ext != ".parquet" {
 		ext = ".jsonl"
 	}
 
-	tmpFile, err := os.CreateTemp("", "import-*"+ext)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temp file"})
-		return
-	}
-
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		if err := os.Remove(tmpFile.Name()); err != nil {
-			fmt.Fprintf(os.Stderr, "error removing temp file: %v\n", err)
+	// Rename temp file to have correct extension if needed
+	filePath := tmpFilePath
+	if !strings.HasSuffix(filePath, ext) {
+		newPath := strings.TrimSuffix(filePath, filepath.Ext(filePath)) + ext
+		if err := os.Rename(filePath, newPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error renaming temp file: %v\n", err)
+		} else {
+			filePath = newPath
 		}
-
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save downloaded file"})
-
-		return
 	}
 
-	if err := tmpFile.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "error closing temp file: %v\n", err)
-	}
-
-	h.importSSE(c, collectionName, tmpFile.Name(), req.Content, req.ID)
+	// Start import process
+	h.importSSEWithEvents(c, collectionName, filePath, req.Content, req.ID, sendEvent)
 }

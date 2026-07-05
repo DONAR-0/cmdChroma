@@ -54,7 +54,7 @@ func main() {
 	}
 
 	// Build service layer
-	chatService := service.NewChatService(chromaClient, embedder, &cfg.LLM)
+	chatService := service.NewChatService(logger, chromaClient, embedder, &cfg.LLM)
 	sessionStore := storage.NewSessionStore()
 
 	// Build handlers

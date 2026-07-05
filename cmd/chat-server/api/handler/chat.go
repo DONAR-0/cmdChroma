@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -16,7 +17,6 @@ type ChatHandler struct {
 	svc          *service.ChatService
 	sessions     *storage.SessionStore
 	defaultModel string
-	nimURL       string
 }
 
 func NewChatHandler(svc *service.ChatService, sessions *storage.SessionStore, defaultModel string) *ChatHandler {
@@ -24,7 +24,6 @@ func NewChatHandler(svc *service.ChatService, sessions *storage.SessionStore, de
 		svc:          svc,
 		sessions:     sessions,
 		defaultModel: defaultModel,
-		nimURL:       "https://integrate.api.nvidia.com/v1",
 	}
 }
 
@@ -57,11 +56,14 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 		model = h.defaultModel
 	}
 
+	slog.Info("chat request received", "collection", req.Collection, "model", model, "session_id", req.SessionID)
+
 	// Get or create session — persists conversation history across turns
 	session := h.sessions.GetOrCreate(apiKey, req.SessionID, req.Collection)
 
 	// Switching collection mid-session clears history
 	if session.Collection != req.Collection {
+		slog.Info("switching collection mid-session, clearing history", "session_id", session.ID, "old", session.Collection, "new", req.Collection)
 		_ = h.sessions.Clear(apiKey, session.ID)
 		session.Collection = req.Collection
 	}
@@ -71,6 +73,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	// 1: Semantic search in ChromaDB
 	results, err := h.svc.Query(ctx, req.Collection, req.Message, req.NResults, req.DistanceThreshold)
 	if err != nil {
+		slog.Error("chat query error", "err", err)
 		h.writeErrorSSE(c, "collection or query error: "+err.Error())
 		return
 	}
@@ -90,6 +93,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	provider, err := h.svc.CreateProvider(strippedModel, apiKey)
 	if err != nil {
+		slog.Error("provider creation error", "err", err)
 		h.writeErrorSSE(c, err.Error())
 		return
 	}
@@ -109,12 +113,14 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	err = provider.Generate(ctx, prompt, strippedModel, sw)
 
 	if err != nil && ctx.Err() == nil {
+		slog.Error("token generation error", "err", err)
 		h.writeErrorSSE(c, "generation error: "+err.Error())
 		return
 	}
 
 	// 6: Mark SSE stream done
 	if _, err := fmt.Fprintf(sw, "event: done\\ndata: {}\n\n"); err != nil {
+		slog.Error("failed to write done event", "err", err)
 		h.writeErrorSSE(c, err.Error())
 	}
 
@@ -122,6 +128,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 	// 7: Append to session history
 	if err := h.sessions.AppendMessage(session.ID, apiKey, "user", req.Message, 0); err != nil {
+		slog.Error("failed to append user message to history", "session_id", session.ID, "err", err)
 		h.writeErrorSSE(c, err.Error())
 	}
 }

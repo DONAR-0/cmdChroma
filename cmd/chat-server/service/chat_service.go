@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/config"
@@ -16,10 +17,13 @@ import (
 
 // ChatService orchestrates: ChromaDB query → build RAG prompt → LLM stream.
 type ChatService struct {
+	logger       *slog.Logger
 	chromaClient client.ChromaClientInterface
 	embedder     onnx.EmbedderInterface
+	chromaSvc    *service.ChromaService
 	ollamaURL    string
 	nimURL       string
+	nimPrefixes  []string
 }
 
 // InitIntegrations boots the ONNX embedder and ChromaDB client.
@@ -44,12 +48,15 @@ func InitIntegrations(ctx context.Context, chromaCfg *config.ChromaConfig, embed
 }
 
 // NewChatService creates a ChatService with injected dependencies.
-func NewChatService(chromaClient client.ChromaClientInterface, embedder onnx.EmbedderInterface, llmCfg *config.LLMConfig) *ChatService {
+func NewChatService(logger *slog.Logger, chromaClient client.ChromaClientInterface, embedder onnx.EmbedderInterface, llmCfg *config.LLMConfig) *ChatService {
 	return &ChatService{
+		logger:       logger,
 		chromaClient: chromaClient,
 		embedder:     embedder,
+		chromaSvc:    service.NewChromaService(chromaClient, embedder),
 		ollamaURL:    llmCfg.OllamaURL,
 		nimURL:       llmCfg.NIMURL,
+		nimPrefixes:  llmCfg.NIMPrefixes,
 	}
 }
 
@@ -64,13 +71,17 @@ type QueryResult struct {
 // Query runs a semantic search against ChromaDB and returns raw documents
 // without LLM involvement (used by /api/query endpoint).
 func (s *ChatService) Query(ctx context.Context, collectionName string, query string, nResults int, distanceThreshold float64) ([]QueryResult, error) {
+	s.logger.Info("performing semantic search", "collection", collectionName, "n_results", nResults)
+
 	collectionID, err := s.chromaClient.ResolveCollectionID(ctx, collectionName)
 	if err != nil {
+		s.logger.Error("collection not found", "collection", collectionName, "err", err)
 		return nil, fmt.Errorf("collection not found: %s", collectionName)
 	}
 
 	resp, err := s.chromaClient.QueryBatch(ctx, collectionID, []string{query}, nResults)
 	if err != nil {
+		s.logger.Error("query failed", "collection_id", collectionID, "err", err)
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
@@ -90,6 +101,7 @@ func (s *ChatService) Query(ctx context.Context, collectionName string, query st
 		})
 	}
 
+	s.logger.Info("query completed", "results_found", len(results))
 	return results, nil
 }
 
@@ -98,26 +110,26 @@ func (s *ChatService) Query(ctx context.Context, collectionName string, query st
 func (s *ChatService) CreateProvider(model, nimKey string) (llm.ProviderInterface, error) {
 	model = strings.TrimPrefix(model, "nim://")
 
-	nimPrefixes := []string{
-		"google/", "meta/", "mistralai/", "nvidia/",
-		"qwen/", "deepseek-", "minimaxai/", "snowflake/",
-		"ibm/", "upstage/", "writer/", "z-ai/",
-	}
-	for _, prefix := range nimPrefixes {
+	for _, prefix := range s.nimPrefixes {
 		if strings.HasPrefix(model, prefix) {
+			s.logger.Debug("using NIM provider", "model", model)
 			return llm.NewNIMProvider(s.nimURL, nimKey)
 		}
 	}
 
+	s.logger.Debug("using Ollama provider", "model", model)
 	return llm.NewProvider(s.ollamaURL), nil
 }
 
 // GetOllamaURL returns the configured Ollama base URL.
 func (s *ChatService) GetOllamaURL() string { return s.ollamaURL }
 
+// GetNIMURL returns the configured NVIDIA NIM base URL.
+func (s *ChatService) GetNIMURL() string { return s.nimURL }
+
 // ImportFile ingests records from a JSONL/Parquet file into a collection with progress reporting.
 func (s *ChatService) ImportFile(ctx context.Context, collectionName, filePath string, contentField, idField string, progressFn func(int)) error {
-	svc := service.NewChromaService(s.chromaClient, s.embedder)
+	s.logger.Info("starting file import", "collection", collectionName, "path", filePath)
 
 	cfg := &ingest.Config{
 		BatchSize:    100,
@@ -133,7 +145,14 @@ func (s *ChatService) ImportFile(ctx context.Context, collectionName, filePath s
 		cfg.IDField = "id"
 	}
 
-	return svc.IngestRecords(ctx, collectionName, filePath, cfg, progressFn)
+	err := s.chromaSvc.IngestRecords(ctx, collectionName, filePath, cfg, progressFn)
+	if err != nil {
+		s.logger.Error("import failed", "collection", collectionName, "path", filePath, "err", err)
+		return err
+	}
+
+	s.logger.Info("import completed successfully", "collection", collectionName, "path", filePath)
+	return nil
 }
 
 // CollectionWithCount extends a ChromaDB collection with its document count.
@@ -149,8 +168,10 @@ func (s *ChatService) ListCollections(ctx context.Context) ([]client.Collection,
 
 // ListCollectionsWithCount returns all collections with their document counts.
 func (s *ChatService) ListCollectionsWithCount(ctx context.Context) ([]CollectionWithCount, error) {
+	s.logger.Debug("listing collections with counts")
 	collections, err := s.chromaClient.ListCollections(ctx)
 	if err != nil {
+		s.logger.Error("failed to list collections", "err", err)
 		return nil, err
 	}
 
@@ -158,9 +179,13 @@ func (s *ChatService) ListCollectionsWithCount(ctx context.Context) ([]Collectio
 	for i, col := range collections {
 		result[i] = CollectionWithCount{Collection: col}
 
+		// NOTE: ListDocuments can be expensive for large collections. 
+		// In a high-scale production environment, a dedicated count API should be used.
 		records, err := s.chromaClient.ListDocuments(ctx, col.ID)
 		if err == nil && records != nil {
 			result[i].Count = len(records.IDs)
+		} else if err != nil {
+			s.logger.Warn("could not retrieve document count", "collection_id", col.ID, "err", err)
 		}
 	}
 

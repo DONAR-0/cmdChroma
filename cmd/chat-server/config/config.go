@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -41,9 +42,10 @@ type EmbedderConfig struct {
 
 // LLMConfig holds LLM provider settings.
 type LLMConfig struct {
-	DefaultModel string `yaml:"default_model"`
-	OllamaURL    string `yaml:"ollama_url"`
-	NIMURL       string `yaml:"nim_url"`
+	DefaultModel string   `yaml:"default_model"`
+	OllamaURL    string   `yaml:"ollama_url"`
+	NIMURL       string   `yaml:"nim_url"`
+	NIMPrefixes  []string `yaml:"nim_prefixes"`
 }
 
 // CollectionEntry describes a single collection to manage.
@@ -93,6 +95,11 @@ func Default() *Config {
 			DefaultModel: "google/gemma-2-2b-it",
 			OllamaURL:    "http://localhost:11434",
 			NIMURL:       "https://integrate.api.nvidia.com/v1",
+			NIMPrefixes: []string{
+				"google/", "meta/", "mistralai/", "nvidia/",
+				"qwen/", "deepseek-", "minimaxai/", "snowflake/",
+				"ibm/", "upstage/", "writer/", "z-ai/",
+			},
 		},
 		Collections: nil,
 	}
@@ -126,6 +133,10 @@ func applyEnvOverrides(cfg *Config) {
 
 	if v := os.Getenv("CHAT_LLM_DEFAULT_MODEL"); v != "" {
 		cfg.LLM.DefaultModel = v
+	}
+
+	if v := os.Getenv("CHAT_LLM_NIM_PREFIXES"); v != "" {
+		cfg.LLM.NIMPrefixes = strings.Split(v, ",")
 	}
 
 	if v := os.Getenv("CHAT_EMBEDDER_MODEL_PATH"); v != "" {

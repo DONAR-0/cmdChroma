@@ -302,6 +302,8 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		}
 	}
 
+	slog.Info("Record channel closed", "docs_remaining", len(docs), "total_uploaded", totalUploaded)
+
 	if len(docs) > 0 {
 		if err := s.uploadBatch(ctx, collectionID, docs, ids, metas, cfg.Upsert); err != nil {
 			return fmt.Errorf("final batch upload failed at document %d: %w", totalUploaded, err)
