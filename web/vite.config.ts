@@ -1,12 +1,9 @@
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
-import { TanStackRouterVite } from '@tanstack/router-devtools/vite';
+import router from '@tanstack/router-plugin/vite';
 
 export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    TanStackRouterVite(),
-  ],
+  plugins: [tailwindcss(), router()],
   server: {
     port: 3000,
     proxy: {
