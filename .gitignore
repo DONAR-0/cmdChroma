@@ -36,3 +36,8 @@ tests/output/
 .ci/models/
 test_data/
 docs/
+
+# ----- Coverage & Build Artifacts -----
+coverage.out
+*.tsbuildinfo
+*.bak

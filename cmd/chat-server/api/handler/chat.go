@@ -75,6 +75,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	if err != nil {
 		slog.Error("chat query error", "err", err)
 		h.writeErrorSSE(c, "collection or query error: "+err.Error())
+
 		return
 	}
 
@@ -95,6 +96,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	if err != nil {
 		slog.Error("provider creation error", "err", err)
 		h.writeErrorSSE(c, err.Error())
+
 		return
 	}
 
@@ -115,6 +117,7 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 	if err != nil && ctx.Err() == nil {
 		slog.Error("token generation error", "err", err)
 		h.writeErrorSSE(c, "generation error: "+err.Error())
+
 		return
 	}
 

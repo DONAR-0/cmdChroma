@@ -141,6 +141,70 @@ func TestEmbedder_EmbedDocuments_Parallel(t *testing.T) {
 	}
 }
 
+func TestEmbedder_EmbedDocuments_Sequential(t *testing.T) {
+	// Use more workers than texts to trigger sequential path (len(texts) < e.numWorkers)
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizersPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libpath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	emb, err := NewEmbedder(modelPath, tokenizersPath, libpath, WithNumWorkers(10))
+	if err != nil {
+		t.Fatalf("Failed to create embedder: %v", err)
+	}
+	defer emb.Close()
+
+	texts := []string{"Hello", "World"} // 2 texts, < numWorkers=10
+
+	embeddings, err := emb.EmbedDocuments(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("EmbedDocuments failed: %v", err)
+	}
+
+	if len(embeddings) != len(texts) {
+		t.Errorf("Expected %d embeddings, got %d", len(texts), len(embeddings))
+	}
+
+	for i, embd := range embeddings {
+		if embd == nil {
+			t.Errorf("Embedding %d is nil", i)
+		}
+
+		if len(embd) != 384 {
+			t.Errorf("Embedding %d has wrong dimension: %d", i, len(embd))
+		}
+	}
+}
+
+func TestEmbedder_EmbedDocuments_Empty(t *testing.T) {
+	_, currentFile, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(currentFile)
+	projectRoot := filepath.Join(dir, "..", "..")
+
+	modelPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "model.onnx")
+	tokenizersPath := filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
+	libpath := filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
+
+	emb, err := NewEmbedder(modelPath, tokenizersPath, libpath)
+	if err != nil {
+		t.Fatalf("Failed to create embedder: %v", err)
+	}
+	defer emb.Close()
+
+	// Empty texts should return empty results
+	embeddings, err := emb.EmbedDocuments(context.Background(), []string{})
+	if err != nil {
+		t.Fatalf("EmbedDocuments with empty slice failed: %v", err)
+	}
+
+	if len(embeddings) != 0 {
+		t.Errorf("Expected 0 embeddings for empty input, got %d", len(embeddings))
+	}
+}
+
 // ExampleNewEmbedder demonstrates creating an embedder and generating a simple embedding.
 func ExampleNewEmbedder() {
 	// This example assumes model files are in the standard location.

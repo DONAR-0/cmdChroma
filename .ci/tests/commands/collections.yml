@@ -112,7 +112,8 @@ testcases:
         script: cmdChroma delete t11_nonexistent
         assertions:
           - result.code ShouldEqual 1
-          - result.systemout ShouldContainSubstring "collection 't11_nonexistent' not found"
+          - result.systemout ShouldContainSubstring "t11_nonexistent"
+          - result.systemout ShouldContainSubstring "not found"
   - name: cleanup
     always: true
     steps:

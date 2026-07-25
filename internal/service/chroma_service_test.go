@@ -37,6 +37,8 @@ type mockChromaClient struct {
 	deleteCollectionErr       error
 	deleteRecordsErr          error
 	createDatabaseErr         error
+	countDocumentsResult      int64
+	countDocumentsErr         error
 }
 
 func (m *mockChromaClient) TestConnection(_ context.Context) error {
@@ -93,6 +95,10 @@ func (m *mockChromaClient) DeleteRecords(_ context.Context, _ string, ids []stri
 
 func (m *mockChromaClient) CreateDatabase(_ context.Context, _ string) error {
 	return m.createDatabaseErr
+}
+
+func (m *mockChromaClient) CountDocuments(_ context.Context, _ string) (int64, error) {
+	return m.countDocumentsResult, m.countDocumentsErr
 }
 
 func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (string, error) {
@@ -212,6 +218,63 @@ func TestChromaService_ListCollections_Error(t *testing.T) {
 	_, err := svc.ListCollections(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListCollections when client returns error")
+	}
+}
+
+func TestChromaService_CountDocuments(t *testing.T) {
+	client := &mockChromaClient{
+		resolveCollectionIDResult: "test-id",
+	}
+	svc := NewChromaService(client, nil)
+
+	count, err := svc.CountDocuments(context.Background(), "test_collection")
+	if err != nil {
+		t.Errorf("CountDocuments failed: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf("Expected count 0, got %d", count)
+	}
+}
+
+func TestChromaService_CountDocuments_ResolveError(t *testing.T) {
+	client := &mockChromaClient{resolveCollectionIDErr: errors.New("resolve failed")}
+	svc := NewChromaService(client, nil)
+
+	_, err := svc.CountDocuments(context.Background(), "test_collection")
+	if err == nil {
+		t.Error("Expected error for CountDocuments when resolve fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to resolve collection") {
+		t.Errorf("Expected 'failed to resolve collection' in error, got: %v", err)
+	}
+}
+
+type countErrorMock struct {
+	mockChromaClient
+}
+
+func (m *countErrorMock) CountDocuments(_ context.Context, _ string) (int64, error) {
+	return 0, errors.New("count error")
+}
+
+func TestChromaService_CountDocuments_CountError(t *testing.T) {
+	client := &countErrorMock{
+		mockChromaClient: mockChromaClient{
+			resolveCollectionIDResult: "test-id",
+		},
+	}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	_, err := svc.CountDocuments(context.Background(), "test")
+	if err == nil {
+		t.Errorf("Expected error for CountDocuments when client returns error")
+	}
+
+	if !strings.Contains(err.Error(), "count error") {
+		t.Errorf("Expected 'count error' in error, got: %v", err)
 	}
 }
 

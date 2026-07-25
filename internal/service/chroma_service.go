@@ -88,6 +88,23 @@ func (s *ChromaService) ListCollections(ctx context.Context) ([]client.Collectio
 	return collections, nil
 }
 
+// CountDocuments returns the number of documents in a collection.
+// collectionName can be a name or UUID. ctx propagates to the HTTP round trip.
+func (s *ChromaService) CountDocuments(ctx context.Context, collectionName string) (int64, error) {
+	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve collection '%s': %w", collectionName, err)
+	}
+
+	count, err := s.client.CountDocuments(ctx, collectionID)
+	if err != nil {
+		slog.Error("Failed to count documents", "collection", collectionName, "error", err)
+		return 0, fmt.Errorf("failed to count documents in '%s': %w", collectionName, err)
+	}
+
+	return count, nil
+}
+
 // ============ Document Operations ============
 
 // AddDocuments adds documents to a collection with embeddings. ctx propagates
@@ -236,7 +253,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 		startTime     = time.Now()
 	)
 
-	if cfg.DedupMode == "warn" || cfg.DedupMode == "skip" {
+	if cfg.DedupMode == "warn" || cfg.DedupMode == "skip" || cfg.UniqueIDs {
 		seenIDs = make(map[string]int)
 	}
 
@@ -259,17 +276,22 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 
 	for record := range records {
 		if seenIDs != nil {
-			if _, exists := seenIDs[record.ID]; exists {
-				switch cfg.DedupMode {
-				case "warn":
-					slog.Warn("Duplicate ID skipped", "id", record.ID)
-				case "skip":
-				}
+			if count, exists := seenIDs[record.ID]; exists {
+				if cfg.UniqueIDs {
+					record.ID = fmt.Sprintf("%s_%d", record.ID, count)
+					seenIDs[record.ID] = 1
+				} else if cfg.DedupMode == "warn" || cfg.DedupMode == "skip" {
+					switch cfg.DedupMode {
+					case "warn":
+						slog.Warn("Duplicate ID skipped", "id", record.ID)
+					case "skip":
+					}
 
-				continue
+					continue
+				}
 			}
 
-			seenIDs[record.ID] = 1
+			seenIDs[record.ID]++
 		}
 
 		docs = append(docs, record.Content)

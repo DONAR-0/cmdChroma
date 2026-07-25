@@ -11,6 +11,8 @@ MODEL_DIR="$REPO_ROOT/models"
 MINILM_URL="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx"
 TOKENIZER_URL="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json"
 ONNX_URL="https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-x64-1.24.2.tgz"
+ONNX_GENAI_VERSION="0.14.0"
+ONNX_GENAI_URL="https://github.com/microsoft/onnxruntime-genai/releases/download/v${ONNX_GENAI_VERSION}/onnxruntime-genai-${ONNX_GENAI_VERSION}-linux-x64.tar.gz"
 
 echo "📂 Creating directory structure..."
 mkdir -p $MODEL_DIR/all-MiniLM-L6-v2
@@ -36,6 +38,15 @@ if [ ! -f "$MODEL_DIR/onnx_runtime/lib/libonnxruntime.so.1" ]; then
   rm onnxruntime.tgz
 else
   echo "✅ ONNX Runtime already exists: $MODEL_DIR/onnx_runtime/lib/libonnxruntime.so.1"
+fi
+
+echo "🧠 Downloading ONNX Runtime GenAI (v${ONNX_GENAI_VERSION})..."
+if [ ! -f "$MODEL_DIR/onnx_runtime/lib/libonnxruntime-genai.so" ]; then
+  curl -L "$ONNX_GENAI_URL" -o onnxruntime-genai.tgz
+  tar -xzf onnxruntime-genai.tgz --strip-components=1 -C "$MODEL_DIR/onnx_runtime" onnxruntime-genai-${ONNX_GENAI_VERSION}-linux-x64/lib/
+  rm onnxruntime-genai.tgz
+else
+  echo "✅ ONNX Runtime GenAI already exists: $MODEL_DIR/onnx_runtime/lib/libonnxruntime-genai.so"
 fi
 
 echo "✅ Setup complete! Models and libraries are in $MODEL_DIR"

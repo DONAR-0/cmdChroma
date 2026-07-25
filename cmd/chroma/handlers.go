@@ -194,7 +194,9 @@ func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	collections, err := chromaClient.ListCollections(ctx)
+	svc := service.NewChromaService(chromaClient, nil)
+
+	collections, err := svc.ListCollections(ctx)
 	if err != nil {
 		slog.Error("Failed to list collections", "error", err)
 		return fmt.Errorf("failed to list collections: %w\n\nHint: Verify database exists: chroma databases", err)
@@ -210,7 +212,13 @@ func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 	printer.Info("Collections in database '%s':", cmd.String("database"))
 
 	for _, coll := range collections {
-		printer.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
+		// Get document count efficiently using the /count endpoint
+		count, countErr := svc.CountDocuments(ctx, coll.Name)
+		if countErr != nil {
+			printer.Printf("  • %s (ID: %s) [count failed]\n", coll.Name, coll.ID)
+		} else {
+			printer.Printf("  • %s (ID: %s) [%d docs]\n", coll.Name, coll.ID, count)
+		}
 	}
 
 	slog.Info("Collection listing complete", "count", len(collections))

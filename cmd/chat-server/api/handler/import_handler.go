@@ -66,10 +66,12 @@ func (h *ImportHandler) importSSEWithEvents(c *gin.Context, collectionName, file
 	importCtx := context.Background()
 
 	slog.Info("Starting import", "collection", collectionName, "file", filePath)
+
 	err := h.svc.ImportFile(importCtx, collectionName, filePath, contentField, idField, progressFn)
 	if err != nil {
 		slog.Error("Import failed", "error", err)
 		sendEvent("error", fmt.Sprintf(`{"error":"%s"}`, err.Error()))
+
 		return
 	}
 
@@ -166,6 +168,7 @@ func (h *ImportHandler) ImportFromURL(c *gin.Context) {
 		if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, data); err != nil {
 			return
 		}
+
 		c.Writer.Flush()
 	}
 

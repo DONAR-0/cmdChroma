@@ -156,6 +156,10 @@ func (m *mockChromaClient) ListCollections(_ context.Context) ([]client.Collecti
 	return m.ListCollectionsResult, m.ListCollectionsErr
 }
 
+func (m *mockChromaClient) CountDocuments(_ context.Context, _ string) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (string, error) {
 	m.CreateCollectionCalls = append(m.CreateCollectionCalls, createCollectionCall{Name: name})
 

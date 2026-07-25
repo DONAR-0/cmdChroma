@@ -15,6 +15,7 @@ type RouterDeps struct {
 	HealthHandler     *handler.HealthHandler
 	CollectionHandler *handler.CollectionHandler
 	ImportHandler     *handler.ImportHandler
+	ModelHandler      *handler.ModelHandler
 	Collections       []config.CollectionEntry
 }
 
@@ -45,6 +46,9 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 		api.DELETE("/collections/:name/documents", deps.CollectionHandler.DeleteDocuments)
 		api.POST("/collections/:name/import", deps.ImportHandler.ImportJSONL)
 		api.POST("/collections/:name/import/url", deps.ImportHandler.ImportFromURL)
+		api.GET("/models", deps.ModelHandler.ListModels)
+		api.POST("/models/download", deps.ModelHandler.DownloadModel)
+		api.POST("/models/active", deps.ModelHandler.SetActiveModel)
 	}
 
 	return r

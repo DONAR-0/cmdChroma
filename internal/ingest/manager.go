@@ -81,7 +81,8 @@ type Config struct {
 	// "warn" logs a warning and skips the duplicate; "skip" silently skips.
 	DedupMode string
 	// Upsert uses the upsert endpoint instead of add, so existing IDs are updated.
-	Upsert bool
+	Upsert    bool
+	UniqueIDs bool
 	// Total is the known total number of records (0 if unknown).
 	// Used for progress display.
 	Total int
@@ -500,23 +501,8 @@ func (p *Processor) stringifyIfComplex(value any) any {
 		rt = reflect.TypeOf(value)
 	}
 
-	// Recursively flatten nested maps into the parent (foo_bar becomes foo.bar)
-	// to preserve structure while meeting ChromaDB's flat-key requirement.
-	if m, ok := value.(map[string]any); ok {
-		result := make(map[string]any)
-		for k, v := range m {
-			result[k] = p.stringifyIfComplex(v)
-		}
-
-		return result
-	}
-
 	if rt == nil {
 		return nil
-	}
-	// Convert slices/arrays to string representation.
-	if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
-		return fmt.Sprintf("%v", value)
 	}
 
 	// Check if primitive
@@ -524,7 +510,13 @@ func (p *Processor) stringifyIfComplex(value any) any {
 		return value
 	}
 
-	// Complex type - convert to string
+	// For all complex types (maps, slices, arrays, structs),
+	// convert to a JSON string to ensure ChromaDB compatibility.
+	if b, err := json.Marshal(value); err == nil {
+		return string(b)
+	}
+
+	// Fallback to basic string representation
 	return fmt.Sprintf("%v", value)
 }
 

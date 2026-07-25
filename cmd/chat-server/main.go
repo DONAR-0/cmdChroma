@@ -57,6 +57,11 @@ func main() {
 	chatService := service.NewChatService(logger, chromaClient, embedder, &cfg.LLM)
 	sessionStore := storage.NewSessionStore()
 
+	modelMgr := service.NewModelManager(logger, "cmdChroma/models")
+	if err := modelMgr.LoadInstalled(); err != nil {
+		logger.Warn("failed to load installed models", "err", err)
+	}
+
 	// Build handlers
 	chatHandler := handler.NewChatHandler(chatService, sessionStore, cfg.LLM.DefaultModel)
 	queryHandler := handler.NewQueryHandler(chatService)
@@ -64,6 +69,7 @@ func main() {
 	healthHandler := handler.NewHealthHandler(chromaClient, embedder)
 	collectionHandler := handler.NewCollectionHandler(chatService)
 	importHandler := handler.NewImportHandler(chatService)
+	modelHandler := handler.NewModelHandler(modelMgr)
 
 	// Wire up router
 	router := api.NewRouter(api.RouterDeps{
@@ -74,6 +80,7 @@ func main() {
 		HealthHandler:     healthHandler,
 		CollectionHandler: collectionHandler,
 		ImportHandler:     importHandler,
+		ModelHandler:      modelHandler,
 		Collections:       cfg.Collections,
 	})
 

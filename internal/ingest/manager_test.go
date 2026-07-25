@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -306,10 +307,10 @@ func TestStringifyIfComplex(t *testing.T) {
 
 	// Complex types (slice, map, struct) should be converted to string
 	slice := []int{1, 2, 3}
-	require.Equal(t, "[1 2 3]", p.stringifyIfComplex(slice))
+	require.Equal(t, "[1,2,3]", p.stringifyIfComplex(slice))
 
 	m := map[string]int{"a": 1}
-	require.Equal(t, "map[a:1]", p.stringifyIfComplex(m))
+	require.Equal(t, `{"a":1}`, p.stringifyIfComplex(m))
 
 	// Pointer to primitive: should dereference and return primitive
 	ptr := new(int)
@@ -327,14 +328,14 @@ func TestStringifyIfComplex(t *testing.T) {
 	// int64
 	require.Equal(t, int64(99), p.stringifyIfComplex(int64(99)))
 
-	// Nested map preserves structure
+	// Nested map becomes JSON string
 	nested := map[string]any{"inner": map[string]any{"key": "val"}}
 	result := p.stringifyIfComplex(nested)
-	rm, ok := result.(map[string]any)
-	require.True(t, ok)
-	inner, ok := rm["inner"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "val", inner["key"])
+	require.IsType(t, "", result)
+
+	var actual map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result.(string)), &actual))
+	require.Equal(t, nested, actual)
 }
 
 // TestExtractRecord tests the record extraction logic.
@@ -364,9 +365,7 @@ func TestExtractRecord(t *testing.T) {
 				ID:      "123",
 				Content: "hello world",
 				Metadata: map[string]any{
-					"extra": map[string]any{
-						"foo": "bar",
-					},
+					"extra": `{"foo":"bar"}`,
 				},
 			},
 			wantError: false,

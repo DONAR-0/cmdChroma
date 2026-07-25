@@ -418,9 +418,13 @@ func TestChromaClient_GetIDByName_Error(t *testing.T) {
 
 func TestChromaClient_DeleteCollection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "DELETE" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test_collection" {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections":
+			data, _ := json.Marshal([]Collection{{ID: "test-uuid", Name: "test_collection"}})
+			_, _ = w.Write(data)
+		case r.Method == "DELETE" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test-uuid":
 			w.WriteHeader(http.StatusOK)
-		} else {
+		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
@@ -431,6 +435,50 @@ func TestChromaClient_DeleteCollection(t *testing.T) {
 	err := client.DeleteCollection(context.Background(), "test_collection")
 	if err != nil {
 		t.Errorf("DeleteCollection failed: %v", err)
+	}
+}
+
+func TestChromaClient_DeleteCollection_CollectionNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections":
+			data, _ := json.Marshal([]Collection{{ID: "other-uuid", Name: "other_collection"}})
+			_, _ = w.Write(data)
+		case r.Method == "DELETE" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/other-uuid":
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	err := client.DeleteCollection(context.Background(), "test_collection")
+	if err == nil {
+		t.Error("Expected error for DeleteCollection when collection not found")
+	}
+
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Expected 'not found' error, got: %v", err)
+	}
+}
+
+func TestChromaClient_DeleteCollection_ListError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections" {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	err := client.DeleteCollection(context.Background(), "test_collection")
+	if err == nil {
+		t.Error("Expected error for DeleteCollection when listing fails")
 	}
 }
 
@@ -449,6 +497,66 @@ func TestChromaClient_DeleteCollection_Error(t *testing.T) {
 	err := client.DeleteCollection(context.Background(), "test_collection")
 	if err == nil {
 		t.Errorf("Expected error for DeleteCollection when server returns 500")
+	}
+}
+
+func TestChromaClient_CountDocuments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test/count" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("42"))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	count, err := client.CountDocuments(context.Background(), "test")
+	if err != nil {
+		t.Errorf("CountDocuments failed: %v", err)
+	}
+
+	if count != 42 {
+		t.Errorf("Expected count 42, got %d", count)
+	}
+}
+
+func TestChromaClient_CountDocuments_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test/count" {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	_, err := client.CountDocuments(context.Background(), "test")
+	if err == nil {
+		t.Error("Expected error for CountDocuments when server returns 500")
+	}
+}
+
+func TestChromaClient_CountDocuments_InvalidResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections/test/count" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("not a number"))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewChromaDBClient(server.URL, "tenant", "db")
+
+	_, err := client.CountDocuments(context.Background(), "test")
+	if err == nil {
+		t.Error("Expected error for CountDocuments with invalid response")
 	}
 }
 

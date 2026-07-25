@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/config"
 	"github.com/DONAR-0/cmdChroma/cmd/chat-server/storage"
@@ -17,13 +18,14 @@ import (
 
 // ChatService orchestrates: ChromaDB query → build RAG prompt → LLM stream.
 type ChatService struct {
-	logger       *slog.Logger
-	chromaClient client.ChromaClientInterface
-	embedder     onnx.EmbedderInterface
-	chromaSvc    *service.ChromaService
-	ollamaURL    string
-	nimURL       string
-	nimPrefixes  []string
+	logger        *slog.Logger
+	chromaClient  client.ChromaClientInterface
+	embedder      onnx.EmbedderInterface
+	chromaSvc     *service.ChromaService
+	ollamaURL     string
+	nimURL        string
+	nimPrefixes   []string
+	localProvider *llm.LocalONNXProvider
 }
 
 // InitIntegrations boots the ONNX embedder and ChromaDB client.
@@ -50,13 +52,14 @@ func InitIntegrations(ctx context.Context, chromaCfg *config.ChromaConfig, embed
 // NewChatService creates a ChatService with injected dependencies.
 func NewChatService(logger *slog.Logger, chromaClient client.ChromaClientInterface, embedder onnx.EmbedderInterface, llmCfg *config.LLMConfig) *ChatService {
 	return &ChatService{
-		logger:       logger,
-		chromaClient: chromaClient,
-		embedder:     embedder,
-		chromaSvc:    service.NewChromaService(chromaClient, embedder),
-		ollamaURL:    llmCfg.OllamaURL,
-		nimURL:       llmCfg.NIMURL,
-		nimPrefixes:  llmCfg.NIMPrefixes,
+		logger:        logger,
+		chromaClient:  chromaClient,
+		embedder:      embedder,
+		chromaSvc:     service.NewChromaService(chromaClient, embedder),
+		ollamaURL:     llmCfg.OllamaURL,
+		nimURL:        llmCfg.NIMURL,
+		nimPrefixes:   llmCfg.NIMPrefixes,
+		localProvider: llm.NewLocalONNXProvider("cmdChroma/models"),
 	}
 }
 
@@ -102,12 +105,18 @@ func (s *ChatService) Query(ctx context.Context, collectionName string, query st
 	}
 
 	s.logger.Info("query completed", "results_found", len(results))
+
 	return results, nil
 }
 
 // CreateProvider returns the correct LLM provider for the model string.
-// NIM models (google/*, meta/*, etc.) use NVIDIA NIM; everything else uses Ollama.
+// NIM models (google/*, meta/*, etc.) use NVIDIA NIM; local:// models use LocalONNX; others use Ollama.
 func (s *ChatService) CreateProvider(model, nimKey string) (llm.ProviderInterface, error) {
+	if strings.HasPrefix(model, "local://") {
+		s.logger.Debug("using Local ONNX provider", "model", model)
+		return s.localProvider, nil
+	}
+
 	model = strings.TrimPrefix(model, "nim://")
 
 	for _, prefix := range s.nimPrefixes {
@@ -118,6 +127,7 @@ func (s *ChatService) CreateProvider(model, nimKey string) (llm.ProviderInterfac
 	}
 
 	s.logger.Debug("using Ollama provider", "model", model)
+
 	return llm.NewProvider(s.ollamaURL), nil
 }
 
@@ -136,6 +146,7 @@ func (s *ChatService) ImportFile(ctx context.Context, collectionName, filePath s
 		ContentField: contentField,
 		IDField:      idField,
 		AllMetadata:  true,
+		UniqueIDs:    true,
 	}
 	if cfg.ContentField == "" {
 		cfg.ContentField = "text"
@@ -152,6 +163,7 @@ func (s *ChatService) ImportFile(ctx context.Context, collectionName, filePath s
 	}
 
 	s.logger.Info("import completed successfully", "collection", collectionName, "path", filePath)
+
 	return nil
 }
 
@@ -169,6 +181,7 @@ func (s *ChatService) ListCollections(ctx context.Context) ([]client.Collection,
 // ListCollectionsWithCount returns all collections with their document counts.
 func (s *ChatService) ListCollectionsWithCount(ctx context.Context) ([]CollectionWithCount, error) {
 	s.logger.Debug("listing collections with counts")
+
 	collections, err := s.chromaClient.ListCollections(ctx)
 	if err != nil {
 		s.logger.Error("failed to list collections", "err", err)
@@ -179,12 +192,10 @@ func (s *ChatService) ListCollectionsWithCount(ctx context.Context) ([]Collectio
 	for i, col := range collections {
 		result[i] = CollectionWithCount{Collection: col}
 
-		// NOTE: ListDocuments can be expensive for large collections. 
-		// In a high-scale production environment, a dedicated count API should be used.
-		records, err := s.chromaClient.ListDocuments(ctx, col.ID)
-		if err == nil && records != nil {
-			result[i].Count = len(records.IDs)
-		} else if err != nil {
+		count, err := s.chromaClient.CountDocuments(ctx, col.ID)
+		if err == nil {
+			result[i].Count = int(count)
+		} else {
 			s.logger.Warn("could not retrieve document count", "collection_id", col.ID, "err", err)
 		}
 	}
@@ -199,6 +210,9 @@ func (s *ChatService) CreateCollection(ctx context.Context, name string) (string
 
 // DeleteCollection removes a collection by name.
 func (s *ChatService) DeleteCollection(ctx context.Context, name string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	return s.chromaClient.DeleteCollection(ctx, name)
 }
 
