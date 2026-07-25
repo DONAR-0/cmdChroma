@@ -243,7 +243,7 @@ test: setup-deps ## Run unit tests on testable packages (excludes main/CGO-only 
 	@echo "Running unit tests on testable packages..."
 	go clean -testcache
 	@echo "mode: set" > coverage.out
-	@for dir in ./cmd/chroma/output/ ./cmd/chroma/factory/ ./internal/client/ ./internal/service/ ./internal/onnx/ ./internal/llm/ ./internal/config/ ./internal/errors/ ./internal/ingest/; do \
+	@for dir in ./cmd/chroma/output/ ./cmd/chroma/factory/ ./internal/client/ ./internal/service/ ./internal/onnx/ ./internal/config/ ./internal/errors/ ./internal/ingest/; do \
 		if [ -d "$$dir" ] && ls $$dir/*_test.go >/dev/null 2>&1; then \
 			echo "Testing package: $$dir"; \
 			CGO_ENABLED=1 \

@@ -1,3 +1,5 @@
+//go:build onnxgenai
+
 package api
 
 import (

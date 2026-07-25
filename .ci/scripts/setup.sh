@@ -44,6 +44,7 @@ echo "🧠 Downloading ONNX Runtime GenAI (v${ONNX_GENAI_VERSION})..."
 if [ ! -f "$MODEL_DIR/onnx_runtime/lib/libonnxruntime-genai.so" ]; then
   curl -L "$ONNX_GENAI_URL" -o onnxruntime-genai.tgz
   tar -xzf onnxruntime-genai.tgz --strip-components=1 -C "$MODEL_DIR/onnx_runtime" onnxruntime-genai-${ONNX_GENAI_VERSION}-linux-x64/lib/
+  tar -xzf onnxruntime-genai.tgz --strip-components=1 -C "$MODEL_DIR/onnx_runtime" onnxruntime-genai-${ONNX_GENAI_VERSION}-linux-x64/include/
   rm onnxruntime-genai.tgz
 else
   echo "✅ ONNX Runtime GenAI already exists: $MODEL_DIR/onnx_runtime/lib/libonnxruntime-genai.so"
