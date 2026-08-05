@@ -69,7 +69,7 @@ testcases:
     tags: ["integration"]
     steps:
       - type: exec
-        script: cmdChroma --quiet t --port 60999 2>&1
+        script: cmdChroma --quiet t --port 60999 --timeout 10 2>&1
         assertions:
           - result.code ShouldNotEqual 0
           - result.systemout ShouldContainSubstring "Connection failed"

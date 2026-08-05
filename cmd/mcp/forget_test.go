@@ -13,7 +13,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func callForget(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callForget(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)

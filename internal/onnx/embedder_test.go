@@ -11,9 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	testEmbedder *Embedder
-)
+var testEmbedder *Embedder
 
 // TestMain initializes the ONNX runtime once for all tests
 func TestMain(m *testing.M) {

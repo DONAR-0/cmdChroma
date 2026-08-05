@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"testing"
 
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
@@ -128,7 +127,7 @@ type mockChromaClient struct {
 	CreateDatabaseErr      error
 
 	// The last embedder passed to SetEmbedder (if any).
-	LastEmbedder onnx.EmbedderInterface
+	LastEmbedder *onnx.Embedder
 }
 
 func (m *mockChromaClient) TestConnection(_ context.Context) error {
@@ -242,7 +241,7 @@ func (m *mockChromaClient) DeleteRecords(_ context.Context, collectionID string,
 	return m.DeleteRecordsErr
 }
 
-func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {
+func (m *mockChromaClient) SetEmbedder(e *onnx.Embedder) {
 	m.NoArg.SetEmbedder++
 	m.LastEmbedder = e
 }
@@ -298,16 +297,4 @@ func (m *mockEmbedder) Close() {
 // Tests that care about specific dimension should override `.Vector`.
 func newTestEmbedder() *mockEmbedder {
 	return &mockEmbedder{Vector: []float32{0.1, 0.2, 0.3, 0.4}}
-}
-
-// -----------------------------------------------------------------------------
-// T-02 smoke test: verify mocks satisfy the interfaces so future tests can
-// rely on them. Detects signature drift in either interface immediately.
-// -----------------------------------------------------------------------------
-
-func TestMocksSatisfyInterfaces(t *testing.T) {
-	var (
-		_ client.ChromaClientInterface = (*mockChromaClient)(nil)
-		_ onnx.EmbedderInterface       = (*mockEmbedder)(nil)
-	)
 }

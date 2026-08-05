@@ -77,7 +77,7 @@ jobs:
       run: |
         LIBRARY_PATH="${{ env.TOKENIZER_LIB_DIR }}:${LIBRARY_PATH}" \
         LD_LIBRARY_PATH="${{ env.ONNX_LIB_DIR }}:${LD_LIBRARY_PATH}" \
-        go test -race -count=1 ./cmd/mcp-server/
+        go test -race -count=1 ./cmd/mcp/
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
@@ -122,7 +122,7 @@ jobs:
         LD_LIBRARY_PATH: ${{ env.ONNX_LIB_DIR }}:${{ env.LD_LIBRARY_PATH }}
 
     - name: Build MCP server
-      run: make build-mcp-server
+      run: make build-mcp
       env:
         CGO_ENABLED: 1
         LD_LIBRARY_PATH: ${{ env.ONNX_LIB_DIR }}:${{ env.LD_LIBRARY_PATH }}
@@ -136,5 +136,5 @@ jobs:
     - name: Upload MCP server artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: mcp-server-linux-amd64
-        path: ./dist/mcp-server*
+        name: mcp-linux-amd64
+        path: ./dist/mcp*

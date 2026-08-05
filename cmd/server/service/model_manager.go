@@ -99,7 +99,7 @@ func (m *ModelManager) DownloadModel(modelID string, progressFn func(int)) error
 	m.logger.Info("downloading model", "model", modelID, "repo", target.HFRepo)
 
 	dest := filepath.Join(m.modelsDir, modelID)
-	if err := os.MkdirAll(dest, 0755); err != nil {
+	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return fmt.Errorf("failed to create model dir: %w", err)
 	}
 
@@ -121,12 +121,4 @@ func (m *ModelManager) DownloadModel(modelID string, progressFn func(int)) error
 	m.logger.Info("download completed", "model", modelID)
 
 	return nil
-}
-
-func (m *ModelManager) GetModelPath(modelID string) (string, error) {
-	if !m.IsInstalled(modelID) {
-		return "", fmt.Errorf("model %s not installed", modelID)
-	}
-
-	return filepath.Join(m.modelsDir, modelID), nil
 }

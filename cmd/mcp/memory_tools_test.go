@@ -13,7 +13,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func callStoreMemory(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callStoreMemory(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)
@@ -45,7 +45,7 @@ func callStoreMemory(t *testing.T, chroma client.ChromaClientInterface, args map
 	})
 }
 
-func callSearchMemories(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callSearchMemories(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)
@@ -77,7 +77,7 @@ func callSearchMemories(t *testing.T, chroma client.ChromaClientInterface, args 
 	})
 }
 
-func callStoreCodeSnippet(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callStoreCodeSnippet(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)
@@ -109,7 +109,7 @@ func callStoreCodeSnippet(t *testing.T, chroma client.ChromaClientInterface, arg
 	})
 }
 
-func callSearchCode(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callSearchCode(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)
@@ -141,7 +141,7 @@ func callSearchCode(t *testing.T, chroma client.ChromaClientInterface, args map[
 	})
 }
 
-func callGetSession(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callGetSession(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)

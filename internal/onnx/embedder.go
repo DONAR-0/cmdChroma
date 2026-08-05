@@ -19,17 +19,8 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-var (
-	// MustClose is a wrapper around internal.CheckDefer for cleaning up resources.
-	MustClose = internal.CheckDefer
-)
-
-// EmbedderInterface defines the contract for embedding text into vectors.
-type EmbedderInterface interface {
-	Embed(text string) ([]float32, error)
-	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
-	Close()
-}
+// MustClose is a wrapper around internal.CheckDefer for cleaning up resources.
+var MustClose = internal.CheckDefer
 
 // EmbedderOption configures an Embedder.
 type EmbedderOption func(*Embedder)
@@ -73,20 +64,20 @@ type Embedder struct {
 //   - *Embedder: Ready to use embedder
 //   - error: If model loading, tokenizer loading, or ONNX initialization fails
 func NewEmbedder(modelPath, tokenizersPath, libpath string, opts ...EmbedderOption) (*Embedder, error) {
-	//1. Setup the ONNX Library
+	// 1. Setup the ONNX Library
 	ort.SetSharedLibraryPath(libpath)
 
 	if err := ort.InitializeEnvironment(); err != nil {
 		return nil, fmt.Errorf("error received when initialize the ONNX Library: %w", err)
 	}
 
-	//2. Load dictionary
+	// 2. Load dictionary
 	tk, err := tokenizers.FromFile(tokenizersPath)
 	if err != nil {
 		return nil, fmt.Errorf("error received when initialize tokenizers from file: %w", err)
 	}
 
-	//3. Load brain
+	// 3. Load brain
 	inputNames := []string{"input_ids", "attention_mask", "token_type_ids"}
 	outputNames := []string{"last_hidden_state"}
 

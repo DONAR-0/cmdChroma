@@ -43,7 +43,7 @@ help: ## Show this help message
 .PHONY: run
 run: ## Run in dev mode (Handles LD_LIBRARY_PATH for ONNX)
 	@echo "Running in development mode..."
-	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" go run $(MAIN_PATH)
+	LD_LIBRARY_PATH="$(TOKENIZER_LIB_DIR):$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" go run $(MAIN_PATH)
 
 .PHONY: dev
 dev: ## Run full development cycle: format, lint, test, and venom
@@ -74,7 +74,7 @@ dev: ## Run full development cycle: format, lint, test, and venom
 # Use single $ for the variable definition, but we will escape it in the command
 # Define the RPATH relative to the binary's location
 # We use '$$ORIGIN' so Make passes '$ORIGIN' to the shell
-RPATH_VALUE = '$$ORIGIN/../models/onnx_runtime/lib:$$ORIGIN/../models/tokenizerLib'
+RPATH_VALUE = $(PROJECT_DIR)/models/onnx_runtime/lib:$(PROJECT_DIR)/tokenizerLib
 
 .PHONY: build
 build:
@@ -83,12 +83,12 @@ build:
 	CGO_ENABLED=1 \
 	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/$(BINARY_NAME) ./cmd/chroma
 
-.PHONY: build-mcp-server
-build-mcp-server: setup-deps ## Build the MCP server binary
+.PHONY: build-mcp
+build-mcp: setup-deps ## Build the MCP server binary
 	@echo "Building MCP server..."
 	@mkdir -p ./dist
 	CGO_ENABLED=1 \
-	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/mcp-server ./cmd/mcp-server
+	go build -v -ldflags="-r $(RPATH_VALUE)" -o ./dist/mcp ./cmd/mcp
 
 .PHONY: clean
 clean: ## Remove build artifacts, coverage profiles, and test caches
@@ -102,7 +102,7 @@ clean: ## Remove build artifacts, coverage profiles, and test caches
 # ==============================================================================
 
 .PHONY: venom
-venom: build build-mcp-server ## Build and run Venom integration tests
+venom: build build-mcp ## Build and run Venom integration tests
 	@echo "🚀 Preparing Venom Integration Tests..."
 	@# Ensure the script is executable
 	@chmod +x ./.ci/scripts/run-venom.sh
@@ -117,7 +117,7 @@ venom-clean: ## Remove Venom logs and reports
 	@echo "✅ Clean complete"
 
 .PHONY: venom-mcp
-venom-mcp: build-mcp-server ## Run MCP server Venom integration tests
+venom-mcp: build-mcp ## Run MCP server Venom integration tests
 	@echo "🚀 Preparing MCP Venom Integration Tests..."
 	@chmod +x ./.ci/scripts/run-venom.sh
 	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)"; \
@@ -125,24 +125,24 @@ venom-mcp: build-mcp-server ## Run MCP server Venom integration tests
 
 
 # ==============================================================================
-# Chat Server Targets
+# Server Targets
 # ==============================================================================
 
-CHAT_SERVER_MAIN=./cmd/chat-server
+SERVER_MAIN=./cmd/server
 
-.PHONY: run-chat-server
-run-chat-server: setup-deps ## Run the chat-server in dev mode
-	@echo "Starting chat-server..."
+.PHONY: run-server
+run-server: setup-deps ## Run the server in dev mode
+	@echo "Starting server..."
 	@mkdir -p $(BUILD_DIR)
 	LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
-	go run $(CHAT_SERVER_MAIN)
+	go run $(SERVER_MAIN)
 
-.PHONY: build-chat-server
-build-chat-server: setup-deps ## Build the chat-server binary
-	@echo "Building chat-server..."
+.PHONY: build-server
+build-server: setup-deps ## Build the server binary
+	@echo "Building server..."
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 \
-	go build -v -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/chat-server $(CHAT_SERVER_MAIN)
+	go build -v -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/server $(SERVER_MAIN)
 
 # ==============================================================================
 # Cross-Compilation Targets
@@ -210,21 +210,21 @@ web-scaffold: web-install web-build ## Scaffold: install deps and build
 build-mcp-all: build-mcp-linux build-mcp-darwin build-mcp-windows ## Build MCP server for all platforms (best-effort CGO)
 
 .PHONY: build-mcp-linux
-build-mcp-linux: build-mcp-server ## Build MCP server for Linux (amd64)
+build-mcp-linux: build-mcp ## Build MCP server for Linux (amd64)
 	@mkdir -p $(BUILD_DIR)
-	cp $(BUILD_DIR)/mcp-server $(BUILD_DIR)/mcp-server-linux-amd64
+	cp $(BUILD_DIR)/mcp $(BUILD_DIR)/mcp-linux-amd64
 
 .PHONY: build-mcp-darwin
 build-mcp-darwin: setup-deps ## Build MCP server for macOS (amd64)
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
-		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp-server-darwin-amd64 ./cmd/mcp-server
+		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp-darwin-amd64 ./cmd/mcp
 
 .PHONY: build-mcp-windows
 build-mcp-windows: setup-deps ## Build MCP server for Windows (amd64)
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
-		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp-server.exe ./cmd/mcp-server
+		go build -ldflags="-r $(RPATH_VALUE)" -o $(BUILD_DIR)/mcp.exe ./cmd/mcp
 
 .PHONY: deps
 deps: ## Download and tidy go modules
@@ -248,7 +248,7 @@ test: setup-deps ## Run unit tests on testable packages (excludes main/CGO-only 
 			echo "Testing package: $$dir"; \
 			CGO_ENABLED=1 \
 			LIBRARY_PATH="$(TOKENIZER_LIB_DIR):$${LIBRARY_PATH}" \
-			LD_LIBRARY_PATH="$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
+			LD_LIBRARY_PATH="$(TOKENIZER_LIB_DIR):$(ONNX_LIB_DIR):$(LD_LIBRARY_PATH)" \
 			go test -v -coverprofile=profile.out $$dir || exit 1; \
 			if [ -f profile.out ]; then \
 				grep -v "mode: set" profile.out >> coverage.out || true; \
@@ -295,9 +295,9 @@ generate: ## Run go code generation (if any)
 
 .PHONY: fmt
 fmt: ## Format source code
-	go fmt ./...
+	gofumpt -w -l .
 	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run --no-config --enable-only wsl_v5 --fix; \
+		golangci-lint run --no-config --enable-only wsl_v5 --fix ./cmd/... ./internal/...; \
 	fi
 	
 .PHONY: lint

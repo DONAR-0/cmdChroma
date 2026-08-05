@@ -45,7 +45,7 @@ export LD_LIBRARY_PATH="$REPO_ROOT/models/onnx_runtime/lib:${LD_LIBRARY_PATH:-}"
 echo "DEBUG: REPO_ROOT=$REPO_ROOT"
 echo "DEBUG: PWD=$PWD"
 echo "DEBUG: PATH=$PATH"
-echo "DEBUG: Checking for mcp-server in dist: $(ls -la $REPO_ROOT/dist/mcp-server 2>/dev/null || echo 'not found')"
+echo "DEBUG: Checking for mcp in dist: $(ls -la $REPO_ROOT/dist/mcp 2>/dev/null || echo 'not found')"
 
 # Ensure ChromaDB is running
 echo "Checking for ChromaDB..."

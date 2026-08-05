@@ -377,7 +377,7 @@ func TestConfig_LoadConfig_FromFile(t *testing.T) {
 	}()
 
 	yamlData := "chroma:\n  host: filehost\n  port: \"1234\"\n  tenant: filetenant\n  database: filedb\n"
-	if err := os.WriteFile(".cmdChroma.yaml", []byte(yamlData), 0644); err != nil {
+	if err := os.WriteFile(".cmdChroma.yaml", []byte(yamlData), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -480,7 +480,7 @@ func TestConfigFindConfigFile_WithFile(t *testing.T) {
 		}
 	}()
 
-	if err := os.WriteFile("cmdChroma.yaml", []byte("chroma:\n  host: testhost\n"), 0644); err != nil {
+	if err := os.WriteFile("cmdChroma.yaml", []byte("chroma:\n  host: testhost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

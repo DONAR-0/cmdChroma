@@ -15,26 +15,48 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 	"github.com/DONAR-0/cmdChroma/internal/errors"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
-	"github.com/DONAR-0/cmdChroma/internal/onnx"
 )
 
 // ============ Service Definition ============
+
+// chromaClient is the subset of *client.ChromaClient needed by ChromaService.
+type chromaClient interface {
+	ResolveCollectionID(ctx context.Context, input string) (string, error)
+	AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error
+	AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error)
+	ListCollections(ctx context.Context) ([]client.Collection, error)
+	ListDocuments(ctx context.Context, collectionID string) (*client.GetRecordsResponse, error)
+	CountDocuments(ctx context.Context, collectionID string) (int64, error)
+	TestConnection(ctx context.Context) error
+	GetTenant(ctx context.Context) (bool, error)
+	ListDatabases(ctx context.Context) ([]client.Database, error)
+	CreateDatabase(ctx context.Context, name string) error
+	DeleteCollection(ctx context.Context, name string) error
+	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
+	CreateCollection(ctx context.Context, name string) (string, error)
+	GetIDByName(ctx context.Context, name string) (string, error)
+}
+
+// embedder is the subset of *onnx.Embedder needed by ChromaService.
+type embedder interface {
+	Close()
+}
 
 // ChromaService handles business logic for ChromaDB operations.
 // It coordinates between the client (HTTP API) and embedder (vector generation)
 // to provide high-level operations like AddDocuments, QueryDocuments, and IngestRecords.
 type ChromaService struct {
 	// client is the underlying ChromaDB HTTP client. Must be non-nil.
-	client client.ChromaClientInterface
+	client chromaClient
 	// embedder is used to generate embeddings for documents and queries.
 	// Must be non-nil for operations that require embeddings.
-	embedder onnx.EmbedderInterface
+	embedder embedder
 }
 
 // NewChromaService creates a new service with the given client and embedder.
-func NewChromaService(c client.ChromaClientInterface, e onnx.EmbedderInterface) *ChromaService {
-	c.SetEmbedder(e)
-
+func NewChromaService(c chromaClient, e embedder) *ChromaService {
 	return &ChromaService{
 		client:   c,
 		embedder: e,
@@ -75,6 +97,18 @@ func (s *ChromaService) ListDatabases(ctx context.Context) ([]client.Database, e
 
 	return databases, nil
 }
+
+// CreateDatabase creates a new database. ctx propagates to the HTTP round trip.
+func (s *ChromaService) CreateDatabase(ctx context.Context, name string) error {
+	err := s.client.CreateDatabase(ctx, name)
+	if err != nil {
+		slog.Error("Failed to create database", "name", name, "error", err)
+	}
+
+	return err
+}
+
+// ============ Discovery Operations ============
 
 // ListCollections lists all collections in the database. ctx propagates to the
 // HTTP round trip.
@@ -169,7 +203,7 @@ func (s *ChromaService) QueryDocuments(ctx context.Context, collectionName strin
 }
 
 // GetDocuments returns documents from a collection by name or ID. It handles
-// collection name→ID resolution internally. ctx propagates to all client
+// collection name->ID resolution internally. ctx propagates to all client
 // HTTP calls.
 func (s *ChromaService) GetDocuments(ctx context.Context, collectionName string) (*client.GetRecordsResponse, error) {
 	collectionID, err := s.client.ResolveCollectionID(ctx, collectionName)

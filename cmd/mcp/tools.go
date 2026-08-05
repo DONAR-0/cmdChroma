@@ -22,8 +22,27 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/DONAR-0/cmdChroma/internal/client"
-	"github.com/DONAR-0/cmdChroma/internal/onnx"
 )
+
+// chromaClient is the subset of *client.ChromaClient methods used by MCP handlers.
+type chromaClient interface {
+	ResolveCollectionID(ctx context.Context, input string) (string, error)
+	AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error
+	AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error)
+	ListCollections(ctx context.Context) ([]client.Collection, error)
+	CreateCollection(ctx context.Context, name string) (string, error)
+	DeleteCollection(ctx context.Context, name string) error
+	ListDocuments(ctx context.Context, collectionID string) (*client.GetRecordsResponse, error)
+	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
+}
+
+// textEmbedder is the subset of *onnx.Embedder methods used by MCP handlers.
+type textEmbedder interface {
+	Embed(text string) ([]float32, error)
+	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
+	Close()
+}
 
 const (
 	serverName        = "cmdChroma MCP"
@@ -35,7 +54,7 @@ const (
 	shutdownTimeout   = 5 * time.Second
 )
 
-func buildServer(chroma client.ChromaClientInterface, embedder onnx.EmbedderInterface, mode string) *server.MCPServer {
+func buildServer(chroma chromaClient, embedder textEmbedder, mode string) *server.MCPServer {
 	_ = embedder
 
 	s := server.NewMCPServer(
@@ -175,7 +194,7 @@ func withOutputBudget(t mcp.Tool, maxChars int) mcp.Tool {
 	return t
 }
 
-func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterface) {
+func registerMemoryTools(s *server.MCPServer, chroma chromaClient) {
 	storeMemTool := mcp.NewTool("store_memory",
 		mcp.WithDescription("Store a piece of knowledge for future retrieval"),
 		mcp.WithToolTitle("Store Memory"),
@@ -271,7 +290,7 @@ func registerMemoryTools(s *server.MCPServer, chroma client.ChromaClientInterfac
 	))
 }
 
-func handleStoreDocuments(ctx context.Context, chroma client.ChromaClientInterface, in StoreDocumentsInput) (StoreDocumentsOutput, error) {
+func handleStoreDocuments(ctx context.Context, chroma chromaClient, in StoreDocumentsInput) (StoreDocumentsOutput, error) {
 	if in.CollectionID == "" {
 		return StoreDocumentsOutput{}, fmt.Errorf("collection_id is required")
 	}
@@ -334,7 +353,7 @@ func handleStoreDocuments(ctx context.Context, chroma client.ChromaClientInterfa
 	return StoreDocumentsOutput{Count: len(in.Documents), IDs: ids}, nil
 }
 
-func handleQueryDocuments(ctx context.Context, chroma client.ChromaClientInterface, in QueryDocumentsInput) (QueryDocumentsOutput, error) {
+func handleQueryDocuments(ctx context.Context, chroma chromaClient, in QueryDocumentsInput) (QueryDocumentsOutput, error) {
 	if in.CollectionID == "" {
 		return QueryDocumentsOutput{}, fmt.Errorf("collection_id is required")
 	}
@@ -383,7 +402,7 @@ func handleQueryDocuments(ctx context.Context, chroma client.ChromaClientInterfa
 	return out, nil
 }
 
-func handleCollectionList(ctx context.Context, chroma client.ChromaClientInterface) (CollectionListOutput, error) {
+func handleCollectionList(ctx context.Context, chroma chromaClient) (CollectionListOutput, error) {
 	cols, err := chroma.ListCollections(ctx)
 	if err != nil {
 		return CollectionListOutput{}, fmt.Errorf("list collections failed: %v", err)
@@ -402,7 +421,7 @@ func handleCollectionList(ctx context.Context, chroma client.ChromaClientInterfa
 	return out, nil
 }
 
-func handleCollectionCreate(ctx context.Context, chroma client.ChromaClientInterface, in CollectionCreateInput) (CollectionCreateOutput, error) {
+func handleCollectionCreate(ctx context.Context, chroma chromaClient, in CollectionCreateInput) (CollectionCreateOutput, error) {
 	if in.Name == "" {
 		return CollectionCreateOutput{}, fmt.Errorf("name is required")
 	}
@@ -415,7 +434,7 @@ func handleCollectionCreate(ctx context.Context, chroma client.ChromaClientInter
 	return CollectionCreateOutput{ID: id, Name: in.Name}, nil
 }
 
-func handleCollectionDelete(ctx context.Context, chroma client.ChromaClientInterface, in CollectionDeleteInput) (CollectionDeleteOutput, error) {
+func handleCollectionDelete(ctx context.Context, chroma chromaClient, in CollectionDeleteInput) (CollectionDeleteOutput, error) {
 	if in.Name == "" {
 		return CollectionDeleteOutput{}, fmt.Errorf("name is required")
 	}
@@ -427,7 +446,7 @@ func handleCollectionDelete(ctx context.Context, chroma client.ChromaClientInter
 	return CollectionDeleteOutput{Deleted: true, Name: in.Name}, nil
 }
 
-func handleCollectionStats(ctx context.Context, chroma client.ChromaClientInterface, in CollectionStatsInput) (CollectionStatsOutput, error) {
+func handleCollectionStats(ctx context.Context, chroma chromaClient, in CollectionStatsInput) (CollectionStatsOutput, error) {
 	if in.CollectionID == "" {
 		return CollectionStatsOutput{}, fmt.Errorf("collection_id is required")
 	}
@@ -459,7 +478,7 @@ func handleCollectionStats(ctx context.Context, chroma client.ChromaClientInterf
 	return out, nil
 }
 
-func handleForget(ctx context.Context, chroma client.ChromaClientInterface, in ForgetInput) (ForgetOutput, error) {
+func handleForget(ctx context.Context, chroma chromaClient, in ForgetInput) (ForgetOutput, error) {
 	if in.CollectionID == "" {
 		return ForgetOutput{}, fmt.Errorf("collection_id is required")
 	}

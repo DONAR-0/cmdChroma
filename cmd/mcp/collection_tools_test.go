@@ -13,7 +13,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func callCollectionTool(t *testing.T, chroma client.ChromaClientInterface, toolName string, args map[string]any) (*mcp.CallToolResult, error) {
+func callCollectionTool(t *testing.T, chroma chromaClient, toolName string, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)

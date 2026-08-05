@@ -105,7 +105,7 @@ func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (str
 	return "test-collection-id", nil
 }
 
-func (m *mockChromaClient) SetEmbedder(_ onnx.EmbedderInterface) {}
+func (m *mockChromaClient) SetEmbedder(_ *onnx.Embedder) {}
 
 type mockEmbedder struct{}
 
@@ -468,6 +468,7 @@ func TestChromaService_IngestRecords_NoEmbedder(t *testing.T) {
 func TestChromaService_NewChromaService(t *testing.T) {
 	realClient := &client.ChromaClient{}
 	embedder := &mockEmbedder{}
+	realClient.SetEmbedder(embedder)
 	svc := NewChromaService(realClient, embedder)
 
 	if svc.client != realClient {

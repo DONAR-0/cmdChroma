@@ -9,9 +9,8 @@ import (
 	"github.com/tmc/langchaingo/vectorstores"
 )
 
-// mockClient implements ChromaClientInterface for testing.
+// mockClient provides canned responses for AddBatchGeneric and QueryBatch.
 type mockClient struct {
-	client.ChromaClientInterface
 	queryBatchFunc func(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error)
 }
 

@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
@@ -40,37 +42,22 @@ var (
 
 // ============ Core Types ============
 
-type (
-	// ChromaClient is the concrete implementation of ChromaClientInterface.
-	ChromaClient struct {
-		URL      string
-		Tenant   string
-		Database string
-		client   *http.Client
-		Embedder onnx.EmbedderInterface
-	}
+var _ embedder = (*onnx.Embedder)(nil)
 
-	// ChromaClientInterface defines the contract for ChromaDB clients.
-	ChromaClientInterface interface {
-		TestConnection(ctx context.Context) error
-		GetTenant(ctx context.Context) (bool, error)
-		ListDatabases(ctx context.Context) ([]Database, error)
-		CreateDatabase(ctx context.Context, name string) error
-		ListCollections(ctx context.Context) ([]Collection, error)
-		CountDocuments(ctx context.Context, collectionID string) (int64, error)
-		CreateCollection(ctx context.Context, name string) (string, error)
-		AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error
-		AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
-		UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
-		QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*QueryResponse, error)
-		GetIDByName(ctx context.Context, name string) (string, error)
-		ListDocuments(ctx context.Context, collectionID string) (*GetRecordsResponse, error)
-		ResolveCollectionID(ctx context.Context, input string) (string, error)
-		DeleteCollection(ctx context.Context, name string) error
-		DeleteRecords(ctx context.Context, collectionID string, ids []string) error
-		SetEmbedder(e onnx.EmbedderInterface)
-	}
-)
+// embedder is the subset of *onnx.Embedder used by *ChromaClient.
+type embedder interface {
+	Embed(text string) ([]float32, error)
+	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
+	Close()
+}
+
+type ChromaClient struct {
+	URL      string
+	Tenant   string
+	Database string
+	client   *http.Client
+	Embedder embedder
+}
 
 // ============ Data Transfer Types ============
 
@@ -142,7 +129,12 @@ func NewChromaDBClient(url, tenant, database string) *ChromaClient {
 		URL:      url,
 		Tenant:   tenant,
 		Database: database,
-		client:   &http.Client{},
+		client: &http.Client{
+			Transport: &http.Transport{
+				Proxy:       http.ProxyFromEnvironment,
+				DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+			},
+		},
 	}
 }
 
@@ -160,7 +152,11 @@ func (c *ChromaClient) TestConnection(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to ChromaDB at %s: %w", c.URL, err)
 	}
-	defer MustClose(resp.Body.Close)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Warn("deferred close failed", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -169,6 +165,8 @@ func (c *ChromaClient) TestConnection(ctx context.Context) error {
 
 	return nil
 }
+
+// ============ Tenant & Database ============
 
 func (c *ChromaClient) GetTenant(ctx context.Context) (bool, error) {
 	endpoint := fmt.Sprintf(getTenant, c.URL, c.Tenant)
@@ -194,8 +192,6 @@ func (c *ChromaClient) GetTenant(ctx context.Context) (bool, error) {
 
 	return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 }
-
-// ============ Databases ============
 
 func (c *ChromaClient) ListDatabases(ctx context.Context) ([]Database, error) {
 	endpoint := fmt.Sprintf(listDatabases, c.URL, c.Tenant)
@@ -451,7 +447,7 @@ func (c *ChromaClient) ResolveCollectionID(ctx context.Context, input string) (s
 	return "", fmt.Errorf("collection %q not found", input)
 }
 
-func (c *ChromaClient) SetEmbedder(e onnx.EmbedderInterface) {
+func (c *ChromaClient) SetEmbedder(e embedder) {
 	c.Embedder = e
 }
 
@@ -581,46 +577,6 @@ func (c *ChromaClient) DeleteRecords(ctx context.Context, collectionID string, i
 	}
 
 	return nil
-}
-
-// ============ Embedding ============
-
-func (c *ChromaClient) AddDocument(collectionID, id, text string, vector []float32) error {
-	endpoint := fmt.Sprintf(batchAdd, c.URL, c.Tenant, c.Database, collectionID)
-	payload := AddRecordsRequest{
-		IDs:        []string{id},
-		Documents:  []string{text},
-		Embeddings: [][]float32{vector},
-	}
-	jsonData, _ := json.Marshal(payload)
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer MustClose(resp.Body.Close)
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("chroma error (%d): %s", resp.StatusCode, string(body))
-	}
-
-	return nil
-}
-
-func (c *ChromaClient) GenerateLocalEmbedding(text string) ([]float32, error) {
-	if c.Embedder == nil {
-		return nil, fmt.Errorf("embedder is not initialized")
-	}
-
-	return c.Embedder.Embed(text)
 }
 
 // ============ Querying ============

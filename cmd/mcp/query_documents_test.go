@@ -14,7 +14,7 @@ import (
 	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func callQueryDocuments(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callQueryDocuments(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)

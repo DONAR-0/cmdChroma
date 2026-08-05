@@ -3,9 +3,9 @@
 package api
 
 import (
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/api/handler"
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/api/middleware"
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/config"
+	"github.com/DONAR-0/cmdChroma/cmd/server/api/handler"
+	"github.com/DONAR-0/cmdChroma/cmd/server/api/middleware"
+	"github.com/DONAR-0/cmdChroma/cmd/server/config"
 	"github.com/gin-gonic/gin"
 )
 

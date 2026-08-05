@@ -10,11 +10,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/mcptest"
 	"github.com/mark3labs/mcp-go/server"
-
-	client "github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func callStoreDocuments(t *testing.T, chroma client.ChromaClientInterface, args map[string]any) (*mcp.CallToolResult, error) {
+func callStoreDocuments(t *testing.T, chroma chromaClient, args map[string]any) (*mcp.CallToolResult, error) {
 	t.Helper()
 
 	ms := mcptest.NewUnstartedServer(t)

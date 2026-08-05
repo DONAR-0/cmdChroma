@@ -5,11 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
-	"github.com/DONAR-0/cmdChroma/internal/client"
 )
 
-func handleStoreMemory(ctx context.Context, chroma client.ChromaClientInterface, in StoreMemoryInput) (StoreMemoryOutput, error) {
+func handleStoreMemory(ctx context.Context, chroma chromaClient, in StoreMemoryInput) (StoreMemoryOutput, error) {
 	if in.Content == "" {
 		return StoreMemoryOutput{}, fmt.Errorf("content is required")
 	}
@@ -45,7 +43,7 @@ func handleStoreMemory(ctx context.Context, chroma client.ChromaClientInterface,
 	return StoreMemoryOutput{ID: id, Count: 1}, nil
 }
 
-func handleSearchMemories(ctx context.Context, chroma client.ChromaClientInterface, in SearchMemoriesInput) (SearchMemoriesOutput, error) {
+func handleSearchMemories(ctx context.Context, chroma chromaClient, in SearchMemoriesInput) (SearchMemoriesOutput, error) {
 	if in.Query == "" {
 		return SearchMemoriesOutput{}, fmt.Errorf("query is required")
 	}
@@ -113,7 +111,7 @@ func handleSearchMemories(ctx context.Context, chroma client.ChromaClientInterfa
 	return SearchMemoriesOutput{Results: results}, nil
 }
 
-func handleStoreCodeSnippet(ctx context.Context, chroma client.ChromaClientInterface, in StoreCodeSnippetInput) (StoreCodeSnippetOutput, error) {
+func handleStoreCodeSnippet(ctx context.Context, chroma chromaClient, in StoreCodeSnippetInput) (StoreCodeSnippetOutput, error) {
 	if in.Code == "" {
 		return StoreCodeSnippetOutput{}, fmt.Errorf("code is required")
 	}
@@ -153,7 +151,7 @@ func handleStoreCodeSnippet(ctx context.Context, chroma client.ChromaClientInter
 	return StoreCodeSnippetOutput{ID: id, Count: 1}, nil
 }
 
-func handleSearchCode(ctx context.Context, chroma client.ChromaClientInterface, in SearchCodeInput) (SearchCodeOutput, error) {
+func handleSearchCode(ctx context.Context, chroma chromaClient, in SearchCodeInput) (SearchCodeOutput, error) {
 	if in.Query == "" {
 		return SearchCodeOutput{}, fmt.Errorf("query is required")
 	}
@@ -221,7 +219,7 @@ func handleSearchCode(ctx context.Context, chroma client.ChromaClientInterface, 
 	return SearchCodeOutput{Results: results}, nil
 }
 
-func handleGetSession(ctx context.Context, chroma client.ChromaClientInterface, in GetSessionInput) (GetSessionOutput, error) {
+func handleGetSession(ctx context.Context, chroma chromaClient, in GetSessionInput) (GetSessionOutput, error) {
 	if in.ID == "" {
 		return GetSessionOutput{}, fmt.Errorf("id is required")
 	}

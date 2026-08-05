@@ -11,14 +11,20 @@ import (
 	"github.com/tmc/langchaingo/vectorstores"
 )
 
-// ChromaStore implements langchaingo.VectorStore using ChromaClientInterface.
+// storeClient is the subset of *client.ChromaClient needed by ChromaStore.
+type storeClient interface {
+	AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error)
+}
+
+// ChromaStore implements langchaingo.VectorStore using the ChromaDB client.
 type ChromaStore struct {
-	client       client.ChromaClientInterface
+	client       storeClient
 	collectionID string
 }
 
 // NewChromaStore creates a new ChromaStore backed by the given client and collection.
-func NewChromaStore(c client.ChromaClientInterface, collectionID string) *ChromaStore {
+func NewChromaStore(c storeClient, collectionID string) *ChromaStore {
 	return &ChromaStore{
 		client:       c,
 		collectionID: collectionID,

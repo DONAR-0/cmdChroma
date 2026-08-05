@@ -21,30 +21,39 @@ func (m *mockChromaClient) CreateDatabase(ctx context.Context, name string) erro
 func (m *mockChromaClient) ListCollections(ctx context.Context) ([]client.Collection, error) {
 	return nil, nil
 }
+
 func (m *mockChromaClient) CountDocuments(ctx context.Context, collectionID string) (int64, error) {
 	return 0, nil
 }
+
 func (m *mockChromaClient) CreateCollection(ctx context.Context, name string) (string, error) {
 	return "test-id", nil
 }
+
 func (m *mockChromaClient) AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error {
 	return nil
 }
+
 func (m *mockChromaClient) AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	return nil
 }
+
 func (m *mockChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error {
 	return nil
 }
+
 func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return nil, nil
 }
+
 func (m *mockChromaClient) GetIDByName(ctx context.Context, name string) (string, error) {
 	return "", nil
 }
+
 func (m *mockChromaClient) ListDocuments(ctx context.Context, collectionID string) (*client.GetRecordsResponse, error) {
 	return nil, nil
 }
+
 func (m *mockChromaClient) ResolveCollectionID(ctx context.Context, input string) (string, error) {
 	return "", nil
 }
@@ -52,7 +61,7 @@ func (m *mockChromaClient) DeleteCollection(ctx context.Context, name string) er
 func (m *mockChromaClient) DeleteRecords(ctx context.Context, collectionID string, ids []string) error {
 	return nil
 }
-func (m *mockChromaClient) SetEmbedder(e onnx.EmbedderInterface) {}
+func (m *mockChromaClient) SetEmbedder(e *onnx.Embedder) {}
 
 // mockEmbedder implements onnx.EmbedderInterface for testing
 type mockEmbedder struct{}
@@ -136,7 +145,7 @@ func TestServiceFactory_CreateChromaService_RequiresEmbedder(t *testing.T) {
 		},
 	}
 
-	_, _, _, err := f.CreateChromaService(cmd)
+	_, _, err := f.CreateChromaService(cmd)
 	// Expected to fail because model files don't exist
 	if err == nil {
 		t.Error("expected error for missing model files, got nil")
@@ -162,10 +171,5 @@ func findSubstring(s, substr string) bool {
 	return false
 }
 
-func TestMockClient_ImplementsInterface(t *testing.T) {
-	var _ client.ChromaClientInterface = (*mockChromaClient)(nil)
-}
-
-func TestMockEmbedder_ImplementsInterface(t *testing.T) {
-	var _ onnx.EmbedderInterface = (*mockEmbedder)(nil)
+func TestMockClient_Compiles(_ *testing.T) {
 }

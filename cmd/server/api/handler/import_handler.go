@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/service"
+	"github.com/DONAR-0/cmdChroma/cmd/server/service"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/gin-gonic/gin"
 )

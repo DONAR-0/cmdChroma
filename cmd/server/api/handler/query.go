@@ -5,9 +5,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/config"
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/service"
-	"github.com/DONAR-0/cmdChroma/cmd/chat-server/storage"
+	"github.com/DONAR-0/cmdChroma/cmd/server/config"
+	"github.com/DONAR-0/cmdChroma/cmd/server/service"
+	"github.com/DONAR-0/cmdChroma/cmd/server/storage"
 	"github.com/gin-gonic/gin"
 )
 
