@@ -29,7 +29,7 @@ type mockChromaClient struct {
 	addBatchGenericErr        error
 	upsertBatchGenericErr     error
 	queryBatchResult          *client.QueryResponse
-	queryBatchErr error
+	queryBatchErr             error
 	resolveCollectionIDResult string
 	resolveCollectionIDErr    error
 	deleteCollectionErr       error

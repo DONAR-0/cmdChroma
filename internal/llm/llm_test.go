@@ -51,6 +51,7 @@ func TestLangChainAdapter_Generate(t *testing.T) {
 			if messages[0].Role != llms.ChatMessageTypeHuman {
 				t.Errorf("expected human role, got %v", messages[0].Role)
 			}
+
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "Hello world!"},

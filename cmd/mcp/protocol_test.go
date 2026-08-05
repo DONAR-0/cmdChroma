@@ -220,7 +220,7 @@ func TestProtocol_HTTP_RoundTrip(t *testing.T) {
 			Distances: [][]float32{{0.0}},
 		},
 	}
- 	srv := buildServer(chroma, "")
+	srv := buildServer(chroma, "")
 	httpSrv := server.NewStreamableHTTPServer(srv)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

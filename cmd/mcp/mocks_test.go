@@ -82,7 +82,7 @@ type mockChromaClient struct {
 	AddBatchGenericCalls     []writeCall
 	UpsertBatchGenericCalls  []writeCall
 	QueryCalls               []queryCall
- 	ListDocsCalls            []listDocsCall
+	ListDocsCalls            []listDocsCall
 	ResolveCollectionIDCalls []resolveCollectionIDCall
 	CreateCollectionCalls    []createCollectionCall
 	CreateDatabaseCalls      []createDatabaseCall
