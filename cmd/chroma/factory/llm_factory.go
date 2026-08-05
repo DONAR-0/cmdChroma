@@ -7,13 +7,7 @@ import (
 	"github.com/DONAR-0/cmdChroma/internal/llm"
 )
 
-type LLMProviderFactory struct{}
-
-func NewLLMProviderFactory() *LLMProviderFactory {
-	return &LLMProviderFactory{}
-}
-
-func (f *LLMProviderFactory) CreateProvider(model, nimURL string) (llm.ProviderInterface, error) {
+func CreateProvider(model, nimURL string) (llm.ProviderInterface, error) {
 	if model == "" {
 		model = "qwen:0.5b"
 	}
@@ -29,7 +23,7 @@ func (f *LLMProviderFactory) CreateProvider(model, nimURL string) (llm.ProviderI
 	return llm.NewProvider(""), nil
 }
 
-func (f *LLMProviderFactory) ValidateModel(model string) error {
+func ValidateModel(model string) error {
 	if strings.HasPrefix(model, "nim://") {
 		modelID := strings.TrimPrefix(model, "nim://")
 		if modelID == "" {

@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	client "github.com/DONAR-0/cmdChroma/internal/client"
+	"github.com/DONAR-0/cmdChroma/internal/client"
+	"github.com/urfave/cli/v3"
 )
 
 func TestFormatter_FormatQueryResponse_HumanMode(t *testing.T) {
@@ -167,5 +168,27 @@ func TestFormatter_FormatQueryResponse_TruncatesLongContent(t *testing.T) {
 
 	if !strings.Contains(output, "...") {
 		t.Errorf("expected truncation marker '...' in output, got: %s", output)
+	}
+}
+
+func TestModeFromCLI(t *testing.T) {
+	cmd := &cli.Command{
+		Flags: []cli.Flag{&cli.BoolFlag{Name: "json"}},
+	}
+	if ModeFromCLI(cmd) != ModeHuman {
+		t.Errorf("ModeFromCLI() without json flag = %v, want ModeHuman", ModeFromCLI(cmd))
+	}
+
+	if err := cmd.Set("json", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	if ModeFromCLI(cmd) != ModeJSON {
+		t.Errorf("ModeFromCLI() with json flag = %v, want ModeJSON", ModeFromCLI(cmd))
+	}
+
+	// Test with non-command input
+	if ModeFromCLI(nil) != ModeHuman {
+		t.Errorf("ModeFromCLI(nil) = %v, want ModeHuman", ModeFromCLI(nil))
 	}
 }

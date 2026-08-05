@@ -92,6 +92,7 @@ func handleTestConnection(ctx context.Context, cmd *cli.Command) error {
 		// Check context deadline
 		if rlCtx.Err() == context.DeadlineExceeded {
 			slog.Error("operation_timeout", "op", opName, "timeout_s", timeout, "duration_ms", time.Since(start).Milliseconds())
+			printer.Error("Connection failed: %v", err)
 			printer.Error("Connection timed out after %d seconds", timeout)
 			printer.Info("Check if ChromaDB is running")
 			printer.Info("Verify host/port: --host %s --port %s", host, port)
@@ -194,7 +195,9 @@ func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to create Chroma client: %w", err)
 	}
 
-	collections, err := chromaClient.ListCollections(ctx)
+	svc := service.NewChromaService(chromaClient, nil)
+
+	collections, err := svc.ListCollections(ctx)
 	if err != nil {
 		slog.Error("Failed to list collections", "error", err)
 		return fmt.Errorf("failed to list collections: %w\n\nHint: Verify database exists: chroma databases", err)
@@ -210,7 +213,13 @@ func handleListCollection(ctx context.Context, cmd *cli.Command) error {
 	printer.Info("Collections in database '%s':", cmd.String("database"))
 
 	for _, coll := range collections {
-		printer.Printf("  • %s (ID: %s)\n", coll.Name, coll.ID)
+		// Get document count efficiently using the /count endpoint
+		count, countErr := svc.CountDocuments(ctx, coll.Name)
+		if countErr != nil {
+			printer.Printf("  • %s (ID: %s) [count failed]\n", coll.Name, coll.ID)
+		} else {
+			printer.Printf("  • %s (ID: %s) [%d docs]\n", coll.Name, coll.ID, count)
+		}
 	}
 
 	slog.Info("Collection listing complete", "count", len(collections))
@@ -342,7 +351,7 @@ func handleListDocuments(ctx context.Context, c *cli.Command) error {
 
 	f := factory.NewServiceFactory()
 
-	svc, _, cleanup, err := f.CreateChromaService(c)
+	svc, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
@@ -397,7 +406,7 @@ func handleBatchAddDocuments(ctx context.Context, c *cli.Command) error {
 	// Setup service using factory
 	f := factory.NewServiceFactory()
 
-	svc, _, cleanup, err := f.CreateChromaService(c)
+	svc, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
@@ -507,7 +516,7 @@ func handleQueryBatchInCollection(ctx context.Context, c *cli.Command) error {
 	// Setup service using factory
 	f := factory.NewServiceFactory()
 
-	svc, _, cleanup, err := f.CreateChromaService(c)
+	svc, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
@@ -636,7 +645,7 @@ func handleImportFileInChromaDb(ctx context.Context, c *cli.Command) error {
 	// Setup service using factory
 	f := factory.NewServiceFactory()
 
-	svc, _, cleanup, err := f.CreateChromaService(c)
+	svc, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
@@ -707,24 +716,20 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	// Setup service and LLM using factories
 	f := factory.NewServiceFactory()
 
-	svc, _, cleanup, err := f.CreateChromaService(c)
+	svc, cleanup, err := f.CreateChromaService(c)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
 	defer cleanup()
 
-	llmFactory := factory.NewLLMProviderFactory()
 	nimURL := c.String("nim-url")
 
-	provider, err := llmFactory.CreateProvider(model, nimURL)
+	provider, err := factory.CreateProvider(model, nimURL)
 	if err != nil {
 		return err
 	}
 
-	// We can't use ProviderInterface directly for chains,
-	// but we know our providers now use LangChainAdapter.
-	// For this MVP, we'll use the existing RAG pipeline logic but
-	// move towards chains in the next sub-task.
+	// RAG pipeline: query ChromaDB → build prompt → LLM generation
 
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
 
@@ -918,7 +923,7 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 
 	// Create directory if needed
 	if dir := filepath.Dir(outputPath); dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
@@ -929,7 +934,7 @@ func handleConfigInit(ctx context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to marshal default config to YAML: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, yamlData, 0644); err != nil {
+	if err := os.WriteFile(outputPath, yamlData, 0o644); err != nil {
 		return fmt.Errorf("failed to write configuration file %s: %w", outputPath, err)
 	}
 

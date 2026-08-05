@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,30 @@ import (
 	"github.com/DONAR-0/cmdChroma/internal/service"
 	"github.com/urfave/cli/v3"
 )
+
+// chromaClient is the subset of *client.ChromaClient needed by ServiceFactory.
+type chromaClient interface {
+	ResolveCollectionID(ctx context.Context, input string) (string, error)
+	AddBatch(ctx context.Context, collectionID string, docs []string, ids []string) error
+	AddBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	UpsertBatchGeneric(ctx context.Context, collectionID string, documents []string, ids []string, metadatas []map[string]any) error
+	QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error)
+	ListCollections(ctx context.Context) ([]client.Collection, error)
+	ListDocuments(ctx context.Context, collectionID string) (*client.GetRecordsResponse, error)
+	CountDocuments(ctx context.Context, collectionID string) (int64, error)
+	TestConnection(ctx context.Context) error
+	GetTenant(ctx context.Context) (bool, error)
+	ListDatabases(ctx context.Context) ([]client.Database, error)
+	CreateDatabase(ctx context.Context, name string) error
+	DeleteCollection(ctx context.Context, name string) error
+	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
+	CreateCollection(ctx context.Context, name string) (string, error)
+}
+
+// embedder is the subset of *onnx.Embedder needed by ServiceFactory.
+type embedder interface {
+	Close()
+}
 
 // ServiceFactory creates and configures service dependencies.
 // It centralizes client, embedder, and service initialization.
@@ -29,12 +54,12 @@ func NewServiceFactory() *ServiceFactory {
 }
 
 // CreateChromaService creates a ChromaService with client and embedder.
-// Returns the service, embedder (for cleanup), and a cleanup function.
-func (f *ServiceFactory) CreateChromaService(cmd *cli.Command) (*service.ChromaService, *onnx.Embedder, func(), error) {
+// Returns the service and a cleanup function.
+func (f *ServiceFactory) CreateChromaService(cmd *cli.Command) (*service.ChromaService, func(), error) {
 	// Resolve AI paths
 	cfg, err := f.resolveEmbedderConfig(cmd)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	slog.Info("Loading AI embedding engine", "model", cfg.modelPath)
@@ -46,10 +71,11 @@ func (f *ServiceFactory) CreateChromaService(cmd *cli.Command) (*service.ChromaS
 	// Create embedder
 	embedder, err := onnx.NewEmbedder(cfg.modelPath, cfg.tokenizerPath, cfg.onnxLibPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to initialize embedder: %w", err)
+		return nil, nil, fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
 	// Create service
+	chromaClient.SetEmbedder(embedder)
 	svc := service.NewChromaService(chromaClient, embedder)
 
 	// Return cleanup function that closes the embedder
@@ -59,12 +85,12 @@ func (f *ServiceFactory) CreateChromaService(cmd *cli.Command) (*service.ChromaS
 		}
 	}
 
-	return svc, embedder, cleanup, nil
+	return svc, cleanup, nil
 }
 
 // CreateChromaClient creates just the ChromaDB client without embedder.
 // Use this for operations that don't require embeddings (e.g., list, create, delete).
-func (f *ServiceFactory) CreateChromaClient(cmd *cli.Command) (client.ChromaClientInterface, error) {
+func (f *ServiceFactory) CreateChromaClient(cmd *cli.Command) (*client.ChromaClient, error) {
 	chromaHost := fmt.Sprintf("http://%s:%s", cmd.String("host"), cmd.String("port"))
 	return client.NewChromaDBClient(chromaHost, cmd.String("tenant"), cmd.String("database")), nil
 }
@@ -72,10 +98,10 @@ func (f *ServiceFactory) CreateChromaClient(cmd *cli.Command) (client.ChromaClie
 // CreateChromaServiceWithEmbedder creates a ChromaService from pre-existing client and embedder.
 // Use this when you need to inject custom instances for testing.
 func (f *ServiceFactory) CreateChromaServiceWithEmbedder(
-	chromaClient client.ChromaClientInterface,
-	embedder onnx.EmbedderInterface,
+	c chromaClient,
+	e embedder,
 ) *service.ChromaService {
-	return service.NewChromaService(chromaClient, embedder)
+	return service.NewChromaService(c, e)
 }
 
 // resolveEmbedderConfig determines the paths for model files with fallbacks.

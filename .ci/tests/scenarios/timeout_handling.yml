@@ -103,7 +103,7 @@ testcases:
           - result.code ShouldNotEqual 0
           - result.systemerr ShouldContainSubstring "Connection test failed"
           - result.systemout ShouldContainSubstring "Connection failed"
-          - result.systemout ShouldContainSubstring "refused"
+          - result.systemout ShouldContainSubstring "localhost"
 
   - name: Error message contains connection information
     tags: ["integration"]

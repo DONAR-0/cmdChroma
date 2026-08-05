@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/parquet-go/parquet-go"
-	"github.com/tmc/langchaingo/textsplitter"
 
 	"github.com/DONAR-0/cmdChroma/internal"
 )
@@ -82,7 +81,8 @@ type Config struct {
 	// "warn" logs a warning and skips the duplicate; "skip" silently skips.
 	DedupMode string
 	// Upsert uses the upsert endpoint instead of add, so existing IDs are updated.
-	Upsert bool
+	Upsert    bool
+	UniqueIDs bool
 	// Total is the known total number of records (0 if unknown).
 	// Used for progress display.
 	Total int
@@ -163,17 +163,17 @@ func (p *Processor) ProcessJSONL(filePath string) (<-chan *Record, <-chan error)
 				continue
 			}
 
-			recordsList, err := p.extractRecord(rec)
+			recs, err := p.extractRecord(rec)
 			if err != nil {
 				slog.Error("Skipping record", "error", err)
 				continue
 			}
 
-			if len(recordsList) == 0 {
+			if len(recs) == 0 {
 				continue
 			}
 
-			for _, record := range recordsList {
+			for _, record := range recs {
 				if p.ctx != nil {
 					select {
 					case records <- record:
@@ -220,6 +220,145 @@ func (p *Processor) ProcessJSONLFull(filePath string) ([]*Record, error) {
 	return records, nil
 }
 
+// processParquetReader reads rows from an already-configured parquet reader and
+// streams records through the provided channel. It handles schema detection and
+// auto-fallback for content/id fields.
+func (p *Processor) processParquetReader(reader *parquet.GenericReader[any], records chan<- *Record, errChan chan<- error) {
+	batchSize := p.cfg.BatchSize
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+
+	batch := make([]any, batchSize)
+
+	var (
+		total        int
+		schemaLogged bool
+		contentField string
+	)
+
+	for {
+		n, err := reader.Read(batch)
+		if n > 0 {
+			for _, row := range batch[:n] {
+				rowMap, ok := row.(map[string]any)
+				if !ok {
+					slog.Error("Skipping record with unexpected type", "type", fmt.Sprintf("%T", row))
+					continue
+				}
+
+				// Log schema from first row
+				if !schemaLogged {
+					keys := make([]string, 0, len(rowMap))
+					for k := range rowMap {
+						keys = append(keys, k)
+					}
+
+					slog.Info("Parquet schema", "columns", keys)
+
+					schemaLogged = true
+
+					// Auto-detect content field if configured field yields no results
+					contentField = p.detectContentField(rowMap)
+					if contentField != p.cfg.ContentField {
+						slog.Info("Auto-detected content field", "from", p.cfg.ContentField, "to", contentField)
+					}
+				}
+
+				recs, err := p.extractRecordWithField(rowMap, contentField, p.cfg.IDField)
+				if err != nil {
+					slog.Error("Skipping record", "error", err)
+					continue
+				}
+
+				if len(recs) == 0 {
+					continue
+				}
+
+				for _, rec := range recs {
+					records <- rec
+				}
+
+				total++
+
+				if p.cfg.Limit > 0 && total >= p.cfg.Limit {
+					slog.Info("Limit reached", "count", total)
+					return
+				}
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			errChan <- fmt.Errorf("parquet read error: %w", err)
+
+			return
+		}
+	}
+
+	slog.Info("Processing complete", "total", total)
+}
+
+// detectContentField tries to find a suitable content column from the first row.
+// If the configured field is missing or has a nil value, it falls back to the
+// longest string column, preferring ones with common content-related names.
+func (p *Processor) detectContentField(firstRow map[string]any) string {
+	if cfg := p.cfg.ContentField; cfg != "" {
+		if v, ok := firstRow[cfg]; ok && v != nil {
+			return cfg
+		}
+	}
+
+	// Score candidate fields: prefer longer text and content-like names
+	type candidate struct {
+		name  string
+		score int
+		len   int
+	}
+
+	var candidates []candidate
+
+	contentKeywords := []string{"text", "content", "body", "description", "answer", "response", "output", "question", "instruction", "utterance", "dialogue", "story"}
+
+	for k, v := range firstRow {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+
+		score := 0
+
+		for _, kw := range contentKeywords {
+			if strings.Contains(strings.ToLower(k), kw) {
+				score++
+			}
+		}
+
+		candidates = append(candidates, candidate{name: k, score: score, len: len(s)})
+	}
+
+	if len(candidates) == 0 {
+		return p.cfg.ContentField
+	}
+
+	// Sort by score desc, then by length desc
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.score > best.score || (c.score == best.score && c.len > best.len) {
+			best = c
+		}
+	}
+
+	if best.score > 0 || best.len > 0 {
+		return best.name
+	}
+
+	return p.cfg.ContentField
+}
+
 // ProcessParquet reads a Parquet file and streams records through the provided channel.
 // It uses parquet-go's GenericReader to read rows as map[string]any, then converts
 // each row to a Record using the same extractRecord logic as JSONL.
@@ -238,6 +377,18 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 		}
 		defer internal.CheckDefer(f.Close)
 
+		// Check Parquet magic bytes before creating reader to avoid panic on invalid files
+		magic := make([]byte, 4)
+		if _, err := f.Read(magic); err != nil || string(magic) != "PAR1" {
+			errChan <- fmt.Errorf("invalid parquet file: missing PAR1 magic header")
+			return
+		}
+
+		if _, err := f.Seek(0, 0); err != nil {
+			errChan <- fmt.Errorf("failed to seek parquet file: %w", err)
+			return
+		}
+
 		// Use GenericReader to read rows as map[string]any
 		reader := parquet.NewGenericReader[any](f)
 
@@ -247,96 +398,70 @@ func (p *Processor) ProcessParquet(filePath string) (<-chan *Record, <-chan erro
 			}
 		}()
 
-		// Determine batch size for reading
-		batchSize := p.cfg.BatchSize
-		if batchSize <= 0 {
-			batchSize = 100
-		}
-
-		batch := make([]any, batchSize)
-
-		var total int
-
-		for {
-			n, err := reader.Read(batch)
-			if n > 0 {
-				for _, row := range batch[:n] {
-					rowMap, ok := row.(map[string]any)
-					if !ok {
-						slog.Error("Skipping record with unexpected type", "type", fmt.Sprintf("%T", row))
-						continue
-					}
-
-					recordsList, err := p.extractRecord(rowMap)
-					if err != nil {
-						slog.Error("Skipping record", "error", err)
-						continue
-					}
-
-					if len(recordsList) == 0 {
-						continue
-					}
-
-					for _, rec := range recordsList {
-						if p.ctx != nil {
-							select {
-							case records <- rec:
-							case <-p.ctx.Done():
-								return
-							}
-						} else {
-							records <- rec
-						}
-					}
-
-					total++
-
-					if p.cfg.Limit > 0 && total >= p.cfg.Limit {
-						slog.Info("Limit reached", "count", total)
-						return
-					}
-				}
-			}
-
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-
-				errChan <- fmt.Errorf("parquet read error: %w", err)
-
-				return
-			}
-		}
-
-		slog.Info("Processing complete", "total", total)
+		p.processParquetReader(reader, records, errChan)
 	}()
 
 	return records, errChan
 }
 
-// ParquetRowCount returns the number of rows in a parquet file.
-// Returns 0 if the row count cannot be determined.
-func ParquetRowCount(filePath string) int {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return 0
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-
-	info, err := f.Stat()
-	if err != nil {
-		return 0
+// extractRecordWithField converts raw JSON/Parquet map into a Record using explicit field names.
+func (p *Processor) extractRecordWithField(raw map[string]any, contentField, idField string) ([]*Record, error) {
+	contentVal := getNestedValue(raw, contentField)
+	if contentVal == nil {
+		return nil, nil // skip records without content
 	}
 
-	pf, err := parquet.OpenFile(f, info.Size())
-	if err != nil {
-		return 0
+	rawContent := fmt.Sprintf("%v", contentVal)
+
+	// Generate or extract ID
+	var id string
+
+	if p.cfg.AutoID {
+		hash := sha256.Sum256([]byte(rawContent))
+		id = hex.EncodeToString(hash[:12])
+	} else if idVal := getNestedValue(raw, idField); idVal != nil {
+		id = fmt.Sprintf("%v", idVal)
+	} else {
+		hash := sha256.Sum256([]byte(rawContent))
+		id = hex.EncodeToString(hash[:12])
 	}
 
-	return int(pf.NumRows())
+	// Extract metadata
+	meta := make(map[string]any)
+
+	isExcluded := func(k string) bool {
+		if k == contentField || k == idField {
+			return true
+		}
+
+		for _, ex := range p.cfg.ExcludeFields {
+			if k == ex {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	if p.cfg.AllMetadata || len(p.cfg.MetadataFields) == 0 {
+		for k, v := range raw {
+			if !isExcluded(k) {
+				meta[k] = p.stringifyIfComplex(v)
+			}
+		}
+	} else {
+		for _, k := range p.cfg.MetadataFields {
+			if v, exists := raw[k]; exists {
+				meta[k] = p.stringifyIfComplex(v)
+			}
+		}
+	}
+
+	if p.cfg.ChunkSize <= 0 || len(rawContent) <= p.cfg.ChunkSize {
+		return []*Record{{ID: id, Content: rawContent, Metadata: meta}}, nil
+	}
+
+	return p.chunkContent(id, rawContent, meta), nil
 }
 
 // ============ Private Helpers ============
@@ -376,23 +501,8 @@ func (p *Processor) stringifyIfComplex(value any) any {
 		rt = reflect.TypeOf(value)
 	}
 
-	// Recursively flatten nested maps into the parent (foo_bar becomes foo.bar)
-	// to preserve structure while meeting ChromaDB's flat-key requirement.
-	if m, ok := value.(map[string]any); ok {
-		result := make(map[string]any)
-		for k, v := range m {
-			result[k] = p.stringifyIfComplex(v)
-		}
-
-		return result
-	}
-
 	if rt == nil {
 		return nil
-	}
-	// Convert slices/arrays to string representation.
-	if rt.Kind() == reflect.Slice || rt.Kind() == reflect.Array {
-		return fmt.Sprintf("%v", value)
 	}
 
 	// Check if primitive
@@ -400,96 +510,81 @@ func (p *Processor) stringifyIfComplex(value any) any {
 		return value
 	}
 
-	// Complex type - convert to string
+	// For all complex types (maps, slices, arrays, structs),
+	// convert to a JSON string to ensure ChromaDB compatibility.
+	if b, err := json.Marshal(value); err == nil {
+		return string(b)
+	}
+
+	// Fallback to basic string representation
 	return fmt.Sprintf("%v", value)
 }
 
-// extractRecord converts a raw Parquet/JSON row into Records, splitting
-// content into chunks if ChunkSize is configured.
-func (p *Processor) extractRecord(raw map[string]any) ([]*Record, error) {
-	contentVal := getNestedValue(raw, p.cfg.ContentField)
-	if contentVal == nil {
-		return nil, nil
-	}
+// chunkContent splits content into overlapping chunks.
+func (p *Processor) chunkContent(baseID, content string, meta map[string]any) []*Record {
+	var records []*Record
 
-	content := fmt.Sprintf("%v", contentVal)
+	chunkSize := p.cfg.ChunkSize
+	overlap := p.cfg.ChunkOverlap
+	start := 0
+	chunkIdx := 0
 
-	baseID := p.resolveID(raw, content)
+	for start < len(content) {
+		end := start + chunkSize
+		if end > len(content) {
+			end = len(content)
+		}
 
-	meta := p.collectMetadata(raw)
+		chunkID := baseID
+		if chunkIdx > 0 {
+			chunkID = fmt.Sprintf("%s_chunk_%d", baseID, chunkIdx)
+		}
 
-	if p.cfg.ChunkSize <= 0 {
-		return []*Record{{ID: baseID, Content: content, Metadata: meta}}, nil
-	}
-
-	splitter := textsplitter.NewRecursiveCharacter(
-		textsplitter.WithChunkSize(p.cfg.ChunkSize),
-		textsplitter.WithChunkOverlap(p.cfg.ChunkOverlap),
-	)
-
-	chunks, err := splitter.SplitText(content)
-	if err != nil {
-		return nil, fmt.Errorf("text splitting failed: %w", err)
-	}
-
-	records := make([]*Record, 0, len(chunks))
-	for i, chunk := range chunks {
 		records = append(records, &Record{
-			ID:       fmt.Sprintf("%s_chunk%d", baseID, i),
-			Content:  chunk,
+			ID:       chunkID,
+			Content:  content[start:end],
 			Metadata: meta,
 		})
+
+		if end >= len(content) {
+			break
+		}
+
+		start = end - overlap
+		if start < 0 {
+			start = 0
+		}
+
+		chunkIdx++
 	}
 
-	return records, nil
+	return records
 }
 
-// resolveID returns the record ID from the configured field, or a content hash.
-func (p *Processor) resolveID(raw map[string]any, content string) string {
-	if p.cfg.AutoID {
-		return p.contentHash(content)
+// ParquetRowCount returns the number of rows in a Parquet file.
+// Returns 0 if the file cannot be opened or read.
+func ParquetRowCount(filePath string) int {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = f.Close() }()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return 0
 	}
 
-	if idVal := getNestedValue(raw, p.cfg.IDField); idVal != nil {
-		return fmt.Sprintf("%v", idVal)
+	pf, err := parquet.OpenFile(f, fi.Size())
+	if err != nil {
+		return 0
 	}
 
-	return p.contentHash(content)
+	return int(pf.NumRows())
 }
 
-// contentHash returns a deterministic hex hash of the given string.
-func (p *Processor) contentHash(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:12])
-}
-
-// collectMetadata extracts metadata from a raw row based on the config.
-func (p *Processor) collectMetadata(raw map[string]any) map[string]any {
-	meta := make(map[string]any)
-
-	if p.cfg.AllMetadata {
-		excluded := map[string]bool{
-			p.cfg.ContentField: true,
-			p.cfg.IDField:      true,
-		}
-		for _, f := range p.cfg.ExcludeFields {
-			excluded[f] = true
-		}
-
-		for k, v := range raw {
-			if !excluded[k] {
-				meta[k] = p.stringifyIfComplex(v)
-			}
-		}
-
-		return meta
-	}
-
-	for _, k := range p.cfg.MetadataFields {
-		if v, ok := raw[k]; ok {
-			meta[k] = p.stringifyIfComplex(v)
-		}
-	}
-
-	return meta
+// extractRecord converts raw JSON/Parquet map into Records using the configured field names.
+// Returns multiple records when chunking is enabled.
+func (p *Processor) extractRecord(raw map[string]any) ([]*Record, error) {
+	return p.extractRecordWithField(raw, p.cfg.ContentField, p.cfg.IDField)
 }

@@ -30,13 +30,13 @@ type mockChromaClient struct {
 	upsertBatchGenericErr     error
 	queryBatchResult          *client.QueryResponse
 	queryBatchErr             error
-	getIDByNameResult         string
-	getIDByNameErr            error
 	resolveCollectionIDResult string
 	resolveCollectionIDErr    error
 	deleteCollectionErr       error
 	deleteRecordsErr          error
 	createDatabaseErr         error
+	countDocumentsResult      int64
+	countDocumentsErr         error
 }
 
 func (m *mockChromaClient) TestConnection(_ context.Context) error {
@@ -71,10 +71,6 @@ func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, 
 	return m.queryBatchResult, m.queryBatchErr
 }
 
-func (m *mockChromaClient) GetIDByName(_ context.Context, _ string) (string, error) {
-	return m.getIDByNameResult, m.getIDByNameErr
-}
-
 func (m *mockChromaClient) ResolveCollectionID(_ context.Context, _ string) (string, error) {
 	return m.resolveCollectionIDResult, m.resolveCollectionIDErr
 }
@@ -95,11 +91,15 @@ func (m *mockChromaClient) CreateDatabase(_ context.Context, _ string) error {
 	return m.createDatabaseErr
 }
 
+func (m *mockChromaClient) CountDocuments(_ context.Context, _ string) (int64, error) {
+	return m.countDocumentsResult, m.countDocumentsErr
+}
+
 func (m *mockChromaClient) CreateCollection(_ context.Context, name string) (string, error) {
 	return "test-collection-id", nil
 }
 
-func (m *mockChromaClient) SetEmbedder(_ onnx.EmbedderInterface) {}
+func (m *mockChromaClient) SetEmbedder(_ *onnx.Embedder) {}
 
 type mockEmbedder struct{}
 
@@ -212,6 +212,63 @@ func TestChromaService_ListCollections_Error(t *testing.T) {
 	_, err := svc.ListCollections(context.Background())
 	if err == nil {
 		t.Errorf("Expected error for ListCollections when client returns error")
+	}
+}
+
+func TestChromaService_CountDocuments(t *testing.T) {
+	client := &mockChromaClient{
+		resolveCollectionIDResult: "test-id",
+	}
+	svc := NewChromaService(client, nil)
+
+	count, err := svc.CountDocuments(context.Background(), "test_collection")
+	if err != nil {
+		t.Errorf("CountDocuments failed: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf("Expected count 0, got %d", count)
+	}
+}
+
+func TestChromaService_CountDocuments_ResolveError(t *testing.T) {
+	client := &mockChromaClient{resolveCollectionIDErr: errors.New("resolve failed")}
+	svc := NewChromaService(client, nil)
+
+	_, err := svc.CountDocuments(context.Background(), "test_collection")
+	if err == nil {
+		t.Error("Expected error for CountDocuments when resolve fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to resolve collection") {
+		t.Errorf("Expected 'failed to resolve collection' in error, got: %v", err)
+	}
+}
+
+type countErrorMock struct {
+	mockChromaClient
+}
+
+func (m *countErrorMock) CountDocuments(_ context.Context, _ string) (int64, error) {
+	return 0, errors.New("count error")
+}
+
+func TestChromaService_CountDocuments_CountError(t *testing.T) {
+	client := &countErrorMock{
+		mockChromaClient: mockChromaClient{
+			resolveCollectionIDResult: "test-id",
+		},
+	}
+	embedder := &mockEmbedder{}
+	svc := NewChromaService(client, embedder)
+
+	_, err := svc.CountDocuments(context.Background(), "test")
+	if err == nil {
+		t.Errorf("Expected error for CountDocuments when client returns error")
+	}
+
+	if !strings.Contains(err.Error(), "count error") {
+		t.Errorf("Expected 'count error' in error, got: %v", err)
 	}
 }
 
@@ -405,6 +462,7 @@ func TestChromaService_IngestRecords_NoEmbedder(t *testing.T) {
 func TestChromaService_NewChromaService(t *testing.T) {
 	realClient := &client.ChromaClient{}
 	embedder := &mockEmbedder{}
+	realClient.SetEmbedder(embedder)
 	svc := NewChromaService(realClient, embedder)
 
 	if svc.client != realClient {
@@ -497,34 +555,6 @@ func TestChromaService_IngestRecords_BatchError(t *testing.T) {
 	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
 	if err == nil {
 		t.Errorf("Expected error for IngestRecords when batch upload fails")
-	}
-}
-
-func TestGetFileExt(t *testing.T) {
-	tests := []struct {
-		path   string
-		expect string
-	}{
-		{"file.jsonl", ".jsonl"},
-		{"file.parquet", ".parquet"},
-		{"dir/file.jsonl", ".jsonl"},
-		{"/abs/path/file.jsonl", ".jsonl"},
-		{"file.tar.gz", ".gz"},
-		{"noextension", ""},
-		{".hidden", ".hidden"},
-		{"file.", "."},
-		{"", ""},
-		{"file.JSONL", ".jsonl"},  // case insensitivity
-		{"dir\\file", ""},         // backslash before dot, no extension
-		{"dir\\file.txt", ".txt"}, // backslash with extension
-		{"dir/file", ""},          // slash before dot, no extension
-	}
-
-	for _, tt := range tests {
-		result := getFileExt(tt.path)
-		if result != tt.expect {
-			t.Errorf("getFileExt(%q) = %q, want %q", tt.path, result, tt.expect)
-		}
 	}
 }
 
@@ -811,6 +841,79 @@ func TestChromaService_Query_NoEmbedder(t *testing.T) {
 
 	if err != nil && !errors.Is(err, internalErrors.ErrEmbedderNotInitialized) {
 		t.Errorf("Expected ErrEmbedderNotInitialized, got: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_WithCSV(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.csv")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	_, _ = tmpFile.WriteString("id,content\n")
+	_, _ = tmpFile.WriteString("1,hello from csv\n")
+	_ = tmpFile.Close()
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords with CSV failed: %v", err)
+	}
+}
+
+func TestChromaService_IngestRecords_ProgressInfoFields(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_*.jsonl")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	for i := 0; i < 3; i++ {
+		line := `{"id":"` + fmt.Sprintf("%d", i) + `","content":"doc ` + fmt.Sprintf("%d", i) + `"}`
+		_, _ = tmpFile.WriteString(line + "\n")
+	}
+
+	_ = tmpFile.Close()
+
+	var lastInfo ingest.ProgressInfo
+
+	client := &mockChromaClient{}
+	svc := NewChromaService(client, &mockEmbedder{})
+
+	cfg := &ingest.Config{
+		BatchSize:    100,
+		ContentField: "content",
+		IDField:      "id",
+		Total:        3,
+		OnProgress: func(info ingest.ProgressInfo) {
+			lastInfo = info
+		},
+	}
+
+	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
+	if err != nil {
+		t.Fatalf("IngestRecords failed: %v", err)
+	}
+
+	if lastInfo.Processed != 3 {
+		t.Errorf("Expected Processed=3, got %d", lastInfo.Processed)
+	}
+
+	if lastInfo.Total != 3 {
+		t.Errorf("Expected Total=3, got %d", lastInfo.Total)
+	}
+
+	if !lastInfo.Done {
+		t.Error("Expected Done=true")
 	}
 }
 

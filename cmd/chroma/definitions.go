@@ -476,7 +476,7 @@ var (
 
 	timeoutFlag = &cli.IntFlag{
 		Name:    "timeout",
-		Aliases: []string{"t"},
+		Aliases: nil,
 		Value:   30,
 		Usage:   "Connection timeout in seconds",
 	}

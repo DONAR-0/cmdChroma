@@ -1,7 +1,7 @@
 version: "2"
 name: MCP Server - HTTP Round-Trip
 vars:
-  mcp_server: mcp-server
+  mcp_server: mcp
 testcases:
   - name: initialize via HTTP
     tags: ["mcp", "http"]
@@ -11,7 +11,7 @@ testcases:
         script: |
           cd ../../../
           PORT=9092
-          mcp-server --transport http --port $PORT --collection venom_test &
+          mcp --transport http --port $PORT --collection venom_test &
           SERVER_PID=$!
           sleep 2
           curl -s -X POST "http://127.0.0.1:$PORT/mcp" \

@@ -11,7 +11,6 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
-// mockModel implements llms.Model for testing the adapter.
 type mockModel struct {
 	generateContentFunc func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error)
 	callFunc            func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
@@ -33,8 +32,6 @@ func (m *mockModel) Call(ctx context.Context, prompt string, options ...llms.Cal
 	return "", errors.New("Call not implemented")
 }
 
-// ============ Adapter Tests ============
-
 func TestNewLangChainAdapter(t *testing.T) {
 	mock := &mockModel{}
 
@@ -42,16 +39,11 @@ func TestNewLangChainAdapter(t *testing.T) {
 	if adapter == nil {
 		t.Fatal("Expected non-nil adapter")
 	}
-
-	if adapter.GetModel() != mock {
-		t.Error("GetModel should return the same model")
-	}
 }
 
 func TestLangChainAdapter_Generate(t *testing.T) {
 	mock := &mockModel{
 		generateContentFunc: func(_ context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			// Verify the message has the correct role and content
 			if len(messages) != 1 {
 				t.Fatalf("expected 1 message, got %d", len(messages))
 			}
@@ -59,7 +51,7 @@ func TestLangChainAdapter_Generate(t *testing.T) {
 			if messages[0].Role != llms.ChatMessageTypeHuman {
 				t.Errorf("expected human role, got %v", messages[0].Role)
 			}
-			// Check streaming func was set in options
+
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "Hello world!"},
@@ -143,11 +135,8 @@ func TestLangChainAdapter_Generate_Error(t *testing.T) {
 }
 
 func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
-	var capturedModel string
-
 	mock := &mockModel{
 		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			// The model option should be passed through to the underlying llm
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "ok"},
@@ -155,10 +144,6 @@ func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
 			}, nil
 		},
 	}
-
-	// We can't easily check the model was passed to the mock without wrapping,
-	// but we can verify the adapter doesn't error on model string
-	_ = capturedModel
 	adapter := NewLangChainAdapter(mock)
 	ctx := context.Background()
 
@@ -169,8 +154,6 @@ func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
 		t.Fatalf("Generate with model failed: %v", err)
 	}
 }
-
-// ============ Provider (Ollama) Tests ============
 
 func TestNewProvider(t *testing.T) {
 	p := NewProvider("")
@@ -183,8 +166,6 @@ func TestNewProvider(t *testing.T) {
 		t.Errorf("Expected provider to be non-nil")
 	}
 }
-
-// ============ NIMProvider Tests ============
 
 func TestNewNIMProvider(t *testing.T) {
 	if err := os.Setenv("NVIDIA_API_KEY", "env-key"); err != nil {

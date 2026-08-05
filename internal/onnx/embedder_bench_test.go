@@ -38,7 +38,7 @@ func benchPaths() (modelPath, tokenizersPath, libpath string) {
 	tokenizersPath = filepath.Join(projectRoot, "models", "all-MiniLM-L6-v2", "tokenizer.json")
 	libpath = filepath.Join(projectRoot, "models", "onnx_runtime", "lib", "libonnxruntime.so.1")
 
-	return
+	return modelPath, tokenizersPath, libpath
 }
 
 func newBenchEmbedder(b *testing.B, opts ...EmbedderOption) *Embedder {

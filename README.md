@@ -51,21 +51,21 @@ That's it! 🎉
 
 ## 🧠 MCP Server (Claude Code Integration)
 
-cmdChroma includes an [MCP](https://modelcontextprotocol.io)-compatible server at `cmd/mcp-server/` that exposes ChromaDB vector search as tools for Claude Code and other MCP hosts.
+cmdChroma includes an [MCP](https://modelcontextprotocol.io)-compatible server at `cmd/mcp/` that exposes ChromaDB vector search as tools for Claude Code and other MCP hosts.
 
-```bash
+\`\`\`bash
 # Build the MCP server
-make build-mcp-server
+make build-mcp
 
 # Run with stdio transport (for Claude Code)
-./dist/mcp-server --transport stdio
+./dist/mcp --transport stdio
 
 # Run with HTTP transport (for remote access)
-./dist/mcp-server --transport http --port 9090
+./dist/mcp --transport http --port 9090
 
 # Run with memory-mode (extra tools for knowledge storage)
-./dist/mcp-server --transport stdio --mode memory
-```
+./dist/mcp --transport stdio --mode memory
+\`\`\`
 
 ### Tools (generic mode — 7 tools)
 `store_documents`, `query_documents`, `collection_list`, `collection_create`, `collection_delete`, `collection_stats`, `forget`

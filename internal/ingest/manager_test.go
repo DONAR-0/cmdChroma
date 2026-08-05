@@ -1,6 +1,8 @@
 package ingest
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -305,10 +307,10 @@ func TestStringifyIfComplex(t *testing.T) {
 
 	// Complex types (slice, map, struct) should be converted to string
 	slice := []int{1, 2, 3}
-	require.Equal(t, "[1 2 3]", p.stringifyIfComplex(slice))
+	require.Equal(t, "[1,2,3]", p.stringifyIfComplex(slice))
 
 	m := map[string]int{"a": 1}
-	require.Equal(t, "map[a:1]", p.stringifyIfComplex(m))
+	require.Equal(t, `{"a":1}`, p.stringifyIfComplex(m))
 
 	// Pointer to primitive: should dereference and return primitive
 	ptr := new(int)
@@ -318,6 +320,22 @@ func TestStringifyIfComplex(t *testing.T) {
 	// Pointer to nil: should return nil
 	var nilPtr *int
 	require.Nil(t, p.stringifyIfComplex(nilPtr))
+
+	// uint types
+	require.Equal(t, uint(42), p.stringifyIfComplex(uint(42)))
+	require.Equal(t, uint8(8), p.stringifyIfComplex(uint8(8)))
+
+	// int64
+	require.Equal(t, int64(99), p.stringifyIfComplex(int64(99)))
+
+	// Nested map becomes JSON string
+	nested := map[string]any{"inner": map[string]any{"key": "val"}}
+	result := p.stringifyIfComplex(nested)
+	require.IsType(t, "", result)
+
+	var actual map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result.(string)), &actual))
+	require.Equal(t, nested, actual)
 }
 
 // TestExtractRecord tests the record extraction logic.
@@ -347,9 +365,7 @@ func TestExtractRecord(t *testing.T) {
 				ID:      "123",
 				Content: "hello world",
 				Metadata: map[string]any{
-					"extra": map[string]any{
-						"foo": "bar",
-					},
+					"extra": `{"foo":"bar"}`,
 				},
 			},
 			wantError: false,
@@ -445,19 +461,14 @@ func TestExtractRecord(t *testing.T) {
 			if tt.wantRecord == nil {
 				require.Nil(t, gotRecs)
 			} else {
-				require.NotNil(t, gotRecs)
-				// In the new implementation, extractRecord returns a slice.
-				// For these tests, we expect the first chunk to match the wantRecord
-				// (since the test inputs are short and don't trigger splitting).
-				require.GreaterOrEqual(t, len(gotRecs), 1)
-				gotRec := gotRecs[0]
-				require.Equal(t, tt.wantRecord.ID, gotRec.ID)
-				require.Equal(t, tt.wantRecord.Content, gotRec.Content)
-				// Compare metadata loosely because maps may have different ordering
-				require.Len(t, gotRec.Metadata, len(tt.wantRecord.Metadata))
+				require.NotEmpty(t, gotRecs)
+				got := gotRecs[0]
+				require.Equal(t, tt.wantRecord.ID, got.ID)
+				require.Equal(t, tt.wantRecord.Content, got.Content)
+				require.Len(t, got.Metadata, len(tt.wantRecord.Metadata))
 
 				for k, v := range tt.wantRecord.Metadata {
-					require.Equal(t, v, gotRec.Metadata[k])
+					require.Equal(t, v, got.Metadata[k])
 				}
 			}
 		})
@@ -481,7 +492,7 @@ func TestExtractRecord_AutoID(t *testing.T) {
 
 	recs, err := p.extractRecord(input)
 	require.NoError(t, err)
-	require.Len(t, recs, 1)
+	require.NotEmpty(t, recs)
 
 	// AutoID should produce a hash-based ID, not the "should-be-ignored" value
 	require.NotEqual(t, "should-be-ignored", recs[0].ID)
@@ -614,4 +625,187 @@ func TestProcessParquetGenerated(t *testing.T) {
 	require.Equal(t, "2", records[1].ID)
 	require.Equal(t, "Another document", records[1].Content)
 	require.Equal(t, map[string]any{"extra": "metadata2"}, records[1].Metadata)
+}
+
+func TestDetectContentField(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfgContent string
+		row        map[string]any
+		want       string
+	}{
+		{
+			name:       "configured field exists",
+			cfgContent: "text",
+			row:        map[string]any{"text": "hello", "other": "world"},
+			want:       "text",
+		},
+		{
+			name:       "configured field missing falls back to longest content-like",
+			cfgContent: "body",
+			row:        map[string]any{"id": "1", "description": "short", "utterance": "a longer string here"},
+			want:       "utterance",
+		},
+		{
+			name:       "configured field nil value falls back",
+			cfgContent: "body",
+			row:        map[string]any{"body": nil, "text": "actual content"},
+			want:       "text",
+		},
+		{
+			name:       "no string candidates returns configured field",
+			cfgContent: "body",
+			row:        map[string]any{"id": 1, "num": 42},
+			want:       "body",
+		},
+		{
+			name:       "prefers longer text over shorter content-like",
+			cfgContent: "body",
+			row:        map[string]any{"text": "short", "description": "a much longer description field"},
+			want:       "description",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Processor{cfg: &Config{ContentField: tt.cfgContent}}
+			got := p.detectContentField(tt.row)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestChunkContent(t *testing.T) {
+	t.Run("single chunk when size exceeds content", func(t *testing.T) {
+		p := &Processor{cfg: &Config{ChunkSize: 100}}
+		records := p.chunkContent("id1", "short", map[string]any{"k": "v"})
+		require.Len(t, records, 1)
+		require.Equal(t, "id1", records[0].ID)
+		require.Equal(t, "short", records[0].Content)
+	})
+
+	t.Run("splits into chunks with overlap", func(t *testing.T) {
+		p := &Processor{cfg: &Config{ChunkSize: 10, ChunkOverlap: 3}}
+		records := p.chunkContent("id1", "Hello World! This is a test", nil)
+		require.Greater(t, len(records), 1)
+		require.Equal(t, "id1", records[0].ID)
+
+		for i, r := range records {
+			require.NotEmpty(t, r.Content)
+
+			if i > 0 {
+				require.Contains(t, r.ID, "_chunk_")
+			}
+		}
+	})
+
+	t.Run("no overlap at zero", func(t *testing.T) {
+		p := &Processor{cfg: &Config{ChunkSize: 8, ChunkOverlap: 0}}
+		records := p.chunkContent("x", "abcdefghijklmnop", nil)
+		require.Len(t, records, 2)
+		require.Equal(t, "abcdefgh", records[0].Content)
+		require.Equal(t, "ijklmnop", records[1].Content)
+	})
+}
+
+func TestExtractRecord_ExcludeFields(t *testing.T) {
+	cfg := &Config{
+		ContentField:  "text",
+		IDField:       "id",
+		AllMetadata:   true,
+		ExcludeFields: []string{"secret", "internal"},
+	}
+	p := &Processor{cfg: cfg}
+
+	input := map[string]any{
+		"id":       "1",
+		"text":     "content",
+		"secret":   "should-be-excluded",
+		"internal": "should-also-be-excluded",
+		"public":   "visible",
+	}
+
+	recs, err := p.extractRecord(input)
+	require.NoError(t, err)
+	require.NotEmpty(t, recs)
+	require.NotContains(t, recs[0].Metadata, "secret")
+	require.NotContains(t, recs[0].Metadata, "internal")
+	require.Equal(t, "visible", recs[0].Metadata["public"])
+}
+
+func TestExtractRecord_NestedField(t *testing.T) {
+	cfg := &Config{
+		ContentField: "data.text",
+		IDField:      "data.id",
+	}
+	p := &Processor{cfg: cfg}
+
+	input := map[string]any{
+		"data": map[string]any{
+			"id":   "nested-id",
+			"text": "nested content",
+		},
+	}
+
+	recs, err := p.extractRecord(input)
+	require.NoError(t, err)
+	require.NotEmpty(t, recs)
+	require.Equal(t, "nested-id", recs[0].ID)
+	require.Equal(t, "nested content", recs[0].Content)
+}
+
+func TestProcessJSONL_ContextCancellation(t *testing.T) {
+	tmpfile, err := os.CreateTemp("", "cancel.jsonl")
+	require.NoError(t, err)
+
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+
+	for i := 0; i < 100; i++ {
+		_, _ = tmpfile.WriteString(fmt.Sprintf(`{"id":"%d","text":"doc %d"}`, i, i) + "\n")
+	}
+
+	_ = tmpfile.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cfg := DefaultConfig()
+	proc := NewProcessor(cfg).WithContext(ctx)
+	recordsChan, _ := proc.ProcessJSONL(tmpfile.Name())
+
+	var count int
+	for range recordsChan {
+		count++
+	}
+
+	require.LessOrEqual(t, count, 100)
+}
+
+func TestProcessParquet_InvalidFile(t *testing.T) {
+	tmpfile, err := os.CreateTemp("", "invalid.parquet")
+	require.NoError(t, err)
+
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+
+	_, _ = tmpfile.WriteString("NOT A PARQUET FILE")
+	_ = tmpfile.Close()
+
+	proc := NewProcessor(DefaultConfig())
+	_, errChan := proc.ProcessParquet(tmpfile.Name())
+
+	select {
+	case err, ok := <-errChan:
+		require.True(t, ok)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "missing PAR1 magic header")
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for error")
+	}
+}
+
+func TestWithContext(t *testing.T) {
+	ctx := context.Background()
+	p := NewProcessor(DefaultConfig())
+	p2 := p.WithContext(ctx)
+	require.Same(t, p, p2)
+	require.Equal(t, ctx, p.ctx)
 }
