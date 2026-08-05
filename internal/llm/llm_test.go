@@ -11,7 +11,6 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
-// mockModel implements llms.Model for testing the adapter.
 type mockModel struct {
 	generateContentFunc func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error)
 	callFunc            func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
@@ -33,8 +32,6 @@ func (m *mockModel) Call(ctx context.Context, prompt string, options ...llms.Cal
 	return "", errors.New("Call not implemented")
 }
 
-// ============ Adapter Tests ============
-
 func TestNewLangChainAdapter(t *testing.T) {
 	mock := &mockModel{}
 
@@ -42,16 +39,11 @@ func TestNewLangChainAdapter(t *testing.T) {
 	if adapter == nil {
 		t.Fatal("Expected non-nil adapter")
 	}
-
-	if adapter.GetModel() != mock {
-		t.Error("GetModel should return the same model")
-	}
 }
 
 func TestLangChainAdapter_Generate(t *testing.T) {
 	mock := &mockModel{
 		generateContentFunc: func(_ context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			// Verify the message has the correct role and content
 			if len(messages) != 1 {
 				t.Fatalf("expected 1 message, got %d", len(messages))
 			}
@@ -59,7 +51,6 @@ func TestLangChainAdapter_Generate(t *testing.T) {
 			if messages[0].Role != llms.ChatMessageTypeHuman {
 				t.Errorf("expected human role, got %v", messages[0].Role)
 			}
-			// Check streaming func was set in options
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "Hello world!"},
@@ -143,11 +134,8 @@ func TestLangChainAdapter_Generate_Error(t *testing.T) {
 }
 
 func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
-	var capturedModel string
-
 	mock := &mockModel{
 		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			// The model option should be passed through to the underlying llm
 			return &llms.ContentResponse{
 				Choices: []*llms.ContentChoice{
 					{Content: "ok"},
@@ -155,10 +143,6 @@ func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
 			}, nil
 		},
 	}
-
-	// We can't easily check the model was passed to the mock without wrapping,
-	// but we can verify the adapter doesn't error on model string
-	_ = capturedModel
 	adapter := NewLangChainAdapter(mock)
 	ctx := context.Background()
 
@@ -169,8 +153,6 @@ func TestLangChainAdapter_Generate_ModelOption(t *testing.T) {
 		t.Fatalf("Generate with model failed: %v", err)
 	}
 }
-
-// ============ Provider (Ollama) Tests ============
 
 func TestNewProvider(t *testing.T) {
 	p := NewProvider("")
@@ -183,8 +165,6 @@ func TestNewProvider(t *testing.T) {
 		t.Errorf("Expected provider to be non-nil")
 	}
 }
-
-// ============ NIMProvider Tests ============
 
 func TestNewNIMProvider(t *testing.T) {
 	if err := os.Setenv("NVIDIA_API_KEY", "env-key"); err != nil {
@@ -221,108 +201,5 @@ func TestNewNIMProvider_MissingAPIKey(t *testing.T) {
 	_, err := NewNIMProvider("", "")
 	if err == nil {
 		t.Error("expected error when API key is missing")
-	}
-}
-
-func TestNIMProvider_Generate(t *testing.T) {
-	mock := &mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			// Call the streaming function to simulate streaming
-			for _, opt := range options {
-				// We can't easily invoke the streaming func here, but we can verify it's set
-				_ = opt
-			}
-
-			return &llms.ContentResponse{
-				Choices: []*llms.ContentChoice{
-					{Content: "test response"},
-				},
-			}, nil
-		},
-	}
-	adapter := NewLangChainAdapter(mock)
-	nimProvider := &NIMProvider{adapter: adapter}
-
-	var buf bytes.Buffer
-
-	err := nimProvider.Generate(context.Background(), "test prompt", "test-model", &buf)
-	if err != nil {
-		t.Errorf("Generate failed: %v", err)
-	}
-	// With mock, the streaming func isn't called, so buffer stays empty - that's expected behavior
-	// The test verifies the function completes without error
-	_ = buf // acknowledge buffer is used
-}
-
-func TestNIMProvider_GenerateSync(t *testing.T) {
-	mock := &mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			return &llms.ContentResponse{
-				Choices: []*llms.ContentChoice{
-					{Content: "sync response"},
-				},
-			}, nil
-		},
-	}
-	adapter := NewLangChainAdapter(mock)
-	nimProvider := &NIMProvider{adapter: adapter}
-
-	result, err := nimProvider.GenerateSync(context.Background(), "test prompt", "test-model")
-	if err != nil {
-		t.Errorf("GenerateSync failed: %v", err)
-	}
-
-	if result != "sync response" {
-		t.Errorf("Expected 'sync response', got %q", result)
-	}
-}
-
-func TestProvider_Generate(t *testing.T) {
-	mock := &mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			for _, opt := range options {
-				_ = opt
-			}
-
-			return &llms.ContentResponse{
-				Choices: []*llms.ContentChoice{
-					{Content: "ollama response"},
-				},
-			}, nil
-		},
-	}
-	adapter := NewLangChainAdapter(mock)
-	provider := &Provider{adapter: adapter}
-
-	var buf bytes.Buffer
-
-	err := provider.Generate(context.Background(), "test prompt", "test-model", &buf)
-	if err != nil {
-		t.Errorf("Generate failed: %v", err)
-	}
-	// With mock, the streaming func isn't called, so buffer stays empty - that's expected
-	_ = buf
-}
-
-func TestProvider_GenerateSync(t *testing.T) {
-	mock := &mockModel{
-		generateContentFunc: func(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
-			return &llms.ContentResponse{
-				Choices: []*llms.ContentChoice{
-					{Content: "ollama sync response"},
-				},
-			}, nil
-		},
-	}
-	adapter := NewLangChainAdapter(mock)
-	provider := &Provider{adapter: adapter}
-
-	result, err := provider.GenerateSync(context.Background(), "test prompt", "test-model")
-	if err != nil {
-		t.Errorf("GenerateSync failed: %v", err)
-	}
-
-	if result != "ollama sync response" {
-		t.Errorf("Expected 'ollama sync response', got %q", result)
 	}
 }

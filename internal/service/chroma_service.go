@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,7 +37,6 @@ type chromaClient interface {
 	DeleteCollection(ctx context.Context, name string) error
 	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
 	CreateCollection(ctx context.Context, name string) (string, error)
-	GetIDByName(ctx context.Context, name string) (string, error)
 }
 
 // embedder is the subset of *onnx.Embedder needed by ChromaService.
@@ -256,7 +256,7 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 	processor := ingest.NewProcessor(cfg).WithContext(ctx)
 
 	// Detect file format and stream records
-	ext := getFileExt(filePath)
+	ext := strings.ToLower(filepath.Ext(filePath))
 
 	var (
 		records <-chan *ingest.Record
@@ -382,24 +382,6 @@ func (s *ChromaService) IngestRecords(ctx context.Context, collectionName, fileP
 	slog.Info("Ingestion complete", "total_documents", totalUploaded)
 
 	return nil
-}
-
-// ============ Private Helpers ============
-
-// getFileExt returns the lowercase file extension for format detection.
-func getFileExt(filePath string) string {
-	// Find the last dot to handle files with dots in their name
-	for i := len(filePath) - 1; i >= 0; i-- {
-		if filePath[i] == '.' {
-			return strings.ToLower(filePath[i:])
-		}
-
-		if filePath[i] == '/' || filePath[i] == '\\' {
-			break
-		}
-	}
-
-	return ""
 }
 
 // uploadBatch uploads a batch of documents to Chroma.

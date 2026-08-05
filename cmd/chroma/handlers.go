@@ -722,18 +722,14 @@ func handleChat(ctx context.Context, c *cli.Command) error {
 	}
 	defer cleanup()
 
-	llmFactory := factory.NewLLMProviderFactory()
 	nimURL := c.String("nim-url")
 
-	provider, err := llmFactory.CreateProvider(model, nimURL)
+	provider, err := factory.CreateProvider(model, nimURL)
 	if err != nil {
 		return err
 	}
 
-	// We can't use ProviderInterface directly for chains,
-	// but we know our providers now use LangChainAdapter.
-	// For this MVP, we'll use the existing RAG pipeline logic but
-	// move towards chains in the next sub-task.
+	// RAG pipeline: query ChromaDB → build prompt → LLM generation
 
 	fmt.Printf("\n🤖 Querying collection '%s' with: %s\n\n", collectionName, question)
 

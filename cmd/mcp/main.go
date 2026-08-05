@@ -118,7 +118,7 @@ func run(cfg *Config) {
 		return
 	}
 
-	srv := buildServer(chromaClient, embedder, cfg.Server.Mode)
+	srv := buildServer(chromaClient, cfg.Server.Mode)
 	slog.Info("server built",
 		"tools", len(srv.ListTools()),
 		"mode", cfg.Server.Mode,

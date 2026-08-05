@@ -29,9 +29,7 @@ type mockChromaClient struct {
 	addBatchGenericErr        error
 	upsertBatchGenericErr     error
 	queryBatchResult          *client.QueryResponse
-	queryBatchErr             error
-	getIDByNameResult         string
-	getIDByNameErr            error
+	queryBatchErr error
 	resolveCollectionIDResult string
 	resolveCollectionIDErr    error
 	deleteCollectionErr       error
@@ -71,10 +69,6 @@ func (m *mockChromaClient) UpsertBatchGeneric(ctx context.Context, collectionID 
 
 func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, queryTexts []string, nResults int) (*client.QueryResponse, error) {
 	return m.queryBatchResult, m.queryBatchErr
-}
-
-func (m *mockChromaClient) GetIDByName(_ context.Context, _ string) (string, error) {
-	return m.getIDByNameResult, m.getIDByNameErr
 }
 
 func (m *mockChromaClient) ResolveCollectionID(_ context.Context, _ string) (string, error) {
@@ -561,34 +555,6 @@ func TestChromaService_IngestRecords_BatchError(t *testing.T) {
 	err = svc.IngestRecords(context.Background(), "test_collection", tmpFile.Name(), cfg)
 	if err == nil {
 		t.Errorf("Expected error for IngestRecords when batch upload fails")
-	}
-}
-
-func TestGetFileExt(t *testing.T) {
-	tests := []struct {
-		path   string
-		expect string
-	}{
-		{"file.jsonl", ".jsonl"},
-		{"file.parquet", ".parquet"},
-		{"dir/file.jsonl", ".jsonl"},
-		{"/abs/path/file.jsonl", ".jsonl"},
-		{"file.tar.gz", ".gz"},
-		{"noextension", ""},
-		{".hidden", ".hidden"},
-		{"file.", "."},
-		{"", ""},
-		{"file.JSONL", ".jsonl"},  // case insensitivity
-		{"dir\\file", ""},         // backslash before dot, no extension
-		{"dir\\file.txt", ".txt"}, // backslash with extension
-		{"dir/file", ""},          // slash before dot, no extension
-	}
-
-	for _, tt := range tests {
-		result := getFileExt(tt.path)
-		if result != tt.expect {
-			t.Errorf("getFileExt(%q) = %q, want %q", tt.path, result, tt.expect)
-		}
 	}
 }
 

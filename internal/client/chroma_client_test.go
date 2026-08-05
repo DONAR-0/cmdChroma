@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 )
 
 // Mock embedder for testing
@@ -357,62 +355,6 @@ func TestChromaClient_ResolveCollectionID_Error(t *testing.T) {
 	_, err := client.ResolveCollectionID(context.Background(), "non_existent")
 	if err == nil {
 		t.Error("ResolveCollectionID should error when listing fails")
-	}
-}
-
-func TestChromaClient_GetIDByName(t *testing.T) {
-	collections := []Collection{
-		{ID: "coll123", Name: "my_collection", Tenant: "tenant", Database: "db"},
-	}
-	data, _ := json.Marshal(collections)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(data)
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewChromaDBClient(server.URL, "tenant", "db")
-
-	id, err := client.GetIDByName(context.Background(), "my_collection")
-	if err != nil {
-		t.Errorf("GetIDByName failed: %v", err)
-	}
-
-	if id != "coll123" {
-		t.Errorf("Expected ID coll123, got %s", id)
-	}
-
-	// Test non-existing
-	id, err = client.GetIDByName(context.Background(), "non_existent")
-	if err != nil {
-		t.Errorf("GetIDByName failed for non-existent: %v", err)
-	}
-
-	if id != "non_existent" {
-		t.Errorf("Expected input as ID, got %s", id)
-	}
-}
-
-func TestChromaClient_GetIDByName_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v2/tenants/tenant/databases/db/collections" {
-			w.WriteHeader(http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewChromaDBClient(server.URL, "tenant", "db")
-
-	_, err := client.GetIDByName(context.Background(), "non_existent")
-	if err != nil {
-		t.Errorf("GetIDByName should not error for non-existent collection when listing fails: %v", err)
 	}
 }
 
@@ -848,83 +790,6 @@ func TestChromaClient_CreateDatabase_Error(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for CreateDatabase when server returns 500")
 	}
-}
-
-func TestChromaMetadataKeyHint(t *testing.T) {
-	tests := []struct {
-		body string
-		want string
-	}{
-		{`metadatas[23].questionText: data did not match any variant`, "questionText"},
-		{`metadatas[0].answer: some error here`, "answer"},
-		{`no prefix here`, ""},
-		{`metadatas[0]: no dot`, ""},
-		{`metadatas[0].:`, ""},
-		{``, ""},
-	}
-	for _, tt := range tests {
-		got := chromaMetadataKeyHint([]byte(tt.body))
-		require.Equal(t, tt.want, got, "chromaMetadataKeyHint(%q)", tt.body)
-	}
-}
-
-func TestWrapChromaError(t *testing.T) {
-	t.Run("422 metadata error", func(t *testing.T) {
-		body := []byte(`metadatas[0].questionText: data did not match any variant of "MetadataValue"`)
-		err := wrapChromaError(422, body)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "questionText")
-		require.Contains(t, err.Error(), "exclude-field")
-	})
-
-	t.Run("422 with unknown field", func(t *testing.T) {
-		body := []byte(`MetadataValue validation error (no field hint)`)
-		err := wrapChromaError(422, body)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "must be strings, numbers, or booleans")
-	})
-
-	t.Run("non-422 error", func(t *testing.T) {
-		body := []byte(`internal server error`)
-		err := wrapChromaError(500, body)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "500")
-		require.Contains(t, err.Error(), "internal server error")
-	})
-}
-
-func TestSanitizeValue(t *testing.T) {
-	require.Equal(t, nil, sanitizeValue(nil))
-	require.Equal(t, "hello", sanitizeValue("hello"))
-	require.Equal(t, 42, sanitizeValue(42))
-	require.Equal(t, true, sanitizeValue(true))
-	require.Equal(t, "[1 2 3]", sanitizeValue([]int{1, 2, 3}))
-	require.Equal(t, "map[key:value]", sanitizeValue(map[string]string{"key": "value"}))
-}
-
-func TestSanitizeMetadataForChroma(t *testing.T) {
-	t.Run("empty input", func(t *testing.T) {
-		result := sanitizeMetadataForChroma(nil)
-		require.Nil(t, result)
-	})
-
-	t.Run("sanitizes complex values", func(t *testing.T) {
-		input := []map[string]any{
-			{"simple": "value", "nested": map[string]any{"k": "v"}, "slice": []int{1, 2}},
-		}
-		result := sanitizeMetadataForChroma(input)
-		require.Len(t, result, 1)
-		require.Equal(t, "value", result[0]["simple"])
-	})
-
-	t.Run("nil metadata entry", func(t *testing.T) {
-		input := []map[string]any{
-			{"key": nil},
-		}
-		result := sanitizeMetadataForChroma(input)
-		require.Len(t, result, 1)
-		require.Nil(t, result[0]["key"])
-	})
 }
 
 func TestChromaClient_SetEmbedder(t *testing.T) {

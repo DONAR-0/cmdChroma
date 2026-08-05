@@ -17,7 +17,7 @@ import (
 )
 
 func TestProtocol_ToolsListRoundTrip(t *testing.T) {
-	srv := buildServer(&mockChromaClient{}, newTestEmbedder(), "")
+	srv := buildServer(&mockChromaClient{}, "")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))
@@ -46,7 +46,7 @@ func TestProtocol_ToolCallRoundTrip(t *testing.T) {
 	chroma := &mockChromaClient{
 		ResolveCollectionIDResult: "col-uuid",
 	}
-	srv := buildServer(chroma, newTestEmbedder(), "memory")
+	srv := buildServer(chroma, "memory")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))
@@ -80,8 +80,7 @@ func TestProtocol_StoreAndQueryRoundTrip(t *testing.T) {
 	chroma := &mockChromaClient{
 		ResolveCollectionIDResult: "col-uuid",
 	}
-	embed := newTestEmbedder()
-	srv := buildServer(chroma, embed, "")
+	srv := buildServer(chroma, "")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))
@@ -170,7 +169,7 @@ func sendRawJSONRPC(t *testing.T, requestJSON string) int {
 	chroma := &mockChromaClient{
 		ResolveCollectionIDResult: "col-uuid",
 	}
-	srv := buildServer(chroma, newTestEmbedder(), "")
+	srv := buildServer(chroma, "")
 	stdioSrv := server.NewStdioServer(srv)
 
 	stdinRead, stdinWrite := io.Pipe()
@@ -221,7 +220,7 @@ func TestProtocol_HTTP_RoundTrip(t *testing.T) {
 			Distances: [][]float32{{0.0}},
 		},
 	}
-	srv := buildServer(chroma, newTestEmbedder(), "")
+ 	srv := buildServer(chroma, "")
 	httpSrv := server.NewStreamableHTTPServer(srv)
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

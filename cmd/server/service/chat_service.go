@@ -10,7 +10,6 @@ import (
 	"github.com/DONAR-0/cmdChroma/cmd/server/config"
 	"github.com/DONAR-0/cmdChroma/cmd/server/storage"
 	"github.com/DONAR-0/cmdChroma/internal/client"
-	"github.com/DONAR-0/cmdChroma/internal/embedding"
 	"github.com/DONAR-0/cmdChroma/internal/ingest"
 	"github.com/DONAR-0/cmdChroma/internal/llm"
 	"github.com/DONAR-0/cmdChroma/internal/onnx"
@@ -22,7 +21,6 @@ type ChatService struct {
 	logger        *slog.Logger
 	chromaClient  *client.ChromaClient
 	embedder      *onnx.Embedder
-	engine        embedding.EmbeddingEngine
 	chromaSvc     *service.ChromaService
 	ollamaURL     string
 	nimURL        string
@@ -52,12 +50,11 @@ func InitIntegrations(ctx context.Context, chromaCfg *config.ChromaConfig, embed
 }
 
 // NewChatService creates a ChatService with injected dependencies.
-func NewChatService(logger *slog.Logger, chromaClient *client.ChromaClient, embedder *onnx.Embedder, engine embedding.EmbeddingEngine, llmCfg *config.LLMConfig) *ChatService {
+func NewChatService(logger *slog.Logger, chromaClient *client.ChromaClient, embedder *onnx.Embedder, llmCfg *config.LLMConfig) *ChatService {
 	return &ChatService{
 		logger:        logger,
 		chromaClient:  chromaClient,
 		embedder:      embedder,
-		engine:        engine,
 		chromaSvc:     service.NewChromaService(chromaClient, embedder),
 		ollamaURL:     llmCfg.OllamaURL,
 		nimURL:        llmCfg.NIMURL,

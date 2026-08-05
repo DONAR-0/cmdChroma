@@ -18,12 +18,6 @@ func NewLangChainAdapter(model llms.Model) *LangChainAdapter {
 	return &LangChainAdapter{llm: model}
 }
 
-// GetModel returns the underlying LangChainGo model for use in chains/agents.
-func (a *LangChainAdapter) GetModel() llms.Model {
-	return a.llm
-}
-
-// Generate streams the response to the provided writer.
 func (a *LangChainAdapter) Generate(ctx context.Context, prompt, model string, writer io.Writer) error {
 	msg := llms.TextParts(llms.ChatMessageTypeHuman, prompt)
 

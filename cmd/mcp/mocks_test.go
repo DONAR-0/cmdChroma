@@ -20,16 +20,11 @@ import (
 //	chroma := &mockChromaClient{
 //	    QueryResult: &client.QueryResponse{ /* canned */ },
 //	}
-//	embed := newTestEmbedder()
 //	runTool(t, "query_documents", ...)
 //
 //	require.Equal(t, 1, len(chroma.QueryCalls))
 //	require.Equal(t, "test_col", chroma.QueryCalls[0].CollectionID)
 // =============================================================================
-
-// -----------------------------------------------------------------------------
-// mockChromaClient
-// -----------------------------------------------------------------------------
 
 // writeCall groups any add/upsert shape — `AddBatch`, `AddBatchGeneric`, and
 // `UpsertBatchGeneric` share the (collectionID, docs, ids, metadatas) tuple.
@@ -48,10 +43,6 @@ type queryCall struct {
 
 type listDocsCall struct {
 	CollectionID string
-}
-
-type getIDByNameCall struct {
-	Name string
 }
 
 type resolveCollectionIDCall struct {
@@ -91,8 +82,7 @@ type mockChromaClient struct {
 	AddBatchGenericCalls     []writeCall
 	UpsertBatchGenericCalls  []writeCall
 	QueryCalls               []queryCall
-	ListDocsCalls            []listDocsCall
-	GetIDByNameCalls         []getIDByNameCall
+ 	ListDocsCalls            []listDocsCall
 	ResolveCollectionIDCalls []resolveCollectionIDCall
 	CreateCollectionCalls    []createCollectionCall
 	CreateDatabaseCalls      []createDatabaseCall
@@ -115,8 +105,6 @@ type mockChromaClient struct {
 	UpsertBatchGenericErr     error
 	QueryResult               *client.QueryResponse
 	QueryErr                  error
-	GetIDByNameResult         string
-	GetIDByNameErr            error
 	ResolveCollectionIDResult string
 	ResolveCollectionIDErr    error
 	// CreateCollectionResult defaults to "test-collection-id" when empty.
@@ -212,11 +200,6 @@ func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, 
 	return m.QueryResult, m.QueryErr
 }
 
-func (m *mockChromaClient) GetIDByName(_ context.Context, name string) (string, error) {
-	m.GetIDByNameCalls = append(m.GetIDByNameCalls, getIDByNameCall{Name: name})
-	return m.GetIDByNameResult, m.GetIDByNameErr
-}
-
 func (m *mockChromaClient) ListDocuments(_ context.Context, collectionID string) (*client.GetRecordsResponse, error) {
 	m.ListDocsCalls = append(m.ListDocsCalls, listDocsCall{CollectionID: collectionID})
 	return m.ListDocsResult, m.ListDocsErr
@@ -247,54 +230,5 @@ func (m *mockChromaClient) SetEmbedder(e *onnx.Embedder) {
 }
 
 // -----------------------------------------------------------------------------
-// mockEmbedder
+// mockChromaClient
 // -----------------------------------------------------------------------------
-
-type embedBatchCall struct {
-	Texts []string
-}
-
-type mockEmbedder struct {
-	EmbedBatchCalls  []embedBatchCall
-	SingleEmbedCalls []string
-	EmbedErr         error
-	EmbedBatchErr    error
-	CloseCount       int
-
-	// Vector returned for every embed. Tests set this to a fixed length so
-	// they can assert on dimension if useful.
-	Vector []float32
-}
-
-func (m *mockEmbedder) Embed(text string) ([]float32, error) {
-	m.SingleEmbedCalls = append(m.SingleEmbedCalls, text)
-	if m.EmbedErr != nil {
-		return nil, m.EmbedErr
-	}
-
-	return m.Vector, nil
-}
-
-func (m *mockEmbedder) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
-	m.EmbedBatchCalls = append(m.EmbedBatchCalls, embedBatchCall{Texts: texts})
-	if m.EmbedBatchErr != nil {
-		return nil, m.EmbedBatchErr
-	}
-
-	out := make([][]float32, len(texts))
-	for i := range out {
-		out[i] = m.Vector
-	}
-
-	return out, nil
-}
-
-func (m *mockEmbedder) Close() {
-	m.CloseCount++
-}
-
-// newTestEmbedder returns an embedder with sensible defaults: 4-dim vector.
-// Tests that care about specific dimension should override `.Vector`.
-func newTestEmbedder() *mockEmbedder {
-	return &mockEmbedder{Vector: []float32{0.1, 0.2, 0.3, 0.4}}
-}

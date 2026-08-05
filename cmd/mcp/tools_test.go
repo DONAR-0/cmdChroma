@@ -30,7 +30,7 @@ import (
 // Claude Code treat "method-not-found" as a handshake failure, not as an
 // empty result — so this empty-list shape is the actual contract.
 func TestServer_ToolsList_NonEmpty(t *testing.T) {
-	srv := buildServer(&mockChromaClient{}, newTestEmbedder(), "")
+	srv := buildServer(&mockChromaClient{}, "")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))
@@ -78,7 +78,7 @@ func TestBuildServer_DoesNotPanic(t *testing.T) {
 		}
 	}()
 
-	s := buildServer(&mockChromaClient{}, newTestEmbedder(), "")
+	s := buildServer(&mockChromaClient{}, "")
 
 	if s == nil {
 		t.Fatal("buildServer returned nil *server.MCPServer")
@@ -96,7 +96,7 @@ func TestBuildServer_AcceptsAnyIFaceImpl(t *testing.T) {
 		}
 	}()
 
-	_ = buildServer(&mockChromaClient{}, newTestEmbedder(), "")
+	_ = buildServer(&mockChromaClient{}, "")
 }
 
 // Annotation matrix for spec compliance (tools.go)
@@ -131,7 +131,7 @@ func TestAnnotations_MatchMatrix(t *testing.T) {
 	modes := []string{"", "memory"}
 	for _, mode := range modes {
 		t.Run("mode="+mode, func(t *testing.T) {
-			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+			srv := buildServer(&mockChromaClient{}, mode)
 
 			serverTools := srv.ListTools()
 			for _, st := range serverTools {
@@ -184,7 +184,7 @@ func TestTitles_Present(t *testing.T) {
 	modes := []string{"", "memory"}
 	for _, mode := range modes {
 		t.Run("mode="+mode, func(t *testing.T) {
-			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+			srv := buildServer(&mockChromaClient{}, mode)
 
 			serverTools := srv.ListTools()
 			for _, st := range serverTools {
@@ -213,7 +213,7 @@ func TestOutputSchema_NotEmpty(t *testing.T) {
 	modes := []string{"", "memory"}
 	for _, mode := range modes {
 		t.Run("mode="+mode, func(t *testing.T) {
-			srv := buildServer(&mockChromaClient{}, newTestEmbedder(), mode)
+			srv := buildServer(&mockChromaClient{}, mode)
 
 			serverTools := srv.ListTools()
 			for _, st := range serverTools {

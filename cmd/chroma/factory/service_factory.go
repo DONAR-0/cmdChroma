@@ -30,7 +30,6 @@ type chromaClient interface {
 	DeleteCollection(ctx context.Context, name string) error
 	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
 	CreateCollection(ctx context.Context, name string) (string, error)
-	GetIDByName(ctx context.Context, name string) (string, error)
 }
 
 // embedder is the subset of *onnx.Embedder needed by ServiceFactory.

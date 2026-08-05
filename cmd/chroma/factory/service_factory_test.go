@@ -46,10 +46,6 @@ func (m *mockChromaClient) QueryBatch(ctx context.Context, collectionID string, 
 	return nil, nil
 }
 
-func (m *mockChromaClient) GetIDByName(ctx context.Context, name string) (string, error) {
-	return "", nil
-}
-
 func (m *mockChromaClient) ListDocuments(ctx context.Context, collectionID string) (*client.GetRecordsResponse, error) {
 	return nil, nil
 }

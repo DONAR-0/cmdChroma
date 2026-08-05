@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/DONAR-0/cmdChroma/cmd/server/config"
 	"github.com/DONAR-0/cmdChroma/cmd/server/service"
 	"github.com/DONAR-0/cmdChroma/cmd/server/storage"
-	"github.com/DONAR-0/cmdChroma/internal/embedding"
 )
 
 func main() {
@@ -57,23 +55,8 @@ func main() {
 		return
 	}
 
-	// Create the high-level embedding engine up front so the chat service
-	// can be wired with it before the router starts serving.
-	engine, err := embedding.NewEmbeddingEngine(
-		cfg.Embedder.ModelPath,
-		strings.ReplaceAll(cfg.Embedder.ModelPath, "model.onnx", "tokenizer.json"),
-		cfg.Embedder.LibraryPath,
-	)
-	if err != nil {
-		logger.Error("failed to create embedding engine", "err", err)
-
-		exitCode = 1
-
-		return
-	}
-
 	// Build service layer
-	chatService := service.NewChatService(logger, chromaClient, embedder, engine, &cfg.LLM)
+	chatService := service.NewChatService(logger, chromaClient, embedder, &cfg.LLM)
 	sessionStore := storage.NewSessionStore()
 
 	modelMgr := service.NewModelManager(logger, "cmdChroma/models")

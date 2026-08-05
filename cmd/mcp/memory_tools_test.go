@@ -892,7 +892,7 @@ func TestMemory_SchemaPresence(t *testing.T) {
 }
 
 func TestMemoryTools_ListedInMemoryMode(t *testing.T) {
-	srv := buildServer(&mockChromaClient{}, newTestEmbedder(), "memory")
+	srv := buildServer(&mockChromaClient{}, "memory")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))
@@ -927,7 +927,7 @@ func TestMemoryTools_ListedInMemoryMode(t *testing.T) {
 }
 
 func TestMemoryTools_NotListedInGenericMode(t *testing.T) {
-	srv := buildServer(&mockChromaClient{}, newTestEmbedder(), "")
+	srv := buildServer(&mockChromaClient{}, "")
 
 	ms := mcptest.NewUnstartedServer(t)
 	ms.AddServerOptions(server.WithToolCapabilities(true))

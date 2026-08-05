@@ -37,13 +37,6 @@ type chromaClient interface {
 	DeleteRecords(ctx context.Context, collectionID string, ids []string) error
 }
 
-// textEmbedder is the subset of *onnx.Embedder methods used by MCP handlers.
-type textEmbedder interface {
-	Embed(text string) ([]float32, error)
-	EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error)
-	Close()
-}
-
 const (
 	serverName        = "cmdChroma MCP"
 	serverVersion     = "0.1.0"
@@ -54,9 +47,7 @@ const (
 	shutdownTimeout   = 5 * time.Second
 )
 
-func buildServer(chroma chromaClient, embedder textEmbedder, mode string) *server.MCPServer {
-	_ = embedder
-
+func buildServer(chroma chromaClient, mode string) *server.MCPServer {
 	s := server.NewMCPServer(
 		serverName,
 		serverVersion,
